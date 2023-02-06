@@ -1,4 +1,4 @@
-# Obsidian-Mermaid.js-Helper-OMH-plugin
+# Mermaid.js-Helper-OMH-plugin
 An [Obsidian](https://obsidian.md/) plugin to help with [mermaid.js graph/flowcharts](https://mermaid.js.org/syntax/flowchart.html) plus extra commands.
 
 ## Commands:
