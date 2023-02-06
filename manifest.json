@@ -3,7 +3,7 @@
 	"name": "Mermaid.js Helper (OMH)",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "helps in move to the top the variable delcariations, use regex in style and create files from a list of names",
+	"description": "plug in that helps in mermaid.js workflow and more",
 	"author": "Francesco Di Cursi",
 	"isDesktopOnly": false,
 	"repo": "FrancescoDiCursi/Mermaid.js-Helper-OMH-plugin"
