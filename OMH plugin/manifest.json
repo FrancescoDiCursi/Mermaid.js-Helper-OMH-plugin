@@ -1,11 +1,11 @@
 {
-	"id": "obsidian-marmaid-helper",
-	"name": "Obsidian Mermaid.js Helper (OMH)",
+	"id": "marmaid-helper",
+	"name": "Mermaid.js Helper (OMH)",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Commands: < Clean code: it extrapolates the variable declarations and bring them to the top of the selection (only for 'flowchart' and 'graph') > , < Regex for style: use regex in the place of the id to select nodes in a 'style' or 'class' clause >, < Create files: Create a list of file in the active folder based on lines of the selection >",
+	"description": "helps in move to the top the variable delcariations, use regex in style and create files from a list of names",
 	"author": "Francesco Di Cursi",
 	"isDesktopOnly": false,
-	"repo": "https://github.com/FrancescoDiCursi/Obsidian-Mermaid.js-Helper-OMH-plugin",
+	"repo": "https://github.com/FrancescoDiCursi/Mermaid.js-Helper-OMH-plugin",
 	"branch":"main"
 }
