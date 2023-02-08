@@ -27,6 +27,6 @@ An [Obsidian](https://obsidian.md/) plugin to help with [mermaid.js graph/flowch
     ![](https://github.com/FrancescoDiCursi/Obsidian-Mermaid.js-Helper-OMH-plugin/blob/main/gifs/obsidian%20files.gif)
     
 - ### \> Copy global colorGroups to local graph:
-    Set the colorGroups in the global graph view, then go to a file and run the command 'Graph view: open local graph'. Finally, run this plugin command and restart Obsidian.
+    Set the colorGroups in the global graph view, then open a file and run the command 'Graph view: open local graph'. Finally, in the same active file, run this plugin command and restart Obsidian.
 
 
