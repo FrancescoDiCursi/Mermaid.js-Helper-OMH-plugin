@@ -133,6 +133,28 @@ var MyPlugin = class extends import_obsidian.Plugin {
         });
       }
     });
+    this.addCommand({
+      id: "copy-global-colorGroups-to-local-graph",
+      name: "Copy global colorGroups to local graph",
+      editorCallback: (editor, view) => {
+        var graph_json = this.app.vault.adapter.read("./.obsidian/graph.json").then((d) => JSON.parse(d));
+        var workspace_json = this.app.vault.adapter.read("./.obsidian/workspace.json").then((d) => JSON.parse(d));
+        console.log(graph_json, workspace_json);
+        graph_json.then((z) => {
+          var g_graph = Object(z);
+          return g_graph["colorGroups"];
+        }).then((y) => {
+          workspace_json.then((d) => {
+            Object(Object(Object(Object(Object(Object(Object(Object(Object(d)["main"])["children"])[1])["children"])[0])["state"])["state"])["options"])["colorGroups"] = y;
+            console.log(d);
+            this.app.vault.adapter.remove("./.obsidian/workspace.json");
+            this.app.vault.create("./.obsidian/workspace.json", JSON.stringify(d));
+          }).then((j) => {
+            var notice = new import_obsidian.Notice("WARNING: Close and reopen Obsidian to update local graph", 1e4);
+          });
+        });
+      }
+    });
   }
   onunload() {
   }
