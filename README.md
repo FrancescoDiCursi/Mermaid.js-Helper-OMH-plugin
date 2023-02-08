@@ -25,5 +25,8 @@ An [Obsidian](https://obsidian.md/) plugin to help with [mermaid.js graph/flowch
     (create the file in the folder thath you wish to populate)
     
     ![](https://github.com/FrancescoDiCursi/Obsidian-Mermaid.js-Helper-OMH-plugin/blob/main/gifs/obsidian%20files.gif)
+    
+- ### \> Copy global colorGroups to local graph:
+    Set the colorGroups in the global graph view, then go to a file and run the command 'Graph view: open local graph'. Finally, run this plugin command and restart Obsidian.
 
 
