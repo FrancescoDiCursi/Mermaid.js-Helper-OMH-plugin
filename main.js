@@ -155,6 +155,27 @@ var MyPlugin = class extends import_obsidian.Plugin {
         });
       }
     });
+    this.addCommand({
+      id: "list-to-links",
+      name: "List to links",
+      editorCallback: (editor, view) => {
+        var selection = editor.getSelection();
+        var selection_list = [];
+        var selection_formatted = "";
+        if (selection.includes("\n")) {
+          selection_list = selection.split("\n").filter((f) => {
+            return f.replace(" ", "") !== "";
+          }).map((d) => d.includes(",") ? "[[" + d.replace(",", "") + "]]," : "[[" + d + "]]");
+          selection_formatted = selection_list.join("\n");
+        } else {
+          selection_list = selection.split(",").filter((f) => {
+            return f.replace(" ", "") !== "";
+          }).map((d) => "[[" + d + "]]");
+          selection_formatted = selection_list.join(",");
+        }
+        editor.replaceSelection(selection_formatted);
+      }
+    });
   }
   onunload() {
   }
