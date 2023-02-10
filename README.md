@@ -1,7 +1,7 @@
 # Mermaid.js-Helper-OMH-plugin
 An [Obsidian](https://obsidian.md/) plugin to help with [mermaid.js graph/flowcharts](https://mermaid.js.org/syntax/flowchart.html) plus extra commands.
 
-## Commands:
+## Mermaid commands:
 
 - ### \> Clean code for Mermaid.js ( [ graph | flowchart ] ):
   Select ONLY the mermaid.js cell of type graph or flowchart and run the command in order to move variable declarations at the top.
@@ -17,7 +17,7 @@ An [Obsidian](https://obsidian.md/) plugin to help with [mermaid.js graph/flowch
    ![](https://github.com/FrancescoDiCursi/Obsidian-Mermaid.js-Helper-OMH-plugin/blob/main/gifs/obsidian%20style%20re.gif)
 
   
-  
+# Extra commands:
   
  - ### \> Create files from text:
     Select a list of names separated by new line and run the command to create those files in the active folder
@@ -25,5 +25,8 @@ An [Obsidian](https://obsidian.md/) plugin to help with [mermaid.js graph/flowch
     (create the file in the folder thath you wish to populate)
     
     ![](https://github.com/FrancescoDiCursi/Obsidian-Mermaid.js-Helper-OMH-plugin/blob/main/gifs/obsidian%20files.gif)
+    
+- ### \> Copy global colorGroups to local graph:
+    Set the colorGroups in the global graph view, then open a file and run the command 'Graph view: open local graph'. Finally, in the same active file, run this plugin command and restart Obsidian.
 
 
