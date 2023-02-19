@@ -34,6 +34,7 @@ var MyPlugin = class extends import_obsidian.Plugin {
       id: "move-mermaidjs-variable-declarations-up",
       name: "Clean code for Mermaid.js ( [ graph | flowchart ] )",
       editorCallback: (editor, view) => {
+        var _a;
         var selection_old = editor.getSelection();
         var check_graph_type = ["graph", "flowchart"];
         var top_lines = selection_old.split("\n").filter((d) => {
@@ -44,18 +45,21 @@ var MyPlugin = class extends import_obsidian.Plugin {
           return;
         var selection_copy = JSON.parse(JSON.stringify(selection_old));
         console.log(selection_old, selection_copy);
+        var parenthesis_pattern = /[\(\[\>]/g;
+        var parenthesis_pattern_open = /[\(\[\>]/;
+        var parenthesis_pattern_close = /[\)\]]/;
         var re_variables_pattern = /([\w\d\_\/]+[\(\[\>][^\)\]\<]+[\)\]]?[^&\.\n\s][\"\']?[^&\n\-]*[\)\]\<])/g;
         var re_variables = selection_old.match(re_variables_pattern);
+        var re_variables_quotes = (_a = selection_old.match(re_variables_pattern)) == null ? void 0 : _a.map((d) => d.split(parenthesis_pattern_open)[0] + d[parenthesis_pattern_open.exec(d).index] + '"' + d.split(parenthesis_pattern_open).slice(1).join("")).map((d) => d.slice(0, -1) + '"' + d.slice(-1)).map((d) => d.replace('""', '"'));
         console.log(re_variables);
-        var clean_variables = re_variables == null ? void 0 : re_variables.map((d) => {
-          var parenthesis_pattern = /[\(\[\>]/g;
+        var clean_variables = re_variables == null ? void 0 : re_variables.map((d, i) => {
           var short_name = d.split(parenthesis_pattern)[0];
           console.log("vars_ " + d + " _ " + short_name);
           selection_copy = selection_copy.replace(d, short_name);
           return "    " + d;
         });
         console.log("# ", selection_copy);
-        var vars_formatted = clean_variables == null ? void 0 : clean_variables.join("\n");
+        var vars_formatted = re_variables_quotes == null ? void 0 : re_variables_quotes.join("\n");
         var final_code = selection_copy.split("\n").slice(0, 2).join(" \n") + "\n\n\n%%var space start" + vars_formatted + "\n%%var space end\n\n\n" + selection_copy.split("\n").slice(2).join("\n");
         if (final_code.match(/\%\%var space start/g).length > 1) {
           var temp = final_code.split("%%var space end").splice(0, 1);
@@ -109,8 +113,8 @@ var MyPlugin = class extends import_obsidian.Plugin {
       }
     });
     this.addCommand({
-      id: "create-files-from-text",
-      name: "Create files from text",
+      id: "create-empty-files-from-list-of-titles",
+      name: "Create empty files from a list of titles",
       editorCallback: (editor, view) => {
         var _a, _b;
         const basePath = this.app.vault.adapter.basePath;
@@ -174,6 +178,36 @@ var MyPlugin = class extends import_obsidian.Plugin {
           selection_formatted = selection_list.join(",");
         }
         editor.replaceSelection(selection_formatted);
+      }
+    });
+    this.addCommand({
+      id: "create-files-from-list-of-sections",
+      name: "Create empty files from a list of sections (H2 as section titles)",
+      editorCallback: (editor, view) => {
+        var _a, _b;
+        const basePath = this.app.vault.adapter.basePath;
+        var activeFolder = (_a = this.app.workspace.getActiveFile()) == null ? void 0 : _a.parent.path;
+        console.log(activeFolder, (_b = this.app.workspace.getActiveFile()) == null ? void 0 : _b.path);
+        var selection = editor.getSelection();
+        var file_names = selection.split("\n").filter((d) => {
+          if (d !== "" && d.startsWith("##")) {
+            return d;
+          }
+        }).map((d) => d.replace("##", "").replace(/[\*\"\\\/\<\>\:\|\?]/g, "_"));
+        console.log(file_names);
+        var files_contents = selection.split("##").filter((d) => {
+          return d !== "";
+        }).map((d) => d.split("\n").slice(1).join("\n"));
+        console.log(files_contents);
+        var files = this.app.vault.getFiles().map((d) => d.path);
+        console.log("old_files ", files);
+        file_names.map((d, i) => {
+          if (!files.includes(activeFolder + `/${d}.md`)) {
+            this.app.vault.create(activeFolder + `/${d}.md`, files_contents[i]);
+          } else {
+            console.log("file already exists");
+          }
+        });
       }
     });
   }
