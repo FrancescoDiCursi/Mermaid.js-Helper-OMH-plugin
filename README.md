@@ -30,3 +30,8 @@ An [Obsidian](https://obsidian.md/) plugin to help with [mermaid.js graph/flowch
     Set the colorGroups in the global graph view, then open a file and run the command 'Graph view: open local graph'. Finally, in the same active file, run this plugin command and restart Obsidian.
 
 
+- ### \> List to link:
+  Given a list of strings separated by either line break, comma or comma plus line break, it returns a list of links
+  
+  _e.g.:    a,b,c --> [[a]],[[b]],[[c]]_
+
