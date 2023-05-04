@@ -19,12 +19,14 @@ An [Obsidian](https://obsidian.md/) plugin to help with [mermaid.js graph/flowch
   
 # Extra commands:
   
- - ### \> Create files from text:
+ - ### \> Create empty files from list of titles:
     Select a list of names separated by new line and run the command to create those files in the active folder
-  
-    (create the file in the folder thath you wish to populate)
-    
+      
     ![](https://github.com/FrancescoDiCursi/Obsidian-Mermaid.js-Helper-OMH-plugin/blob/main/gifs/obsidian%20files.gif)
+    
+- ### \> Create files from sections (H2 as section title)
+    Select all sections, each having H2 as title, and run the command to create those files in the active folder
+    
     
 - ### \> Copy global colorGroups to local graph:
     Set the colorGroups in the global graph view, then open a file and run the command 'Graph view: open local graph'. Finally, in the same active file, run this plugin command and restart Obsidian.
