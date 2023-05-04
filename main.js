@@ -7,6 +7,12 @@ var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __commonJS = (cb, mod) => function __require() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -21,6 +27,23204 @@ var __copyProps = (to, from, except, desc) => {
 };
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
+// node_modules/pdfjs/lib/cursor.js
+var require_cursor = __commonJS({
+  "node_modules/pdfjs/lib/cursor.js"(exports, module2) {
+    "use strict";
+    var Cursor = class {
+      constructor(width, height, x, y) {
+        this.width = width;
+        this.height = height;
+        if (x !== void 0) {
+          this.startX = this.x = x;
+        }
+        if (y !== void 0) {
+          this.startY = this.y = y;
+          this._bottom = this.y - this.height;
+        }
+        this.bottomOffset = 0;
+      }
+      /// public API
+      get bottom() {
+        return this._bottom + this.bottomOffset;
+      }
+      reset() {
+        this.x = this.startX;
+        this.y = this.startY;
+      }
+      doesFit(height) {
+        return this.y - height >= this.bottom;
+      }
+      clone() {
+        return new ClonedCursor(this);
+      }
+    };
+    var ClonedCursor = class extends Cursor {
+      constructor(cursor) {
+        super(cursor.width, cursor.height);
+        this.startX = cursor.startX;
+        this.startY = cursor.startY;
+        this.bottomOffset = 0;
+        this._root = cursor._root || cursor;
+      }
+      /// public API
+      get bottom() {
+        return this._root.bottom + this.bottomOffset;
+      }
+      get x() {
+        return this._root.x;
+      }
+      set x(val) {
+        if (val < 0) {
+          console.warn("set cursor.x to negative value");
+        }
+        this._root.x = val;
+      }
+      get y() {
+        return this._root.y;
+      }
+      set y(val) {
+        if (val < 0) {
+          console.warn("set cursor.y to negative value");
+        }
+        this._root.y = val;
+      }
+    };
+    module2.exports = Cursor;
+  }
+});
+
+// node_modules/pdfjs/lib/parser/lexer.js
+var require_lexer = __commonJS({
+  "node_modules/pdfjs/lib/parser/lexer.js"(exports, module2) {
+    "use strict";
+    var Lexer = class {
+      constructor(buf, outer) {
+        this.buf = buf;
+        this.pos = 0;
+        this.objects = /* @__PURE__ */ Object.create(null);
+        this._outer = outer;
+        this.state = outer ? outer.state : {};
+      }
+      get outer() {
+        return this._outer || this;
+      }
+      read(len) {
+        const buf = this.buf.subarray(this.pos, this.pos + len);
+        this.pos += len;
+        return buf;
+      }
+      getString(len) {
+        return String.fromCharCode.apply(null, this.buf.subarray(this.pos, this.pos + len));
+      }
+      readString(len) {
+        const str = this.getString(len);
+        this.pos += len;
+        return str;
+      }
+      skipEOL(len, trial) {
+        const before = this.pos;
+        let done = false;
+        let count = 0;
+        while (!done && (!len || count < len)) {
+          switch (this.buf[this.pos]) {
+            case 13:
+              if (this.buf[this.pos + 1] === 10) {
+                this.pos++;
+              }
+            case 10:
+              this.pos++;
+              count++;
+              break;
+            default:
+              done = true;
+              break;
+          }
+        }
+        if (!count || len && count < len) {
+          if (!trial) {
+            this._error("EOL expected but not found");
+          }
+          this.pos = before;
+          return false;
+        }
+        return true;
+      }
+      skipComments(trial) {
+        if (this.getString(1) !== "%") {
+          return false;
+        }
+        let pos = this.pos;
+        while (this.buf[pos] !== 10) {
+          pos++;
+        }
+        if (!trial) {
+          this.pos = pos;
+        }
+        return true;
+      }
+      skipWhitespace(len, trial) {
+        const before = this.pos;
+        let done = false;
+        let count = 0;
+        while (!done && (!len || count < len)) {
+          if (this.buf[this.pos] === 37) {
+            while (this.buf[this.pos] !== 10) {
+              this.pos++;
+            }
+          }
+          if (Lexer.isWhiteSpace(this.buf[this.pos])) {
+            this.pos++;
+            count++;
+          } else {
+            done = true;
+          }
+        }
+        if (!count || len && count < len) {
+          if (!trial) {
+            this._error("Whitespace expected but not found");
+          }
+          this.pos = before;
+          return false;
+        }
+        return true;
+      }
+      skipSpace(len, trial) {
+        const before = this.pos;
+        let done = false;
+        let count = 0;
+        while (!done && (!len || count < len)) {
+          if (this.buf[this.pos] === 32) {
+            this.pos++;
+            count++;
+          } else {
+            done = true;
+          }
+        }
+        if (len > 0 && !count || len && count < len) {
+          if (!trial) {
+            this._error("Space expected but not found");
+          }
+          this.pos = before;
+          return false;
+        }
+        return true;
+      }
+      shift(offset) {
+        this.pos += offset;
+      }
+      _nextCharCode() {
+        return this.buf[this.pos++];
+      }
+      _nextChar() {
+        return String.fromCharCode(this.buf[this.pos++]);
+      }
+      _error(err) {
+        throw new Error(err);
+      }
+      _warning(warning) {
+        console.warn(warning);
+      }
+      // e.g. 123 43445 +17 −98 0 34.5 −3.62 +123.6 4. −.002 0.0
+      readNumber(trial) {
+        const before = this.pos;
+        let c = this._nextCharCode();
+        let sign = 1;
+        let isFloat = false;
+        let str = "";
+        switch (true) {
+          case c === 43:
+            break;
+          case c === 45:
+            sign = -1;
+            break;
+          case c === 46:
+            isFloat = true;
+            str = "0.";
+            break;
+          case (c < 48 || c > 57):
+            if (!trial) {
+              this._error("Invalid number at " + this.pos + ": " + String.fromCharCode(c) + " (code: " + c + ")");
+            }
+            this.pos = before;
+            return void 0;
+          default:
+            str += String.fromCharCode(c);
+            break;
+        }
+        let done = false;
+        while (!done && (c = this._nextCharCode()) >= 0) {
+          switch (true) {
+            case c === 46:
+              if (isFloat) {
+                done = true;
+              } else {
+                isFloat = true;
+                str += ".";
+              }
+              break;
+            case (c >= 48 && c <= 57):
+              str += String.fromCharCode(c);
+              break;
+            default:
+              done = true;
+              break;
+          }
+        }
+        this.pos--;
+        const nr = isFloat ? parseFloat(str, 10) : parseInt(str, 10);
+        return nr * sign;
+      }
+      static isWhiteSpace(c) {
+        return c === 0 || // NULL
+        c === 9 || // TAB
+        c === 10 || // LF
+        c === 12 || // FF
+        c === 13 || // CR
+        c === 32;
+      }
+    };
+    module2.exports = Lexer;
+  }
+});
+
+// node_modules/pdfjs/lib/object/string.js
+var require_string = __commonJS({
+  "node_modules/pdfjs/lib/object/string.js"(exports, module2) {
+    "use strict";
+    var Lexer = require_lexer();
+    var PDFString = class {
+      constructor(str) {
+        this.str = str;
+      }
+      toHexString() {
+        let hex = "";
+        for (let i = 0, len = this.str.length; i < len; ++i) {
+          let h = (this.str.charCodeAt(i) - 31).toString(16);
+          h = ("0000" + h).slice(-4);
+          hex += h;
+        }
+        return "<" + hex + ">";
+      }
+      toString() {
+        return "(" + this.str.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)") + ")";
+      }
+      static parse(xref, lexer, trial) {
+        const literal = PDFString.parseLiteral(lexer, trial);
+        const hex = literal === void 0 && PDFString.parseHex(lexer, trial);
+        if (!literal && !hex) {
+          if (trial) {
+            return void 0;
+          }
+          throw new Error("Invalid string");
+        }
+        return literal || hex;
+      }
+      static parseLiteral(lexer, trial) {
+        if (lexer.getString(1) !== "(") {
+          if (trial) {
+            return void 0;
+          }
+          throw new Error("Invalid literal string");
+        }
+        lexer.shift(1);
+        let str = "";
+        let done = false;
+        let open = 0;
+        let c;
+        while (!done && (c = lexer._nextCharCode()) >= 0) {
+          switch (c) {
+            case 40:
+              open++;
+              str += String.fromCharCode("(");
+              break;
+            case 41:
+              if (open === 0) {
+                done = true;
+              } else {
+                open--;
+                str += String.fromCharCode(")");
+              }
+              break;
+            case 92:
+              c = lexer._nextCharCode();
+              switch (c) {
+                case 110:
+                  str += "\n";
+                  break;
+                case 114:
+                  str += "\r";
+                  break;
+                case 116:
+                  str += "	";
+                  break;
+                case 98:
+                  str += "\b";
+                  break;
+                case 102:
+                  str += "\f";
+                  break;
+                case 40:
+                case 41:
+                case 92:
+                  str += String.fromCharCode(c);
+                  break;
+                case 48:
+                case 49:
+                case 50:
+                case 51:
+                case 52:
+                case 53:
+                case 54:
+                case 55:
+                case 56:
+                case 57:
+                  const oct = String.fromCharCode(c) + lexer.readString(2);
+                  str += String.fromCharCode(parseInt(oct, 8));
+                  break;
+                default:
+                  lexer.shift(-1);
+                  break;
+              }
+              break;
+            case 13:
+            case 10:
+              break;
+            default:
+              str += String.fromCharCode(c);
+              break;
+          }
+        }
+        return new PDFString(str);
+      }
+      static parseHex(lexer, trial) {
+        if (lexer.getString(1) !== "<") {
+          if (trial) {
+            return void 0;
+          }
+          throw new Error("Invalid hex string");
+        }
+        lexer.shift(1);
+        let str = "";
+        let done = false;
+        const digits = [];
+        const addCharacter = function(force) {
+          if (digits.length !== 2) {
+            if (digits.length === 1 && force) {
+              digits.push("0");
+            } else {
+              return;
+            }
+          }
+          str += String.fromCharCode(parseInt(digits.join(""), 16));
+          digits.length = 0;
+        };
+        let c;
+        while (!done && (c = lexer._nextCharCode()) >= 0) {
+          switch (true) {
+            case c === 62:
+              done = true;
+              break;
+            case (c >= 48 && c <= 57):
+            case (c >= 65 && c <= 90):
+            case (c >= 97 && c <= 122):
+              digits.push(String.fromCharCode(c));
+              addCharacter();
+              break;
+            case Lexer.isWhiteSpace(c):
+              break;
+            default:
+              lexer._warning("invalid character `" + String.fromCharCode(c) + "` in hex string");
+              break;
+          }
+        }
+        addCharacter(true);
+        return new PDFString(str);
+      }
+    };
+    module2.exports = PDFString;
+  }
+});
+
+// node_modules/pdfjs/lib/ops.js
+var require_ops = __commonJS({
+  "node_modules/pdfjs/lib/ops.js"(exports, module2) {
+    "use strict";
+    var PDFString = require_string();
+    var precision = 3;
+    module2.exports = {
+      BT() {
+        return this.write("BT");
+      },
+      ET() {
+        return this.write("ET");
+      },
+      Tf(font, size) {
+        return this.write(font, size, "Tf");
+      },
+      // use SC instead
+      // rg(r, g, b) {
+      //   return this.write(r, g, b, 'rg')
+      // },
+      Tm(a, b, c, d, e, f2) {
+        return this.write(a, b, c, d, e, f2, "Tm");
+      },
+      Tj(str, asHex) {
+        return this.write(str, "Tj");
+      },
+      TJ(arr) {
+        return this.write("[" + arr.map((v) => {
+          if (typeof v === "number") {
+            return this.toFixed(v, precision);
+          } else {
+            return v;
+          }
+        }).join(" ") + "]", "TJ");
+      },
+      Td(x, y) {
+        return this.write(x, y, "Td");
+      },
+      // set the current color space to use for stroking operations
+      CS(name) {
+        return this.write(name, "CS");
+      },
+      // same as CS but used for nonstroking operations.
+      cs(name) {
+        return this.write(name, "cs");
+      },
+      // set the color to use for stroking operations
+      SC(c1, c2, c3) {
+        return this.write(c1, c2, c3, "SC");
+      },
+      // same as SC but used for nonstroking operations.
+      sc(c1, c2, c3) {
+        return this.write(c1, c2, c3, "sc");
+      },
+      // modify the current transformation matrix
+      // translate: [ 1 0 0 1 x y ]
+      // scale:     [ x 0 0 y 0 0 ]
+      // rotate:    [ cosθ sinθ −sinθ cosθ 0 0 ]
+      cm(a, b, c, d, e, f2) {
+        return this.write(a, b, c, d, e, f2, "cm");
+      },
+      // save the current graphics state on the graphics state stack
+      q() {
+        return this.write("q");
+      },
+      // restore the graphics state by removing the most recently saved state from the stack
+      Q() {
+        return this.write("Q");
+      },
+      // append a rectangle to the current path as a complete subpath
+      re(x, y, width, height) {
+        return this.write(x, y, width, height, "re");
+      },
+      // fill the path
+      f() {
+        return this.write("f");
+      },
+      // set the text leading (used by T*)
+      TL(leading) {
+        return this.write(leading, "TL");
+      },
+      // T* move to the start of the next line, same as: 0 leading Td
+      Tstar() {
+        return this.write("T*");
+      },
+      // paint xobject
+      Do(alias) {
+        return this.write(alias, "Do");
+      },
+      // line width
+      w(lineWidth) {
+        return this.write(lineWidth, "w");
+      },
+      // stroke the path
+      S() {
+        const args = Array.prototype.slice.call(arguments);
+        args.push("S");
+        return this.write.apply(this, args);
+      },
+      write() {
+        const line = Array.prototype.map.call(arguments, (arg) => {
+          if (arg === void 0 || arg === null) {
+            console.warn("received an undefined/null operation argument");
+          }
+          return typeof arg === "number" ? this.toFixed(arg, precision) : arg;
+        });
+        return line.join(" ") + "\n";
+      },
+      toFixed(num, precision2) {
+        return (+(Math.floor(+(num + "e" + precision2)) + "e" + -precision2)).toFixed(precision2);
+      }
+    };
+  }
+});
+
+// node_modules/pako/lib/zlib/adler32.js
+var require_adler32 = __commonJS({
+  "node_modules/pako/lib/zlib/adler32.js"(exports, module2) {
+    "use strict";
+    var adler32 = (adler, buf, len, pos) => {
+      let s1 = adler & 65535 | 0, s2 = adler >>> 16 & 65535 | 0, n = 0;
+      while (len !== 0) {
+        n = len > 2e3 ? 2e3 : len;
+        len -= n;
+        do {
+          s1 = s1 + buf[pos++] | 0;
+          s2 = s2 + s1 | 0;
+        } while (--n);
+        s1 %= 65521;
+        s2 %= 65521;
+      }
+      return s1 | s2 << 16 | 0;
+    };
+    module2.exports = adler32;
+  }
+});
+
+// node_modules/pako/lib/zlib/crc32.js
+var require_crc32 = __commonJS({
+  "node_modules/pako/lib/zlib/crc32.js"(exports, module2) {
+    "use strict";
+    var makeTable = () => {
+      let c, table = [];
+      for (var n = 0; n < 256; n++) {
+        c = n;
+        for (var k = 0; k < 8; k++) {
+          c = c & 1 ? 3988292384 ^ c >>> 1 : c >>> 1;
+        }
+        table[n] = c;
+      }
+      return table;
+    };
+    var crcTable = new Uint32Array(makeTable());
+    var crc32 = (crc, buf, len, pos) => {
+      const t = crcTable;
+      const end = pos + len;
+      crc ^= -1;
+      for (let i = pos; i < end; i++) {
+        crc = crc >>> 8 ^ t[(crc ^ buf[i]) & 255];
+      }
+      return crc ^ -1;
+    };
+    module2.exports = crc32;
+  }
+});
+
+// node_modules/pako/lib/zlib/inffast.js
+var require_inffast = __commonJS({
+  "node_modules/pako/lib/zlib/inffast.js"(exports, module2) {
+    "use strict";
+    var BAD = 16209;
+    var TYPE = 16191;
+    module2.exports = function inflate_fast(strm, start) {
+      let _in;
+      let last;
+      let _out;
+      let beg;
+      let end;
+      let dmax;
+      let wsize;
+      let whave;
+      let wnext;
+      let s_window;
+      let hold;
+      let bits;
+      let lcode;
+      let dcode;
+      let lmask;
+      let dmask;
+      let here;
+      let op;
+      let len;
+      let dist;
+      let from;
+      let from_source;
+      let input, output;
+      const state = strm.state;
+      _in = strm.next_in;
+      input = strm.input;
+      last = _in + (strm.avail_in - 5);
+      _out = strm.next_out;
+      output = strm.output;
+      beg = _out - (start - strm.avail_out);
+      end = _out + (strm.avail_out - 257);
+      dmax = state.dmax;
+      wsize = state.wsize;
+      whave = state.whave;
+      wnext = state.wnext;
+      s_window = state.window;
+      hold = state.hold;
+      bits = state.bits;
+      lcode = state.lencode;
+      dcode = state.distcode;
+      lmask = (1 << state.lenbits) - 1;
+      dmask = (1 << state.distbits) - 1;
+      top:
+        do {
+          if (bits < 15) {
+            hold += input[_in++] << bits;
+            bits += 8;
+            hold += input[_in++] << bits;
+            bits += 8;
+          }
+          here = lcode[hold & lmask];
+          dolen:
+            for (; ; ) {
+              op = here >>> 24;
+              hold >>>= op;
+              bits -= op;
+              op = here >>> 16 & 255;
+              if (op === 0) {
+                output[_out++] = here & 65535;
+              } else if (op & 16) {
+                len = here & 65535;
+                op &= 15;
+                if (op) {
+                  if (bits < op) {
+                    hold += input[_in++] << bits;
+                    bits += 8;
+                  }
+                  len += hold & (1 << op) - 1;
+                  hold >>>= op;
+                  bits -= op;
+                }
+                if (bits < 15) {
+                  hold += input[_in++] << bits;
+                  bits += 8;
+                  hold += input[_in++] << bits;
+                  bits += 8;
+                }
+                here = dcode[hold & dmask];
+                dodist:
+                  for (; ; ) {
+                    op = here >>> 24;
+                    hold >>>= op;
+                    bits -= op;
+                    op = here >>> 16 & 255;
+                    if (op & 16) {
+                      dist = here & 65535;
+                      op &= 15;
+                      if (bits < op) {
+                        hold += input[_in++] << bits;
+                        bits += 8;
+                        if (bits < op) {
+                          hold += input[_in++] << bits;
+                          bits += 8;
+                        }
+                      }
+                      dist += hold & (1 << op) - 1;
+                      if (dist > dmax) {
+                        strm.msg = "invalid distance too far back";
+                        state.mode = BAD;
+                        break top;
+                      }
+                      hold >>>= op;
+                      bits -= op;
+                      op = _out - beg;
+                      if (dist > op) {
+                        op = dist - op;
+                        if (op > whave) {
+                          if (state.sane) {
+                            strm.msg = "invalid distance too far back";
+                            state.mode = BAD;
+                            break top;
+                          }
+                        }
+                        from = 0;
+                        from_source = s_window;
+                        if (wnext === 0) {
+                          from += wsize - op;
+                          if (op < len) {
+                            len -= op;
+                            do {
+                              output[_out++] = s_window[from++];
+                            } while (--op);
+                            from = _out - dist;
+                            from_source = output;
+                          }
+                        } else if (wnext < op) {
+                          from += wsize + wnext - op;
+                          op -= wnext;
+                          if (op < len) {
+                            len -= op;
+                            do {
+                              output[_out++] = s_window[from++];
+                            } while (--op);
+                            from = 0;
+                            if (wnext < len) {
+                              op = wnext;
+                              len -= op;
+                              do {
+                                output[_out++] = s_window[from++];
+                              } while (--op);
+                              from = _out - dist;
+                              from_source = output;
+                            }
+                          }
+                        } else {
+                          from += wnext - op;
+                          if (op < len) {
+                            len -= op;
+                            do {
+                              output[_out++] = s_window[from++];
+                            } while (--op);
+                            from = _out - dist;
+                            from_source = output;
+                          }
+                        }
+                        while (len > 2) {
+                          output[_out++] = from_source[from++];
+                          output[_out++] = from_source[from++];
+                          output[_out++] = from_source[from++];
+                          len -= 3;
+                        }
+                        if (len) {
+                          output[_out++] = from_source[from++];
+                          if (len > 1) {
+                            output[_out++] = from_source[from++];
+                          }
+                        }
+                      } else {
+                        from = _out - dist;
+                        do {
+                          output[_out++] = output[from++];
+                          output[_out++] = output[from++];
+                          output[_out++] = output[from++];
+                          len -= 3;
+                        } while (len > 2);
+                        if (len) {
+                          output[_out++] = output[from++];
+                          if (len > 1) {
+                            output[_out++] = output[from++];
+                          }
+                        }
+                      }
+                    } else if ((op & 64) === 0) {
+                      here = dcode[(here & 65535) + (hold & (1 << op) - 1)];
+                      continue dodist;
+                    } else {
+                      strm.msg = "invalid distance code";
+                      state.mode = BAD;
+                      break top;
+                    }
+                    break;
+                  }
+              } else if ((op & 64) === 0) {
+                here = lcode[(here & 65535) + (hold & (1 << op) - 1)];
+                continue dolen;
+              } else if (op & 32) {
+                state.mode = TYPE;
+                break top;
+              } else {
+                strm.msg = "invalid literal/length code";
+                state.mode = BAD;
+                break top;
+              }
+              break;
+            }
+        } while (_in < last && _out < end);
+      len = bits >> 3;
+      _in -= len;
+      bits -= len << 3;
+      hold &= (1 << bits) - 1;
+      strm.next_in = _in;
+      strm.next_out = _out;
+      strm.avail_in = _in < last ? 5 + (last - _in) : 5 - (_in - last);
+      strm.avail_out = _out < end ? 257 + (end - _out) : 257 - (_out - end);
+      state.hold = hold;
+      state.bits = bits;
+      return;
+    };
+  }
+});
+
+// node_modules/pako/lib/zlib/inftrees.js
+var require_inftrees = __commonJS({
+  "node_modules/pako/lib/zlib/inftrees.js"(exports, module2) {
+    "use strict";
+    var MAXBITS = 15;
+    var ENOUGH_LENS = 852;
+    var ENOUGH_DISTS = 592;
+    var CODES = 0;
+    var LENS = 1;
+    var DISTS = 2;
+    var lbase = new Uint16Array([
+      /* Length codes 257..285 base */
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      13,
+      15,
+      17,
+      19,
+      23,
+      27,
+      31,
+      35,
+      43,
+      51,
+      59,
+      67,
+      83,
+      99,
+      115,
+      131,
+      163,
+      195,
+      227,
+      258,
+      0,
+      0
+    ]);
+    var lext = new Uint8Array([
+      /* Length codes 257..285 extra */
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      17,
+      17,
+      17,
+      17,
+      18,
+      18,
+      18,
+      18,
+      19,
+      19,
+      19,
+      19,
+      20,
+      20,
+      20,
+      20,
+      21,
+      21,
+      21,
+      21,
+      16,
+      72,
+      78
+    ]);
+    var dbase = new Uint16Array([
+      /* Distance codes 0..29 base */
+      1,
+      2,
+      3,
+      4,
+      5,
+      7,
+      9,
+      13,
+      17,
+      25,
+      33,
+      49,
+      65,
+      97,
+      129,
+      193,
+      257,
+      385,
+      513,
+      769,
+      1025,
+      1537,
+      2049,
+      3073,
+      4097,
+      6145,
+      8193,
+      12289,
+      16385,
+      24577,
+      0,
+      0
+    ]);
+    var dext = new Uint8Array([
+      /* Distance codes 0..29 extra */
+      16,
+      16,
+      16,
+      16,
+      17,
+      17,
+      18,
+      18,
+      19,
+      19,
+      20,
+      20,
+      21,
+      21,
+      22,
+      22,
+      23,
+      23,
+      24,
+      24,
+      25,
+      25,
+      26,
+      26,
+      27,
+      27,
+      28,
+      28,
+      29,
+      29,
+      64,
+      64
+    ]);
+    var inflate_table = (type, lens, lens_index, codes, table, table_index, work, opts) => {
+      const bits = opts.bits;
+      let len = 0;
+      let sym = 0;
+      let min = 0, max = 0;
+      let root = 0;
+      let curr = 0;
+      let drop = 0;
+      let left = 0;
+      let used = 0;
+      let huff = 0;
+      let incr;
+      let fill;
+      let low;
+      let mask;
+      let next;
+      let base = null;
+      let match;
+      const count = new Uint16Array(MAXBITS + 1);
+      const offs = new Uint16Array(MAXBITS + 1);
+      let extra = null;
+      let here_bits, here_op, here_val;
+      for (len = 0; len <= MAXBITS; len++) {
+        count[len] = 0;
+      }
+      for (sym = 0; sym < codes; sym++) {
+        count[lens[lens_index + sym]]++;
+      }
+      root = bits;
+      for (max = MAXBITS; max >= 1; max--) {
+        if (count[max] !== 0) {
+          break;
+        }
+      }
+      if (root > max) {
+        root = max;
+      }
+      if (max === 0) {
+        table[table_index++] = 1 << 24 | 64 << 16 | 0;
+        table[table_index++] = 1 << 24 | 64 << 16 | 0;
+        opts.bits = 1;
+        return 0;
+      }
+      for (min = 1; min < max; min++) {
+        if (count[min] !== 0) {
+          break;
+        }
+      }
+      if (root < min) {
+        root = min;
+      }
+      left = 1;
+      for (len = 1; len <= MAXBITS; len++) {
+        left <<= 1;
+        left -= count[len];
+        if (left < 0) {
+          return -1;
+        }
+      }
+      if (left > 0 && (type === CODES || max !== 1)) {
+        return -1;
+      }
+      offs[1] = 0;
+      for (len = 1; len < MAXBITS; len++) {
+        offs[len + 1] = offs[len] + count[len];
+      }
+      for (sym = 0; sym < codes; sym++) {
+        if (lens[lens_index + sym] !== 0) {
+          work[offs[lens[lens_index + sym]]++] = sym;
+        }
+      }
+      if (type === CODES) {
+        base = extra = work;
+        match = 20;
+      } else if (type === LENS) {
+        base = lbase;
+        extra = lext;
+        match = 257;
+      } else {
+        base = dbase;
+        extra = dext;
+        match = 0;
+      }
+      huff = 0;
+      sym = 0;
+      len = min;
+      next = table_index;
+      curr = root;
+      drop = 0;
+      low = -1;
+      used = 1 << root;
+      mask = used - 1;
+      if (type === LENS && used > ENOUGH_LENS || type === DISTS && used > ENOUGH_DISTS) {
+        return 1;
+      }
+      for (; ; ) {
+        here_bits = len - drop;
+        if (work[sym] + 1 < match) {
+          here_op = 0;
+          here_val = work[sym];
+        } else if (work[sym] >= match) {
+          here_op = extra[work[sym] - match];
+          here_val = base[work[sym] - match];
+        } else {
+          here_op = 32 + 64;
+          here_val = 0;
+        }
+        incr = 1 << len - drop;
+        fill = 1 << curr;
+        min = fill;
+        do {
+          fill -= incr;
+          table[next + (huff >> drop) + fill] = here_bits << 24 | here_op << 16 | here_val | 0;
+        } while (fill !== 0);
+        incr = 1 << len - 1;
+        while (huff & incr) {
+          incr >>= 1;
+        }
+        if (incr !== 0) {
+          huff &= incr - 1;
+          huff += incr;
+        } else {
+          huff = 0;
+        }
+        sym++;
+        if (--count[len] === 0) {
+          if (len === max) {
+            break;
+          }
+          len = lens[lens_index + work[sym]];
+        }
+        if (len > root && (huff & mask) !== low) {
+          if (drop === 0) {
+            drop = root;
+          }
+          next += min;
+          curr = len - drop;
+          left = 1 << curr;
+          while (curr + drop < max) {
+            left -= count[curr + drop];
+            if (left <= 0) {
+              break;
+            }
+            curr++;
+            left <<= 1;
+          }
+          used += 1 << curr;
+          if (type === LENS && used > ENOUGH_LENS || type === DISTS && used > ENOUGH_DISTS) {
+            return 1;
+          }
+          low = huff & mask;
+          table[low] = root << 24 | curr << 16 | next - table_index | 0;
+        }
+      }
+      if (huff !== 0) {
+        table[next + huff] = len - drop << 24 | 64 << 16 | 0;
+      }
+      opts.bits = root;
+      return 0;
+    };
+    module2.exports = inflate_table;
+  }
+});
+
+// node_modules/pako/lib/zlib/constants.js
+var require_constants = __commonJS({
+  "node_modules/pako/lib/zlib/constants.js"(exports, module2) {
+    "use strict";
+    module2.exports = {
+      /* Allowed flush values; see deflate() and inflate() below for details */
+      Z_NO_FLUSH: 0,
+      Z_PARTIAL_FLUSH: 1,
+      Z_SYNC_FLUSH: 2,
+      Z_FULL_FLUSH: 3,
+      Z_FINISH: 4,
+      Z_BLOCK: 5,
+      Z_TREES: 6,
+      /* Return codes for the compression/decompression functions. Negative values
+      * are errors, positive values are used for special but normal events.
+      */
+      Z_OK: 0,
+      Z_STREAM_END: 1,
+      Z_NEED_DICT: 2,
+      Z_ERRNO: -1,
+      Z_STREAM_ERROR: -2,
+      Z_DATA_ERROR: -3,
+      Z_MEM_ERROR: -4,
+      Z_BUF_ERROR: -5,
+      //Z_VERSION_ERROR: -6,
+      /* compression levels */
+      Z_NO_COMPRESSION: 0,
+      Z_BEST_SPEED: 1,
+      Z_BEST_COMPRESSION: 9,
+      Z_DEFAULT_COMPRESSION: -1,
+      Z_FILTERED: 1,
+      Z_HUFFMAN_ONLY: 2,
+      Z_RLE: 3,
+      Z_FIXED: 4,
+      Z_DEFAULT_STRATEGY: 0,
+      /* Possible values of the data_type field (though see inflate()) */
+      Z_BINARY: 0,
+      Z_TEXT: 1,
+      //Z_ASCII:                1, // = Z_TEXT (deprecated)
+      Z_UNKNOWN: 2,
+      /* The deflate compression method */
+      Z_DEFLATED: 8
+      //Z_NULL:                 null // Use -1 or null inline, depending on var type
+    };
+  }
+});
+
+// node_modules/pako/lib/zlib/inflate.js
+var require_inflate = __commonJS({
+  "node_modules/pako/lib/zlib/inflate.js"(exports, module2) {
+    "use strict";
+    var adler32 = require_adler32();
+    var crc32 = require_crc32();
+    var inflate_fast = require_inffast();
+    var inflate_table = require_inftrees();
+    var CODES = 0;
+    var LENS = 1;
+    var DISTS = 2;
+    var {
+      Z_FINISH,
+      Z_BLOCK,
+      Z_TREES,
+      Z_OK,
+      Z_STREAM_END,
+      Z_NEED_DICT,
+      Z_STREAM_ERROR,
+      Z_DATA_ERROR,
+      Z_MEM_ERROR,
+      Z_BUF_ERROR,
+      Z_DEFLATED
+    } = require_constants();
+    var HEAD = 16180;
+    var FLAGS = 16181;
+    var TIME = 16182;
+    var OS = 16183;
+    var EXLEN = 16184;
+    var EXTRA = 16185;
+    var NAME = 16186;
+    var COMMENT = 16187;
+    var HCRC = 16188;
+    var DICTID = 16189;
+    var DICT = 16190;
+    var TYPE = 16191;
+    var TYPEDO = 16192;
+    var STORED = 16193;
+    var COPY_ = 16194;
+    var COPY = 16195;
+    var TABLE = 16196;
+    var LENLENS = 16197;
+    var CODELENS = 16198;
+    var LEN_ = 16199;
+    var LEN = 16200;
+    var LENEXT = 16201;
+    var DIST = 16202;
+    var DISTEXT = 16203;
+    var MATCH = 16204;
+    var LIT = 16205;
+    var CHECK = 16206;
+    var LENGTH = 16207;
+    var DONE = 16208;
+    var BAD = 16209;
+    var MEM = 16210;
+    var SYNC = 16211;
+    var ENOUGH_LENS = 852;
+    var ENOUGH_DISTS = 592;
+    var MAX_WBITS = 15;
+    var DEF_WBITS = MAX_WBITS;
+    var zswap32 = (q) => {
+      return (q >>> 24 & 255) + (q >>> 8 & 65280) + ((q & 65280) << 8) + ((q & 255) << 24);
+    };
+    function InflateState() {
+      this.strm = null;
+      this.mode = 0;
+      this.last = false;
+      this.wrap = 0;
+      this.havedict = false;
+      this.flags = 0;
+      this.dmax = 0;
+      this.check = 0;
+      this.total = 0;
+      this.head = null;
+      this.wbits = 0;
+      this.wsize = 0;
+      this.whave = 0;
+      this.wnext = 0;
+      this.window = null;
+      this.hold = 0;
+      this.bits = 0;
+      this.length = 0;
+      this.offset = 0;
+      this.extra = 0;
+      this.lencode = null;
+      this.distcode = null;
+      this.lenbits = 0;
+      this.distbits = 0;
+      this.ncode = 0;
+      this.nlen = 0;
+      this.ndist = 0;
+      this.have = 0;
+      this.next = null;
+      this.lens = new Uint16Array(320);
+      this.work = new Uint16Array(288);
+      this.lendyn = null;
+      this.distdyn = null;
+      this.sane = 0;
+      this.back = 0;
+      this.was = 0;
+    }
+    var inflateStateCheck = (strm) => {
+      if (!strm) {
+        return 1;
+      }
+      const state = strm.state;
+      if (!state || state.strm !== strm || state.mode < HEAD || state.mode > SYNC) {
+        return 1;
+      }
+      return 0;
+    };
+    var inflateResetKeep = (strm) => {
+      if (inflateStateCheck(strm)) {
+        return Z_STREAM_ERROR;
+      }
+      const state = strm.state;
+      strm.total_in = strm.total_out = state.total = 0;
+      strm.msg = "";
+      if (state.wrap) {
+        strm.adler = state.wrap & 1;
+      }
+      state.mode = HEAD;
+      state.last = 0;
+      state.havedict = 0;
+      state.flags = -1;
+      state.dmax = 32768;
+      state.head = null;
+      state.hold = 0;
+      state.bits = 0;
+      state.lencode = state.lendyn = new Int32Array(ENOUGH_LENS);
+      state.distcode = state.distdyn = new Int32Array(ENOUGH_DISTS);
+      state.sane = 1;
+      state.back = -1;
+      return Z_OK;
+    };
+    var inflateReset = (strm) => {
+      if (inflateStateCheck(strm)) {
+        return Z_STREAM_ERROR;
+      }
+      const state = strm.state;
+      state.wsize = 0;
+      state.whave = 0;
+      state.wnext = 0;
+      return inflateResetKeep(strm);
+    };
+    var inflateReset2 = (strm, windowBits) => {
+      let wrap;
+      if (inflateStateCheck(strm)) {
+        return Z_STREAM_ERROR;
+      }
+      const state = strm.state;
+      if (windowBits < 0) {
+        wrap = 0;
+        windowBits = -windowBits;
+      } else {
+        wrap = (windowBits >> 4) + 5;
+        if (windowBits < 48) {
+          windowBits &= 15;
+        }
+      }
+      if (windowBits && (windowBits < 8 || windowBits > 15)) {
+        return Z_STREAM_ERROR;
+      }
+      if (state.window !== null && state.wbits !== windowBits) {
+        state.window = null;
+      }
+      state.wrap = wrap;
+      state.wbits = windowBits;
+      return inflateReset(strm);
+    };
+    var inflateInit2 = (strm, windowBits) => {
+      if (!strm) {
+        return Z_STREAM_ERROR;
+      }
+      const state = new InflateState();
+      strm.state = state;
+      state.strm = strm;
+      state.window = null;
+      state.mode = HEAD;
+      const ret = inflateReset2(strm, windowBits);
+      if (ret !== Z_OK) {
+        strm.state = null;
+      }
+      return ret;
+    };
+    var inflateInit = (strm) => {
+      return inflateInit2(strm, DEF_WBITS);
+    };
+    var virgin = true;
+    var lenfix;
+    var distfix;
+    var fixedtables = (state) => {
+      if (virgin) {
+        lenfix = new Int32Array(512);
+        distfix = new Int32Array(32);
+        let sym = 0;
+        while (sym < 144) {
+          state.lens[sym++] = 8;
+        }
+        while (sym < 256) {
+          state.lens[sym++] = 9;
+        }
+        while (sym < 280) {
+          state.lens[sym++] = 7;
+        }
+        while (sym < 288) {
+          state.lens[sym++] = 8;
+        }
+        inflate_table(LENS, state.lens, 0, 288, lenfix, 0, state.work, { bits: 9 });
+        sym = 0;
+        while (sym < 32) {
+          state.lens[sym++] = 5;
+        }
+        inflate_table(DISTS, state.lens, 0, 32, distfix, 0, state.work, { bits: 5 });
+        virgin = false;
+      }
+      state.lencode = lenfix;
+      state.lenbits = 9;
+      state.distcode = distfix;
+      state.distbits = 5;
+    };
+    var updatewindow = (strm, src, end, copy) => {
+      let dist;
+      const state = strm.state;
+      if (state.window === null) {
+        state.wsize = 1 << state.wbits;
+        state.wnext = 0;
+        state.whave = 0;
+        state.window = new Uint8Array(state.wsize);
+      }
+      if (copy >= state.wsize) {
+        state.window.set(src.subarray(end - state.wsize, end), 0);
+        state.wnext = 0;
+        state.whave = state.wsize;
+      } else {
+        dist = state.wsize - state.wnext;
+        if (dist > copy) {
+          dist = copy;
+        }
+        state.window.set(src.subarray(end - copy, end - copy + dist), state.wnext);
+        copy -= dist;
+        if (copy) {
+          state.window.set(src.subarray(end - copy, end), 0);
+          state.wnext = copy;
+          state.whave = state.wsize;
+        } else {
+          state.wnext += dist;
+          if (state.wnext === state.wsize) {
+            state.wnext = 0;
+          }
+          if (state.whave < state.wsize) {
+            state.whave += dist;
+          }
+        }
+      }
+      return 0;
+    };
+    var inflate = (strm, flush) => {
+      let state;
+      let input, output;
+      let next;
+      let put;
+      let have, left;
+      let hold;
+      let bits;
+      let _in, _out;
+      let copy;
+      let from;
+      let from_source;
+      let here = 0;
+      let here_bits, here_op, here_val;
+      let last_bits, last_op, last_val;
+      let len;
+      let ret;
+      const hbuf = new Uint8Array(4);
+      let opts;
+      let n;
+      const order = (
+        /* permutation of code lengths */
+        new Uint8Array([16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15])
+      );
+      if (inflateStateCheck(strm) || !strm.output || !strm.input && strm.avail_in !== 0) {
+        return Z_STREAM_ERROR;
+      }
+      state = strm.state;
+      if (state.mode === TYPE) {
+        state.mode = TYPEDO;
+      }
+      put = strm.next_out;
+      output = strm.output;
+      left = strm.avail_out;
+      next = strm.next_in;
+      input = strm.input;
+      have = strm.avail_in;
+      hold = state.hold;
+      bits = state.bits;
+      _in = have;
+      _out = left;
+      ret = Z_OK;
+      inf_leave:
+        for (; ; ) {
+          switch (state.mode) {
+            case HEAD:
+              if (state.wrap === 0) {
+                state.mode = TYPEDO;
+                break;
+              }
+              while (bits < 16) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold += input[next++] << bits;
+                bits += 8;
+              }
+              if (state.wrap & 2 && hold === 35615) {
+                if (state.wbits === 0) {
+                  state.wbits = 15;
+                }
+                state.check = 0;
+                hbuf[0] = hold & 255;
+                hbuf[1] = hold >>> 8 & 255;
+                state.check = crc32(state.check, hbuf, 2, 0);
+                hold = 0;
+                bits = 0;
+                state.mode = FLAGS;
+                break;
+              }
+              if (state.head) {
+                state.head.done = false;
+              }
+              if (!(state.wrap & 1) || /* check if zlib header allowed */
+              (((hold & 255) << 8) + (hold >> 8)) % 31) {
+                strm.msg = "incorrect header check";
+                state.mode = BAD;
+                break;
+              }
+              if ((hold & 15) !== Z_DEFLATED) {
+                strm.msg = "unknown compression method";
+                state.mode = BAD;
+                break;
+              }
+              hold >>>= 4;
+              bits -= 4;
+              len = (hold & 15) + 8;
+              if (state.wbits === 0) {
+                state.wbits = len;
+              }
+              if (len > 15 || len > state.wbits) {
+                strm.msg = "invalid window size";
+                state.mode = BAD;
+                break;
+              }
+              state.dmax = 1 << state.wbits;
+              state.flags = 0;
+              strm.adler = state.check = 1;
+              state.mode = hold & 512 ? DICTID : TYPE;
+              hold = 0;
+              bits = 0;
+              break;
+            case FLAGS:
+              while (bits < 16) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold += input[next++] << bits;
+                bits += 8;
+              }
+              state.flags = hold;
+              if ((state.flags & 255) !== Z_DEFLATED) {
+                strm.msg = "unknown compression method";
+                state.mode = BAD;
+                break;
+              }
+              if (state.flags & 57344) {
+                strm.msg = "unknown header flags set";
+                state.mode = BAD;
+                break;
+              }
+              if (state.head) {
+                state.head.text = hold >> 8 & 1;
+              }
+              if (state.flags & 512 && state.wrap & 4) {
+                hbuf[0] = hold & 255;
+                hbuf[1] = hold >>> 8 & 255;
+                state.check = crc32(state.check, hbuf, 2, 0);
+              }
+              hold = 0;
+              bits = 0;
+              state.mode = TIME;
+            case TIME:
+              while (bits < 32) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold += input[next++] << bits;
+                bits += 8;
+              }
+              if (state.head) {
+                state.head.time = hold;
+              }
+              if (state.flags & 512 && state.wrap & 4) {
+                hbuf[0] = hold & 255;
+                hbuf[1] = hold >>> 8 & 255;
+                hbuf[2] = hold >>> 16 & 255;
+                hbuf[3] = hold >>> 24 & 255;
+                state.check = crc32(state.check, hbuf, 4, 0);
+              }
+              hold = 0;
+              bits = 0;
+              state.mode = OS;
+            case OS:
+              while (bits < 16) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold += input[next++] << bits;
+                bits += 8;
+              }
+              if (state.head) {
+                state.head.xflags = hold & 255;
+                state.head.os = hold >> 8;
+              }
+              if (state.flags & 512 && state.wrap & 4) {
+                hbuf[0] = hold & 255;
+                hbuf[1] = hold >>> 8 & 255;
+                state.check = crc32(state.check, hbuf, 2, 0);
+              }
+              hold = 0;
+              bits = 0;
+              state.mode = EXLEN;
+            case EXLEN:
+              if (state.flags & 1024) {
+                while (bits < 16) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold += input[next++] << bits;
+                  bits += 8;
+                }
+                state.length = hold;
+                if (state.head) {
+                  state.head.extra_len = hold;
+                }
+                if (state.flags & 512 && state.wrap & 4) {
+                  hbuf[0] = hold & 255;
+                  hbuf[1] = hold >>> 8 & 255;
+                  state.check = crc32(state.check, hbuf, 2, 0);
+                }
+                hold = 0;
+                bits = 0;
+              } else if (state.head) {
+                state.head.extra = null;
+              }
+              state.mode = EXTRA;
+            case EXTRA:
+              if (state.flags & 1024) {
+                copy = state.length;
+                if (copy > have) {
+                  copy = have;
+                }
+                if (copy) {
+                  if (state.head) {
+                    len = state.head.extra_len - state.length;
+                    if (!state.head.extra) {
+                      state.head.extra = new Uint8Array(state.head.extra_len);
+                    }
+                    state.head.extra.set(
+                      input.subarray(
+                        next,
+                        // extra field is limited to 65536 bytes
+                        // - no need for additional size check
+                        next + copy
+                      ),
+                      /*len + copy > state.head.extra_max - len ? state.head.extra_max : copy,*/
+                      len
+                    );
+                  }
+                  if (state.flags & 512 && state.wrap & 4) {
+                    state.check = crc32(state.check, input, copy, next);
+                  }
+                  have -= copy;
+                  next += copy;
+                  state.length -= copy;
+                }
+                if (state.length) {
+                  break inf_leave;
+                }
+              }
+              state.length = 0;
+              state.mode = NAME;
+            case NAME:
+              if (state.flags & 2048) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                copy = 0;
+                do {
+                  len = input[next + copy++];
+                  if (state.head && len && state.length < 65536) {
+                    state.head.name += String.fromCharCode(len);
+                  }
+                } while (len && copy < have);
+                if (state.flags & 512 && state.wrap & 4) {
+                  state.check = crc32(state.check, input, copy, next);
+                }
+                have -= copy;
+                next += copy;
+                if (len) {
+                  break inf_leave;
+                }
+              } else if (state.head) {
+                state.head.name = null;
+              }
+              state.length = 0;
+              state.mode = COMMENT;
+            case COMMENT:
+              if (state.flags & 4096) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                copy = 0;
+                do {
+                  len = input[next + copy++];
+                  if (state.head && len && state.length < 65536) {
+                    state.head.comment += String.fromCharCode(len);
+                  }
+                } while (len && copy < have);
+                if (state.flags & 512 && state.wrap & 4) {
+                  state.check = crc32(state.check, input, copy, next);
+                }
+                have -= copy;
+                next += copy;
+                if (len) {
+                  break inf_leave;
+                }
+              } else if (state.head) {
+                state.head.comment = null;
+              }
+              state.mode = HCRC;
+            case HCRC:
+              if (state.flags & 512) {
+                while (bits < 16) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold += input[next++] << bits;
+                  bits += 8;
+                }
+                if (state.wrap & 4 && hold !== (state.check & 65535)) {
+                  strm.msg = "header crc mismatch";
+                  state.mode = BAD;
+                  break;
+                }
+                hold = 0;
+                bits = 0;
+              }
+              if (state.head) {
+                state.head.hcrc = state.flags >> 9 & 1;
+                state.head.done = true;
+              }
+              strm.adler = state.check = 0;
+              state.mode = TYPE;
+              break;
+            case DICTID:
+              while (bits < 32) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold += input[next++] << bits;
+                bits += 8;
+              }
+              strm.adler = state.check = zswap32(hold);
+              hold = 0;
+              bits = 0;
+              state.mode = DICT;
+            case DICT:
+              if (state.havedict === 0) {
+                strm.next_out = put;
+                strm.avail_out = left;
+                strm.next_in = next;
+                strm.avail_in = have;
+                state.hold = hold;
+                state.bits = bits;
+                return Z_NEED_DICT;
+              }
+              strm.adler = state.check = 1;
+              state.mode = TYPE;
+            case TYPE:
+              if (flush === Z_BLOCK || flush === Z_TREES) {
+                break inf_leave;
+              }
+            case TYPEDO:
+              if (state.last) {
+                hold >>>= bits & 7;
+                bits -= bits & 7;
+                state.mode = CHECK;
+                break;
+              }
+              while (bits < 3) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold += input[next++] << bits;
+                bits += 8;
+              }
+              state.last = hold & 1;
+              hold >>>= 1;
+              bits -= 1;
+              switch (hold & 3) {
+                case 0:
+                  state.mode = STORED;
+                  break;
+                case 1:
+                  fixedtables(state);
+                  state.mode = LEN_;
+                  if (flush === Z_TREES) {
+                    hold >>>= 2;
+                    bits -= 2;
+                    break inf_leave;
+                  }
+                  break;
+                case 2:
+                  state.mode = TABLE;
+                  break;
+                case 3:
+                  strm.msg = "invalid block type";
+                  state.mode = BAD;
+              }
+              hold >>>= 2;
+              bits -= 2;
+              break;
+            case STORED:
+              hold >>>= bits & 7;
+              bits -= bits & 7;
+              while (bits < 32) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold += input[next++] << bits;
+                bits += 8;
+              }
+              if ((hold & 65535) !== (hold >>> 16 ^ 65535)) {
+                strm.msg = "invalid stored block lengths";
+                state.mode = BAD;
+                break;
+              }
+              state.length = hold & 65535;
+              hold = 0;
+              bits = 0;
+              state.mode = COPY_;
+              if (flush === Z_TREES) {
+                break inf_leave;
+              }
+            case COPY_:
+              state.mode = COPY;
+            case COPY:
+              copy = state.length;
+              if (copy) {
+                if (copy > have) {
+                  copy = have;
+                }
+                if (copy > left) {
+                  copy = left;
+                }
+                if (copy === 0) {
+                  break inf_leave;
+                }
+                output.set(input.subarray(next, next + copy), put);
+                have -= copy;
+                next += copy;
+                left -= copy;
+                put += copy;
+                state.length -= copy;
+                break;
+              }
+              state.mode = TYPE;
+              break;
+            case TABLE:
+              while (bits < 14) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold += input[next++] << bits;
+                bits += 8;
+              }
+              state.nlen = (hold & 31) + 257;
+              hold >>>= 5;
+              bits -= 5;
+              state.ndist = (hold & 31) + 1;
+              hold >>>= 5;
+              bits -= 5;
+              state.ncode = (hold & 15) + 4;
+              hold >>>= 4;
+              bits -= 4;
+              if (state.nlen > 286 || state.ndist > 30) {
+                strm.msg = "too many length or distance symbols";
+                state.mode = BAD;
+                break;
+              }
+              state.have = 0;
+              state.mode = LENLENS;
+            case LENLENS:
+              while (state.have < state.ncode) {
+                while (bits < 3) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold += input[next++] << bits;
+                  bits += 8;
+                }
+                state.lens[order[state.have++]] = hold & 7;
+                hold >>>= 3;
+                bits -= 3;
+              }
+              while (state.have < 19) {
+                state.lens[order[state.have++]] = 0;
+              }
+              state.lencode = state.lendyn;
+              state.lenbits = 7;
+              opts = { bits: state.lenbits };
+              ret = inflate_table(CODES, state.lens, 0, 19, state.lencode, 0, state.work, opts);
+              state.lenbits = opts.bits;
+              if (ret) {
+                strm.msg = "invalid code lengths set";
+                state.mode = BAD;
+                break;
+              }
+              state.have = 0;
+              state.mode = CODELENS;
+            case CODELENS:
+              while (state.have < state.nlen + state.ndist) {
+                for (; ; ) {
+                  here = state.lencode[hold & (1 << state.lenbits) - 1];
+                  here_bits = here >>> 24;
+                  here_op = here >>> 16 & 255;
+                  here_val = here & 65535;
+                  if (here_bits <= bits) {
+                    break;
+                  }
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold += input[next++] << bits;
+                  bits += 8;
+                }
+                if (here_val < 16) {
+                  hold >>>= here_bits;
+                  bits -= here_bits;
+                  state.lens[state.have++] = here_val;
+                } else {
+                  if (here_val === 16) {
+                    n = here_bits + 2;
+                    while (bits < n) {
+                      if (have === 0) {
+                        break inf_leave;
+                      }
+                      have--;
+                      hold += input[next++] << bits;
+                      bits += 8;
+                    }
+                    hold >>>= here_bits;
+                    bits -= here_bits;
+                    if (state.have === 0) {
+                      strm.msg = "invalid bit length repeat";
+                      state.mode = BAD;
+                      break;
+                    }
+                    len = state.lens[state.have - 1];
+                    copy = 3 + (hold & 3);
+                    hold >>>= 2;
+                    bits -= 2;
+                  } else if (here_val === 17) {
+                    n = here_bits + 3;
+                    while (bits < n) {
+                      if (have === 0) {
+                        break inf_leave;
+                      }
+                      have--;
+                      hold += input[next++] << bits;
+                      bits += 8;
+                    }
+                    hold >>>= here_bits;
+                    bits -= here_bits;
+                    len = 0;
+                    copy = 3 + (hold & 7);
+                    hold >>>= 3;
+                    bits -= 3;
+                  } else {
+                    n = here_bits + 7;
+                    while (bits < n) {
+                      if (have === 0) {
+                        break inf_leave;
+                      }
+                      have--;
+                      hold += input[next++] << bits;
+                      bits += 8;
+                    }
+                    hold >>>= here_bits;
+                    bits -= here_bits;
+                    len = 0;
+                    copy = 11 + (hold & 127);
+                    hold >>>= 7;
+                    bits -= 7;
+                  }
+                  if (state.have + copy > state.nlen + state.ndist) {
+                    strm.msg = "invalid bit length repeat";
+                    state.mode = BAD;
+                    break;
+                  }
+                  while (copy--) {
+                    state.lens[state.have++] = len;
+                  }
+                }
+              }
+              if (state.mode === BAD) {
+                break;
+              }
+              if (state.lens[256] === 0) {
+                strm.msg = "invalid code -- missing end-of-block";
+                state.mode = BAD;
+                break;
+              }
+              state.lenbits = 9;
+              opts = { bits: state.lenbits };
+              ret = inflate_table(LENS, state.lens, 0, state.nlen, state.lencode, 0, state.work, opts);
+              state.lenbits = opts.bits;
+              if (ret) {
+                strm.msg = "invalid literal/lengths set";
+                state.mode = BAD;
+                break;
+              }
+              state.distbits = 6;
+              state.distcode = state.distdyn;
+              opts = { bits: state.distbits };
+              ret = inflate_table(DISTS, state.lens, state.nlen, state.ndist, state.distcode, 0, state.work, opts);
+              state.distbits = opts.bits;
+              if (ret) {
+                strm.msg = "invalid distances set";
+                state.mode = BAD;
+                break;
+              }
+              state.mode = LEN_;
+              if (flush === Z_TREES) {
+                break inf_leave;
+              }
+            case LEN_:
+              state.mode = LEN;
+            case LEN:
+              if (have >= 6 && left >= 258) {
+                strm.next_out = put;
+                strm.avail_out = left;
+                strm.next_in = next;
+                strm.avail_in = have;
+                state.hold = hold;
+                state.bits = bits;
+                inflate_fast(strm, _out);
+                put = strm.next_out;
+                output = strm.output;
+                left = strm.avail_out;
+                next = strm.next_in;
+                input = strm.input;
+                have = strm.avail_in;
+                hold = state.hold;
+                bits = state.bits;
+                if (state.mode === TYPE) {
+                  state.back = -1;
+                }
+                break;
+              }
+              state.back = 0;
+              for (; ; ) {
+                here = state.lencode[hold & (1 << state.lenbits) - 1];
+                here_bits = here >>> 24;
+                here_op = here >>> 16 & 255;
+                here_val = here & 65535;
+                if (here_bits <= bits) {
+                  break;
+                }
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold += input[next++] << bits;
+                bits += 8;
+              }
+              if (here_op && (here_op & 240) === 0) {
+                last_bits = here_bits;
+                last_op = here_op;
+                last_val = here_val;
+                for (; ; ) {
+                  here = state.lencode[last_val + ((hold & (1 << last_bits + last_op) - 1) >> last_bits)];
+                  here_bits = here >>> 24;
+                  here_op = here >>> 16 & 255;
+                  here_val = here & 65535;
+                  if (last_bits + here_bits <= bits) {
+                    break;
+                  }
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold += input[next++] << bits;
+                  bits += 8;
+                }
+                hold >>>= last_bits;
+                bits -= last_bits;
+                state.back += last_bits;
+              }
+              hold >>>= here_bits;
+              bits -= here_bits;
+              state.back += here_bits;
+              state.length = here_val;
+              if (here_op === 0) {
+                state.mode = LIT;
+                break;
+              }
+              if (here_op & 32) {
+                state.back = -1;
+                state.mode = TYPE;
+                break;
+              }
+              if (here_op & 64) {
+                strm.msg = "invalid literal/length code";
+                state.mode = BAD;
+                break;
+              }
+              state.extra = here_op & 15;
+              state.mode = LENEXT;
+            case LENEXT:
+              if (state.extra) {
+                n = state.extra;
+                while (bits < n) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold += input[next++] << bits;
+                  bits += 8;
+                }
+                state.length += hold & (1 << state.extra) - 1;
+                hold >>>= state.extra;
+                bits -= state.extra;
+                state.back += state.extra;
+              }
+              state.was = state.length;
+              state.mode = DIST;
+            case DIST:
+              for (; ; ) {
+                here = state.distcode[hold & (1 << state.distbits) - 1];
+                here_bits = here >>> 24;
+                here_op = here >>> 16 & 255;
+                here_val = here & 65535;
+                if (here_bits <= bits) {
+                  break;
+                }
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold += input[next++] << bits;
+                bits += 8;
+              }
+              if ((here_op & 240) === 0) {
+                last_bits = here_bits;
+                last_op = here_op;
+                last_val = here_val;
+                for (; ; ) {
+                  here = state.distcode[last_val + ((hold & (1 << last_bits + last_op) - 1) >> last_bits)];
+                  here_bits = here >>> 24;
+                  here_op = here >>> 16 & 255;
+                  here_val = here & 65535;
+                  if (last_bits + here_bits <= bits) {
+                    break;
+                  }
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold += input[next++] << bits;
+                  bits += 8;
+                }
+                hold >>>= last_bits;
+                bits -= last_bits;
+                state.back += last_bits;
+              }
+              hold >>>= here_bits;
+              bits -= here_bits;
+              state.back += here_bits;
+              if (here_op & 64) {
+                strm.msg = "invalid distance code";
+                state.mode = BAD;
+                break;
+              }
+              state.offset = here_val;
+              state.extra = here_op & 15;
+              state.mode = DISTEXT;
+            case DISTEXT:
+              if (state.extra) {
+                n = state.extra;
+                while (bits < n) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold += input[next++] << bits;
+                  bits += 8;
+                }
+                state.offset += hold & (1 << state.extra) - 1;
+                hold >>>= state.extra;
+                bits -= state.extra;
+                state.back += state.extra;
+              }
+              if (state.offset > state.dmax) {
+                strm.msg = "invalid distance too far back";
+                state.mode = BAD;
+                break;
+              }
+              state.mode = MATCH;
+            case MATCH:
+              if (left === 0) {
+                break inf_leave;
+              }
+              copy = _out - left;
+              if (state.offset > copy) {
+                copy = state.offset - copy;
+                if (copy > state.whave) {
+                  if (state.sane) {
+                    strm.msg = "invalid distance too far back";
+                    state.mode = BAD;
+                    break;
+                  }
+                }
+                if (copy > state.wnext) {
+                  copy -= state.wnext;
+                  from = state.wsize - copy;
+                } else {
+                  from = state.wnext - copy;
+                }
+                if (copy > state.length) {
+                  copy = state.length;
+                }
+                from_source = state.window;
+              } else {
+                from_source = output;
+                from = put - state.offset;
+                copy = state.length;
+              }
+              if (copy > left) {
+                copy = left;
+              }
+              left -= copy;
+              state.length -= copy;
+              do {
+                output[put++] = from_source[from++];
+              } while (--copy);
+              if (state.length === 0) {
+                state.mode = LEN;
+              }
+              break;
+            case LIT:
+              if (left === 0) {
+                break inf_leave;
+              }
+              output[put++] = state.length;
+              left--;
+              state.mode = LEN;
+              break;
+            case CHECK:
+              if (state.wrap) {
+                while (bits < 32) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold |= input[next++] << bits;
+                  bits += 8;
+                }
+                _out -= left;
+                strm.total_out += _out;
+                state.total += _out;
+                if (state.wrap & 4 && _out) {
+                  strm.adler = state.check = /*UPDATE_CHECK(state.check, put - _out, _out);*/
+                  state.flags ? crc32(state.check, output, _out, put - _out) : adler32(state.check, output, _out, put - _out);
+                }
+                _out = left;
+                if (state.wrap & 4 && (state.flags ? hold : zswap32(hold)) !== state.check) {
+                  strm.msg = "incorrect data check";
+                  state.mode = BAD;
+                  break;
+                }
+                hold = 0;
+                bits = 0;
+              }
+              state.mode = LENGTH;
+            case LENGTH:
+              if (state.wrap && state.flags) {
+                while (bits < 32) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold += input[next++] << bits;
+                  bits += 8;
+                }
+                if (state.wrap & 4 && hold !== (state.total & 4294967295)) {
+                  strm.msg = "incorrect length check";
+                  state.mode = BAD;
+                  break;
+                }
+                hold = 0;
+                bits = 0;
+              }
+              state.mode = DONE;
+            case DONE:
+              ret = Z_STREAM_END;
+              break inf_leave;
+            case BAD:
+              ret = Z_DATA_ERROR;
+              break inf_leave;
+            case MEM:
+              return Z_MEM_ERROR;
+            case SYNC:
+            default:
+              return Z_STREAM_ERROR;
+          }
+        }
+      strm.next_out = put;
+      strm.avail_out = left;
+      strm.next_in = next;
+      strm.avail_in = have;
+      state.hold = hold;
+      state.bits = bits;
+      if (state.wsize || _out !== strm.avail_out && state.mode < BAD && (state.mode < CHECK || flush !== Z_FINISH)) {
+        if (updatewindow(strm, strm.output, strm.next_out, _out - strm.avail_out)) {
+          state.mode = MEM;
+          return Z_MEM_ERROR;
+        }
+      }
+      _in -= strm.avail_in;
+      _out -= strm.avail_out;
+      strm.total_in += _in;
+      strm.total_out += _out;
+      state.total += _out;
+      if (state.wrap & 4 && _out) {
+        strm.adler = state.check = /*UPDATE_CHECK(state.check, strm.next_out - _out, _out);*/
+        state.flags ? crc32(state.check, output, _out, strm.next_out - _out) : adler32(state.check, output, _out, strm.next_out - _out);
+      }
+      strm.data_type = state.bits + (state.last ? 64 : 0) + (state.mode === TYPE ? 128 : 0) + (state.mode === LEN_ || state.mode === COPY_ ? 256 : 0);
+      if ((_in === 0 && _out === 0 || flush === Z_FINISH) && ret === Z_OK) {
+        ret = Z_BUF_ERROR;
+      }
+      return ret;
+    };
+    var inflateEnd = (strm) => {
+      if (inflateStateCheck(strm)) {
+        return Z_STREAM_ERROR;
+      }
+      let state = strm.state;
+      if (state.window) {
+        state.window = null;
+      }
+      strm.state = null;
+      return Z_OK;
+    };
+    var inflateGetHeader = (strm, head) => {
+      if (inflateStateCheck(strm)) {
+        return Z_STREAM_ERROR;
+      }
+      const state = strm.state;
+      if ((state.wrap & 2) === 0) {
+        return Z_STREAM_ERROR;
+      }
+      state.head = head;
+      head.done = false;
+      return Z_OK;
+    };
+    var inflateSetDictionary = (strm, dictionary) => {
+      const dictLength = dictionary.length;
+      let state;
+      let dictid;
+      let ret;
+      if (inflateStateCheck(strm)) {
+        return Z_STREAM_ERROR;
+      }
+      state = strm.state;
+      if (state.wrap !== 0 && state.mode !== DICT) {
+        return Z_STREAM_ERROR;
+      }
+      if (state.mode === DICT) {
+        dictid = 1;
+        dictid = adler32(dictid, dictionary, dictLength, 0);
+        if (dictid !== state.check) {
+          return Z_DATA_ERROR;
+        }
+      }
+      ret = updatewindow(strm, dictionary, dictLength, dictLength);
+      if (ret) {
+        state.mode = MEM;
+        return Z_MEM_ERROR;
+      }
+      state.havedict = 1;
+      return Z_OK;
+    };
+    module2.exports.inflateReset = inflateReset;
+    module2.exports.inflateReset2 = inflateReset2;
+    module2.exports.inflateResetKeep = inflateResetKeep;
+    module2.exports.inflateInit = inflateInit;
+    module2.exports.inflateInit2 = inflateInit2;
+    module2.exports.inflate = inflate;
+    module2.exports.inflateEnd = inflateEnd;
+    module2.exports.inflateGetHeader = inflateGetHeader;
+    module2.exports.inflateSetDictionary = inflateSetDictionary;
+    module2.exports.inflateInfo = "pako inflate (from Nodeca project)";
+  }
+});
+
+// node_modules/pako/lib/utils/common.js
+var require_common = __commonJS({
+  "node_modules/pako/lib/utils/common.js"(exports, module2) {
+    "use strict";
+    var _has = (obj, key) => {
+      return Object.prototype.hasOwnProperty.call(obj, key);
+    };
+    module2.exports.assign = function(obj) {
+      const sources = Array.prototype.slice.call(arguments, 1);
+      while (sources.length) {
+        const source = sources.shift();
+        if (!source) {
+          continue;
+        }
+        if (typeof source !== "object") {
+          throw new TypeError(source + "must be non-object");
+        }
+        for (const p in source) {
+          if (_has(source, p)) {
+            obj[p] = source[p];
+          }
+        }
+      }
+      return obj;
+    };
+    module2.exports.flattenChunks = (chunks) => {
+      let len = 0;
+      for (let i = 0, l = chunks.length; i < l; i++) {
+        len += chunks[i].length;
+      }
+      const result = new Uint8Array(len);
+      for (let i = 0, pos = 0, l = chunks.length; i < l; i++) {
+        let chunk = chunks[i];
+        result.set(chunk, pos);
+        pos += chunk.length;
+      }
+      return result;
+    };
+  }
+});
+
+// node_modules/pako/lib/utils/strings.js
+var require_strings = __commonJS({
+  "node_modules/pako/lib/utils/strings.js"(exports, module2) {
+    "use strict";
+    var STR_APPLY_UIA_OK = true;
+    try {
+      String.fromCharCode.apply(null, new Uint8Array(1));
+    } catch (__) {
+      STR_APPLY_UIA_OK = false;
+    }
+    var _utf8len = new Uint8Array(256);
+    for (let q = 0; q < 256; q++) {
+      _utf8len[q] = q >= 252 ? 6 : q >= 248 ? 5 : q >= 240 ? 4 : q >= 224 ? 3 : q >= 192 ? 2 : 1;
+    }
+    _utf8len[254] = _utf8len[254] = 1;
+    module2.exports.string2buf = (str) => {
+      if (typeof TextEncoder === "function" && TextEncoder.prototype.encode) {
+        return new TextEncoder().encode(str);
+      }
+      let buf, c, c2, m_pos, i, str_len = str.length, buf_len = 0;
+      for (m_pos = 0; m_pos < str_len; m_pos++) {
+        c = str.charCodeAt(m_pos);
+        if ((c & 64512) === 55296 && m_pos + 1 < str_len) {
+          c2 = str.charCodeAt(m_pos + 1);
+          if ((c2 & 64512) === 56320) {
+            c = 65536 + (c - 55296 << 10) + (c2 - 56320);
+            m_pos++;
+          }
+        }
+        buf_len += c < 128 ? 1 : c < 2048 ? 2 : c < 65536 ? 3 : 4;
+      }
+      buf = new Uint8Array(buf_len);
+      for (i = 0, m_pos = 0; i < buf_len; m_pos++) {
+        c = str.charCodeAt(m_pos);
+        if ((c & 64512) === 55296 && m_pos + 1 < str_len) {
+          c2 = str.charCodeAt(m_pos + 1);
+          if ((c2 & 64512) === 56320) {
+            c = 65536 + (c - 55296 << 10) + (c2 - 56320);
+            m_pos++;
+          }
+        }
+        if (c < 128) {
+          buf[i++] = c;
+        } else if (c < 2048) {
+          buf[i++] = 192 | c >>> 6;
+          buf[i++] = 128 | c & 63;
+        } else if (c < 65536) {
+          buf[i++] = 224 | c >>> 12;
+          buf[i++] = 128 | c >>> 6 & 63;
+          buf[i++] = 128 | c & 63;
+        } else {
+          buf[i++] = 240 | c >>> 18;
+          buf[i++] = 128 | c >>> 12 & 63;
+          buf[i++] = 128 | c >>> 6 & 63;
+          buf[i++] = 128 | c & 63;
+        }
+      }
+      return buf;
+    };
+    var buf2binstring = (buf, len) => {
+      if (len < 65534) {
+        if (buf.subarray && STR_APPLY_UIA_OK) {
+          return String.fromCharCode.apply(null, buf.length === len ? buf : buf.subarray(0, len));
+        }
+      }
+      let result = "";
+      for (let i = 0; i < len; i++) {
+        result += String.fromCharCode(buf[i]);
+      }
+      return result;
+    };
+    module2.exports.buf2string = (buf, max) => {
+      const len = max || buf.length;
+      if (typeof TextDecoder === "function" && TextDecoder.prototype.decode) {
+        return new TextDecoder().decode(buf.subarray(0, max));
+      }
+      let i, out;
+      const utf16buf = new Array(len * 2);
+      for (out = 0, i = 0; i < len; ) {
+        let c = buf[i++];
+        if (c < 128) {
+          utf16buf[out++] = c;
+          continue;
+        }
+        let c_len = _utf8len[c];
+        if (c_len > 4) {
+          utf16buf[out++] = 65533;
+          i += c_len - 1;
+          continue;
+        }
+        c &= c_len === 2 ? 31 : c_len === 3 ? 15 : 7;
+        while (c_len > 1 && i < len) {
+          c = c << 6 | buf[i++] & 63;
+          c_len--;
+        }
+        if (c_len > 1) {
+          utf16buf[out++] = 65533;
+          continue;
+        }
+        if (c < 65536) {
+          utf16buf[out++] = c;
+        } else {
+          c -= 65536;
+          utf16buf[out++] = 55296 | c >> 10 & 1023;
+          utf16buf[out++] = 56320 | c & 1023;
+        }
+      }
+      return buf2binstring(utf16buf, out);
+    };
+    module2.exports.utf8border = (buf, max) => {
+      max = max || buf.length;
+      if (max > buf.length) {
+        max = buf.length;
+      }
+      let pos = max - 1;
+      while (pos >= 0 && (buf[pos] & 192) === 128) {
+        pos--;
+      }
+      if (pos < 0) {
+        return max;
+      }
+      if (pos === 0) {
+        return max;
+      }
+      return pos + _utf8len[buf[pos]] > max ? pos : max;
+    };
+  }
+});
+
+// node_modules/pako/lib/zlib/messages.js
+var require_messages = __commonJS({
+  "node_modules/pako/lib/zlib/messages.js"(exports, module2) {
+    "use strict";
+    module2.exports = {
+      2: "need dictionary",
+      /* Z_NEED_DICT       2  */
+      1: "stream end",
+      /* Z_STREAM_END      1  */
+      0: "",
+      /* Z_OK              0  */
+      "-1": "file error",
+      /* Z_ERRNO         (-1) */
+      "-2": "stream error",
+      /* Z_STREAM_ERROR  (-2) */
+      "-3": "data error",
+      /* Z_DATA_ERROR    (-3) */
+      "-4": "insufficient memory",
+      /* Z_MEM_ERROR     (-4) */
+      "-5": "buffer error",
+      /* Z_BUF_ERROR     (-5) */
+      "-6": "incompatible version"
+      /* Z_VERSION_ERROR (-6) */
+    };
+  }
+});
+
+// node_modules/pako/lib/zlib/zstream.js
+var require_zstream = __commonJS({
+  "node_modules/pako/lib/zlib/zstream.js"(exports, module2) {
+    "use strict";
+    function ZStream() {
+      this.input = null;
+      this.next_in = 0;
+      this.avail_in = 0;
+      this.total_in = 0;
+      this.output = null;
+      this.next_out = 0;
+      this.avail_out = 0;
+      this.total_out = 0;
+      this.msg = "";
+      this.state = null;
+      this.data_type = 2;
+      this.adler = 0;
+    }
+    module2.exports = ZStream;
+  }
+});
+
+// node_modules/pako/lib/zlib/gzheader.js
+var require_gzheader = __commonJS({
+  "node_modules/pako/lib/zlib/gzheader.js"(exports, module2) {
+    "use strict";
+    function GZheader() {
+      this.text = 0;
+      this.time = 0;
+      this.xflags = 0;
+      this.os = 0;
+      this.extra = null;
+      this.extra_len = 0;
+      this.name = "";
+      this.comment = "";
+      this.hcrc = 0;
+      this.done = false;
+    }
+    module2.exports = GZheader;
+  }
+});
+
+// node_modules/pako/lib/inflate.js
+var require_inflate2 = __commonJS({
+  "node_modules/pako/lib/inflate.js"(exports, module2) {
+    "use strict";
+    var zlib_inflate = require_inflate();
+    var utils = require_common();
+    var strings = require_strings();
+    var msg = require_messages();
+    var ZStream = require_zstream();
+    var GZheader = require_gzheader();
+    var toString = Object.prototype.toString;
+    var {
+      Z_NO_FLUSH,
+      Z_FINISH,
+      Z_OK,
+      Z_STREAM_END,
+      Z_NEED_DICT,
+      Z_STREAM_ERROR,
+      Z_DATA_ERROR,
+      Z_MEM_ERROR
+    } = require_constants();
+    function Inflate(options) {
+      this.options = utils.assign({
+        chunkSize: 1024 * 64,
+        windowBits: 15,
+        to: ""
+      }, options || {});
+      const opt = this.options;
+      if (opt.raw && opt.windowBits >= 0 && opt.windowBits < 16) {
+        opt.windowBits = -opt.windowBits;
+        if (opt.windowBits === 0) {
+          opt.windowBits = -15;
+        }
+      }
+      if (opt.windowBits >= 0 && opt.windowBits < 16 && !(options && options.windowBits)) {
+        opt.windowBits += 32;
+      }
+      if (opt.windowBits > 15 && opt.windowBits < 48) {
+        if ((opt.windowBits & 15) === 0) {
+          opt.windowBits |= 15;
+        }
+      }
+      this.err = 0;
+      this.msg = "";
+      this.ended = false;
+      this.chunks = [];
+      this.strm = new ZStream();
+      this.strm.avail_out = 0;
+      let status = zlib_inflate.inflateInit2(
+        this.strm,
+        opt.windowBits
+      );
+      if (status !== Z_OK) {
+        throw new Error(msg[status]);
+      }
+      this.header = new GZheader();
+      zlib_inflate.inflateGetHeader(this.strm, this.header);
+      if (opt.dictionary) {
+        if (typeof opt.dictionary === "string") {
+          opt.dictionary = strings.string2buf(opt.dictionary);
+        } else if (toString.call(opt.dictionary) === "[object ArrayBuffer]") {
+          opt.dictionary = new Uint8Array(opt.dictionary);
+        }
+        if (opt.raw) {
+          status = zlib_inflate.inflateSetDictionary(this.strm, opt.dictionary);
+          if (status !== Z_OK) {
+            throw new Error(msg[status]);
+          }
+        }
+      }
+    }
+    Inflate.prototype.push = function(data, flush_mode) {
+      const strm = this.strm;
+      const chunkSize = this.options.chunkSize;
+      const dictionary = this.options.dictionary;
+      let status, _flush_mode, last_avail_out;
+      if (this.ended)
+        return false;
+      if (flush_mode === ~~flush_mode)
+        _flush_mode = flush_mode;
+      else
+        _flush_mode = flush_mode === true ? Z_FINISH : Z_NO_FLUSH;
+      if (toString.call(data) === "[object ArrayBuffer]") {
+        strm.input = new Uint8Array(data);
+      } else {
+        strm.input = data;
+      }
+      strm.next_in = 0;
+      strm.avail_in = strm.input.length;
+      for (; ; ) {
+        if (strm.avail_out === 0) {
+          strm.output = new Uint8Array(chunkSize);
+          strm.next_out = 0;
+          strm.avail_out = chunkSize;
+        }
+        status = zlib_inflate.inflate(strm, _flush_mode);
+        if (status === Z_NEED_DICT && dictionary) {
+          status = zlib_inflate.inflateSetDictionary(strm, dictionary);
+          if (status === Z_OK) {
+            status = zlib_inflate.inflate(strm, _flush_mode);
+          } else if (status === Z_DATA_ERROR) {
+            status = Z_NEED_DICT;
+          }
+        }
+        while (strm.avail_in > 0 && status === Z_STREAM_END && strm.state.wrap > 0 && data[strm.next_in] !== 0) {
+          zlib_inflate.inflateReset(strm);
+          status = zlib_inflate.inflate(strm, _flush_mode);
+        }
+        switch (status) {
+          case Z_STREAM_ERROR:
+          case Z_DATA_ERROR:
+          case Z_NEED_DICT:
+          case Z_MEM_ERROR:
+            this.onEnd(status);
+            this.ended = true;
+            return false;
+        }
+        last_avail_out = strm.avail_out;
+        if (strm.next_out) {
+          if (strm.avail_out === 0 || status === Z_STREAM_END) {
+            if (this.options.to === "string") {
+              let next_out_utf8 = strings.utf8border(strm.output, strm.next_out);
+              let tail = strm.next_out - next_out_utf8;
+              let utf8str = strings.buf2string(strm.output, next_out_utf8);
+              strm.next_out = tail;
+              strm.avail_out = chunkSize - tail;
+              if (tail)
+                strm.output.set(strm.output.subarray(next_out_utf8, next_out_utf8 + tail), 0);
+              this.onData(utf8str);
+            } else {
+              this.onData(strm.output.length === strm.next_out ? strm.output : strm.output.subarray(0, strm.next_out));
+            }
+          }
+        }
+        if (status === Z_OK && last_avail_out === 0)
+          continue;
+        if (status === Z_STREAM_END) {
+          status = zlib_inflate.inflateEnd(this.strm);
+          this.onEnd(status);
+          this.ended = true;
+          return true;
+        }
+        if (strm.avail_in === 0)
+          break;
+      }
+      return true;
+    };
+    Inflate.prototype.onData = function(chunk) {
+      this.chunks.push(chunk);
+    };
+    Inflate.prototype.onEnd = function(status) {
+      if (status === Z_OK) {
+        if (this.options.to === "string") {
+          this.result = this.chunks.join("");
+        } else {
+          this.result = utils.flattenChunks(this.chunks);
+        }
+      }
+      this.chunks = [];
+      this.err = status;
+      this.msg = this.strm.msg;
+    };
+    function inflate(input, options) {
+      const inflator = new Inflate(options);
+      inflator.push(input);
+      if (inflator.err)
+        throw inflator.msg || msg[inflator.err];
+      return inflator.result;
+    }
+    function inflateRaw(input, options) {
+      options = options || {};
+      options.raw = true;
+      return inflate(input, options);
+    }
+    module2.exports.Inflate = Inflate;
+    module2.exports.inflate = inflate;
+    module2.exports.inflateRaw = inflateRaw;
+    module2.exports.ungzip = inflate;
+    module2.exports.constants = require_constants();
+  }
+});
+
+// node_modules/pdfjs/lib/util.js
+var require_util = __commonJS({
+  "node_modules/pdfjs/lib/util.js"(exports) {
+    "use strict";
+    exports.colorToRgb = function(hex) {
+      if (hex === void 0 || hex === null) {
+        return;
+      }
+      if (typeof hex === "string") {
+        hex = parseInt(hex.replace("#", ""), 16);
+      }
+      const r = (hex >> 16) / 255;
+      const g = (hex >> 8 & 255) / 255;
+      const b = (hex & 255) / 255;
+      return [r, g, b];
+    };
+    exports.rgbEqual = function(lhs, rhs) {
+      return lhs && rhs && lhs[0] === rhs[0] && lhs[1] === rhs[1] && lhs[2] === rhs[2];
+    };
+    exports.toArrayBuffer = function(b) {
+      if (b instanceof ArrayBuffer) {
+        return b;
+      } else {
+        return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+      }
+    };
+    exports.defaults = function(val, def) {
+      return val !== void 0 ? val : def;
+    };
+    exports.inflate = function(obj) {
+      let filters = obj.properties.get("Filter");
+      let filter;
+      if (filters && Array.isArray(filters)) {
+        filter = filters.shift();
+      } else {
+        filter = filters;
+        filters = [];
+      }
+      if (!filter || filter.name !== "FlateDecode" || filters.length > 0) {
+        throw new Error("Only FlateDecode filter are supported");
+      }
+      let columns = 1;
+      let predictor = 1;
+      const params = obj.properties.get("DecodeParms");
+      if (params) {
+        columns = params.get("Columns");
+        predictor = params.get("Predictor");
+      }
+      const inflate = require_inflate2().inflate;
+      let res = inflate(obj.content.content);
+      if (predictor === 1) {
+        return res;
+      }
+      if (predictor >= 10 && predictor <= 15) {
+        res = pngFilter(res, columns);
+      } else {
+        throw new Error("Unsupported predictor " + predictor);
+      }
+      return res;
+    };
+    function pngFilter(src, columns) {
+      const columnCount = columns + 1;
+      const rowCount = src.length / columnCount;
+      const res = new Uint8Array(columns * rowCount);
+      for (let y = 0; y < rowCount; ++y) {
+        const filter = src[y * columnCount];
+        if (filter === 0) {
+          for (let x = 0; x < columns; ++x) {
+            res[y * columns + x] = src[y * columnCount + 1 + x];
+          }
+        } else if (filter === 2) {
+          for (let x = 0; x < columns; x++) {
+            const prev = y === 0 ? 0 : res[(y - 1) * columns + x];
+            res[y * columns + x] = prev + src[y * columnCount + 1 + x] & 255;
+          }
+        } else {
+          throw new Error("Unsupported PNG filter " + filter);
+        }
+      }
+      return res;
+    }
+  }
+});
+
+// node_modules/pdfjs/lib/object/boolean.js
+var require_boolean = __commonJS({
+  "node_modules/pdfjs/lib/object/boolean.js"(exports) {
+    exports.parse = function(xref, lexer, trial) {
+      const isTrue = lexer.getString(4) === "true";
+      const isFalse = !isTrue && lexer.getString(5) === "false";
+      if (!isTrue && !isFalse) {
+        if (trial) {
+          return void 0;
+        }
+        throw new Error("Invalid boolean");
+      }
+      if (isTrue) {
+        lexer.shift(4);
+      } else {
+        lexer.shift(5);
+      }
+      return isTrue;
+    };
+  }
+});
+
+// node_modules/pdfjs/lib/object/null.js
+var require_null = __commonJS({
+  "node_modules/pdfjs/lib/object/null.js"(exports) {
+    exports.parse = function(xref, lexer, trial) {
+      const isNull = lexer.getString(4) === "null";
+      if (!isNull) {
+        if (trial) {
+          return void 0;
+        }
+        throw new Error("Invalid null");
+      }
+      lexer.shift(4);
+      return null;
+    };
+  }
+});
+
+// node_modules/pdfjs/lib/object/name.js
+var require_name = __commonJS({
+  "node_modules/pdfjs/lib/object/name.js"(exports, module2) {
+    "use strict";
+    var PDFName = class {
+      constructor(name) {
+        if (name === void 0 || name === null) {
+          throw new Error("A Name cannot be undefined");
+        }
+        if (name instanceof PDFName) {
+          return name;
+        }
+        if (name[0] === "/") {
+          name = name.substr(1);
+        }
+        if (name.match(/[\x00]/)) {
+          throw new Error("A Name mustn't contain the null characters");
+        }
+        name = name.toString();
+        name = name.replace(/[^\x21-\x7e]/g, function(c) {
+          let code = c.charCodeAt(0);
+          if (code > 255) {
+            code = 95;
+          }
+          return "#" + Number(code).toString(16);
+        });
+        name = name.replace(/[\x25\x28\x29\x2f\x3c\x3e\x5b\x5d\x7b\x7d]/g, function(c) {
+          let code = c.charCodeAt(0);
+          return "#" + Number(code).toString(16);
+        });
+        this.name = name;
+      }
+      toString() {
+        return "/" + this.name;
+      }
+      static parse(xref, lexer, trial) {
+        if (lexer.getString(1) !== "/") {
+          if (trial) {
+            return void 0;
+          }
+          throw new Error("Name must start with a leading slash, found: " + lexer.getString(1));
+        }
+        lexer.shift(1);
+        let name = "";
+        let done = false;
+        let c;
+        while (!done && (c = lexer._nextCharCode()) >= 0) {
+          switch (true) {
+            case c === 40:
+            case c === 41:
+            case c === 60:
+            case c === 62:
+            case c === 91:
+            case c === 93:
+            case c === 123:
+            case c === 125:
+            case c === 47:
+            case c === 37:
+              done = true;
+              break;
+            case c === 35:
+              const hex = lexer.readString(2);
+              name += String.fromCharCode(parseInt(hex, 16));
+              break;
+            case (c >= 34 && c <= 126):
+              name += String.fromCharCode(c);
+              break;
+            default:
+              done = true;
+              break;
+          }
+        }
+        lexer.shift(-1);
+        return new PDFName(name);
+      }
+    };
+    module2.exports = PDFName;
+  }
+});
+
+// node_modules/pdfjs/lib/object/dictionary.js
+var require_dictionary = __commonJS({
+  "node_modules/pdfjs/lib/object/dictionary.js"(exports, module2) {
+    "use strict";
+    var PDFName = require_name();
+    var PDFValue = require_value();
+    var PDFDictionary = class {
+      constructor(dictionary) {
+        this.dictionary = {};
+        if (dictionary) {
+          for (const key in dictionary) {
+            this.add(key, dictionary[key]);
+          }
+        }
+      }
+      add(key, val) {
+        if (typeof val === "string") {
+          val = new PDFName(val);
+        }
+        this.dictionary[new PDFName(key)] = val;
+      }
+      set(key, val) {
+        this.add(key, val);
+      }
+      has(key) {
+        return String(new PDFName(key)) in this.dictionary;
+      }
+      get(key) {
+        return this.dictionary[new PDFName(key)];
+      }
+      del(key) {
+        delete this.dictionary[new PDFName(key)];
+      }
+      get length() {
+        let length = 0;
+        for (const key in this.dictionary) {
+          length++;
+        }
+        return length;
+      }
+      toString() {
+        let str = "";
+        for (const key in this.dictionary) {
+          const val = this.dictionary[key];
+          str += `${key} ${val === null ? "null" : val}`.replace(/^/gm, "	") + "\n";
+        }
+        return `<<
+${str}>>`;
+      }
+      static parse(xref, lexer, trial) {
+        if (lexer.getString(2) !== "<<") {
+          if (trial) {
+            return void 0;
+          }
+          throw new Error("Invalid dictionary");
+        }
+        lexer.shift(2);
+        lexer.skipWhitespace(null, true);
+        const dictionary = new PDFDictionary();
+        while (lexer.getString(2) !== ">>") {
+          const key = PDFName.parse(xref, lexer);
+          lexer.skipWhitespace(null, true);
+          const value = PDFValue.parse(xref, lexer);
+          dictionary.set(key, value);
+          lexer.skipWhitespace(null, true);
+        }
+        lexer.shift(2);
+        return dictionary;
+      }
+    };
+    module2.exports = PDFDictionary;
+  }
+});
+
+// node_modules/pdfjs/lib/object/stream.js
+var require_stream = __commonJS({
+  "node_modules/pdfjs/lib/object/stream.js"(exports, module2) {
+    "use strict";
+    var PDFObject = require_object();
+    module2.exports = class PDFStream {
+      constructor(object) {
+        if (!object) {
+          object = new PDFObject();
+        }
+        object.content = this;
+        this.object = object;
+        this.content = "";
+      }
+      // slice(begin, end) {
+      //   this.content = this.content.slice(begin, end)
+      //   this.object.prop('Length', this.content.length - 1)
+      // }
+      writeLine(str) {
+        this.content += str + "\n";
+        this.object.prop("Length", this.content.length - 1);
+      }
+      toReference() {
+        return this.object.toReference();
+      }
+      toString() {
+        let content = this.content;
+        if (content instanceof Uint8Array) {
+          content = uint8ToString(content) + "\n";
+        }
+        return "stream\n" + content + "endstream";
+      }
+    };
+    function uint8ToString(u8a) {
+      const CHUNK_SZ = 32768;
+      const c = [];
+      for (let i = 0; i < u8a.length; i += CHUNK_SZ) {
+        c.push(String.fromCharCode.apply(null, u8a.subarray(i, i + CHUNK_SZ)));
+      }
+      return c.join("");
+    }
+  }
+});
+
+// node_modules/pdfjs/lib/object/object.js
+var require_object = __commonJS({
+  "node_modules/pdfjs/lib/object/object.js"(exports, module2) {
+    "use strict";
+    var PDFDictionary = require_dictionary();
+    var PDFReference = require_reference();
+    var PDFValue = require_value();
+    var PDFObject = class {
+      constructor(type) {
+        this.id = null;
+        this.rev = 0;
+        this.properties = new PDFDictionary();
+        this.reference = new PDFReference(this);
+        this.content = null;
+        if (type) {
+          this.prop("Type", type);
+        }
+      }
+      prop(key, val) {
+        this.properties.add(key, val);
+      }
+      toReference() {
+        return this.reference;
+      }
+      toString() {
+        return this.id.toString() + " " + this.rev + " obj\n" + (this.properties.length ? this.properties.toString() + "\n" : "") + (this.content !== null ? this.content.toString() + "\n" : "") + "endobj";
+      }
+      static parse(xref, lexer, trial) {
+        const before = lexer.pos;
+        lexer.skipWhitespace(null, true);
+        const id = lexer.readNumber(trial);
+        if (id === void 0 && !trial) {
+          throw new Error("Invalid object");
+        }
+        lexer.skipWhitespace(1, trial);
+        const generation = lexer.readNumber(trial);
+        if (generation === void 0 && !trial) {
+          throw new Error("Invalid object");
+        }
+        lexer.skipWhitespace(1, trial);
+        if (lexer.getString(3) !== "obj") {
+          if (trial) {
+            lexer.pos = before;
+            return void 0;
+          }
+          throw new Error("Invalid object");
+        }
+        lexer.shift(3);
+        lexer.skipEOL(1, true);
+        lexer.skipWhitespace(null, true);
+        const obj = PDFObject.parseInner(xref, lexer);
+        lexer.skipWhitespace(null, true);
+        if (lexer.readString(3) !== "end") {
+          throw new Error("Invalid object: `end` not found");
+        }
+        return obj;
+      }
+      static parseInner(xref, lexer) {
+        const value = PDFValue.parse(xref, lexer, true);
+        if (value === void 0) {
+          throw new Error("Empty object");
+        }
+        lexer.skipWhitespace(null, true);
+        const obj = new PDFObject();
+        if (value instanceof PDFDictionary) {
+          obj.properties = value;
+          if (lexer.getString(6) === "stream") {
+            lexer.shift(6);
+            lexer.skipEOL(1);
+            let length = obj.properties.get("Length");
+            if (length === void 0) {
+              throw new Error("Invalid Stream: no length specified");
+            }
+            if (typeof length === "object") {
+              const pos = lexer.pos;
+              length = length.object.content;
+              lexer.pos = pos;
+            }
+            const PDFStream = require_stream();
+            const stream = new PDFStream(obj);
+            stream.content = lexer.read(length);
+            lexer.skipEOL(1, true);
+            lexer.skipWhitespace(null, true);
+            if (lexer.readString(9) !== "endstream") {
+              throw new Error("Invalid stream: `endstream` not found");
+            }
+            lexer.skipEOL(1, true);
+          }
+        } else {
+          obj.content = value;
+        }
+        return obj;
+      }
+    };
+    module2.exports = PDFObject;
+  }
+});
+
+// node_modules/pdfjs/lib/object/reference.js
+var require_reference = __commonJS({
+  "node_modules/pdfjs/lib/object/reference.js"(exports, module2) {
+    "use strict";
+    var util = require_util();
+    var PDFReference = class {
+      constructor(obj) {
+        Object.defineProperty(this, "object", {
+          enumerable: true,
+          get: () => {
+            if (!obj) {
+              return void 0;
+            }
+            if (typeof obj === "function") {
+              obj = obj();
+            }
+            return obj;
+          }
+        });
+      }
+      toString() {
+        return this.object.id + " " + this.object.rev + " R";
+      }
+      static parse(xref, lexer, trial) {
+        const before = lexer.pos;
+        const id = lexer.readNumber(trial);
+        if (id === void 0 && !trial) {
+          throw new Error("Invalid indirect");
+        }
+        lexer.skipWhitespace(1, trial);
+        const generation = lexer.readNumber(trial);
+        if (generation === void 0 && !trial) {
+          throw new Error("Invalid indirect");
+        }
+        lexer.skipWhitespace(1, trial);
+        if (lexer.getString(1) !== "R") {
+          if (trial) {
+            lexer.pos = before;
+            return void 0;
+          }
+          throw new Error("Invalid indirect");
+        }
+        lexer.shift(1);
+        if (!lexer.state.references) {
+          lexer.state.references = /* @__PURE__ */ new Map();
+        }
+        const key = `${id} ${generation}`;
+        if (lexer.state.references.has(key)) {
+          return lexer.state.references.get(key);
+        }
+        const ref = new PDFReference(parseObject.bind(null, xref, lexer.outer, id));
+        lexer.state.references.set(key, ref);
+        return ref;
+      }
+    };
+    module2.exports = PDFReference;
+    function parseObject(xref, lexer, id) {
+      const PDFObject = require_object();
+      const Lexer = require_lexer();
+      const obj = xref.get(id);
+      if (obj) {
+        return obj;
+      }
+      const offset = xref.getOffset(id);
+      if (offset === null) {
+        const entry = xref.objects[id];
+        if (entry.compressed) {
+          if (!entry.obj) {
+            lexer.pos = xref.getOffset(entry.id);
+            const obj2 = PDFObject.parse(xref, lexer);
+            const type = obj2.properties.get("Type");
+            if (type && type.name !== "ObjStm") {
+              throw new Error("Expected compressed object stream");
+            }
+            const src = util.inflate(obj2);
+            const innerLexer = new Lexer(src, lexer);
+            obj2.lexer = innerLexer;
+            obj2.innerObjects = [];
+            const n = obj2.properties.get("N");
+            for (let i = 0; i < n; ++i) {
+              const id2 = innerLexer.readNumber(false);
+              innerLexer.skipWhitespace(null, false);
+              const offset2 = innerLexer.readNumber(false);
+              innerLexer.skipWhitespace(null, true);
+              obj2.innerObjects.push({
+                id: id2,
+                offset: offset2,
+                obj: null
+              });
+            }
+            entry.obj = obj2;
+          }
+          const inner = entry.obj.innerObjects[entry.ix];
+          if (!inner.obj) {
+            const innerLexer = entry.obj.lexer;
+            innerLexer.pos = entry.obj.properties.get("First") + inner.offset;
+            inner.obj = PDFObject.parseInner(xref, innerLexer);
+          }
+          return inner.obj;
+        } else {
+          throw new Error("Expected compressed object stream");
+        }
+      } else {
+        lexer.pos = offset;
+        return PDFObject.parse(xref, lexer);
+      }
+    }
+  }
+});
+
+// node_modules/pdfjs/lib/object/number.js
+var require_number = __commonJS({
+  "node_modules/pdfjs/lib/object/number.js"(exports) {
+    exports.parse = function(xref, lexer, trial) {
+      const n = lexer.readNumber(true);
+      if (n === void 0) {
+        if (trial) {
+          return void 0;
+        }
+        throw new Error("Invalid number");
+      }
+      return n;
+    };
+  }
+});
+
+// node_modules/pdfjs/lib/object/value.js
+var require_value = __commonJS({
+  "node_modules/pdfjs/lib/object/value.js"(exports) {
+    var Objects = [];
+    exports.parse = function(xref, lexer) {
+      if (!Objects.length) {
+        Objects.push.apply(Objects, [
+          require_boolean(),
+          require_null(),
+          require_name(),
+          require_dictionary(),
+          // must be tried before string!
+          require_string(),
+          require_array(),
+          require_reference(),
+          // must be tried before number!
+          require_number()
+        ]);
+      }
+      for (let i = 0; i < Objects.length; ++i) {
+        const value = Objects[i].parse(xref, lexer, true);
+        if (value !== void 0) {
+          return value;
+        }
+      }
+      lexer._error("Invalid value");
+      return void 0;
+    };
+  }
+});
+
+// node_modules/pdfjs/lib/object/array.js
+var require_array = __commonJS({
+  "node_modules/pdfjs/lib/object/array.js"(exports, module2) {
+    "use strict";
+    var PDFValue = require_value();
+    var PDFArray = class {
+      constructor(array) {
+        if (!array) {
+          array = [];
+        }
+        array.toString = function() {
+          return "[" + this.map((item) => String(item)).join(" ") + "]";
+        };
+        return array;
+      }
+      static parse(xref, lexer, trial) {
+        if (lexer.getString(1) !== "[") {
+          if (trial) {
+            return void 0;
+          }
+          throw new Error("Invalid array");
+        }
+        lexer.shift(1);
+        lexer.skipWhitespace(null, true);
+        const values = [];
+        while (lexer.getString(1) !== "]") {
+          values.push(PDFValue.parse(xref, lexer));
+          lexer.skipWhitespace(null, true);
+        }
+        lexer.shift(1);
+        return new PDFArray(values);
+      }
+    };
+    module2.exports = PDFArray;
+  }
+});
+
+// node_modules/pdfjs/lib/object/nametree.js
+var require_nametree = __commonJS({
+  "node_modules/pdfjs/lib/object/nametree.js"(exports, module2) {
+    "use strict";
+    var PDFName = require_name();
+    var PDFString = require_string();
+    var PDFDictionary = require_dictionary();
+    var PDFArray = require_array();
+    var PDFNameTree = class extends PDFDictionary {
+      constructor(dictionary) {
+        super(dictionary);
+      }
+      add(key, val) {
+        if (typeof val === "string") {
+          val = new PDFName(val);
+        }
+        this.dictionary[key] = val;
+      }
+      has(key) {
+        return String(key) in this.dictionary;
+      }
+      get(key) {
+        return this.dictionary[key];
+      }
+      del(key) {
+        delete this.dictionary[key];
+      }
+      toString() {
+        const sortedKeys = Object.keys(this.dictionary);
+        sortedKeys.sort((lhs, rhs) => lhs.localeCompare(rhs));
+        const names = [];
+        for (const key of sortedKeys) {
+          names.push(new PDFString(key), this.dictionary[key]);
+        }
+        const dict = new PDFDictionary();
+        dict.set("Names", new PDFArray(names));
+        dict.set("Limits", new PDFArray([
+          new PDFString(sortedKeys[0]),
+          new PDFString(sortedKeys[sortedKeys.length - 1])
+        ]));
+        return dict.toString();
+      }
+    };
+    module2.exports = PDFNameTree;
+  }
+});
+
+// node_modules/pdfjs/package.json
+var require_package = __commonJS({
+  "node_modules/pdfjs/package.json"(exports, module2) {
+    module2.exports = {
+      name: "pdfjs",
+      author: "Markus Ast <npm.m@rkusa.st>",
+      version: "2.4.7",
+      description: "A Portable Document Format (PDF) generation library targeting both the server- and client-side.",
+      keywords: [
+        "pdf",
+        "generator"
+      ],
+      license: "MIT",
+      homepage: "https://github.com/rkusa/pdfjs",
+      bugs: "https://github.com/rkusa/pdfjs/issues",
+      main: "lib/index.js",
+      scripts: {
+        test: "npm run test:pdfs && npm run test:types",
+        "test:pdfs": "node test/index.js",
+        "test:types": "tsc --project ./types"
+      },
+      dependencies: {
+        "@rkusa/linebreak": "^1.0.0",
+        "opentype.js": "^1.3.3",
+        pako: "^2.0.3",
+        "readable-stream": "^3.6.0",
+        unorm: "^1.6.0",
+        uuid: "^8.3.1"
+      },
+      devDependencies: {
+        "@types/node": "^15.12.4",
+        buffer: "^6.0.3",
+        events: "^3.3.0",
+        tape: "^5.0.1",
+        typescript: "^4.0.3"
+      },
+      repository: {
+        type: "git",
+        url: "git://github.com/rkusa/pdfjs.git"
+      },
+      engines: {
+        node: ">=7"
+      },
+      types: "./types/main.d.ts"
+    };
+  }
+});
+
+// node_modules/pdfjs/lib/object/trailer.js
+var require_trailer = __commonJS({
+  "node_modules/pdfjs/lib/object/trailer.js"(exports, module2) {
+    "use strict";
+    var version2 = require_package().version;
+    var PDFDictionary = require_dictionary();
+    var PDFArray = require_array();
+    var PDFString = require_string();
+    var InfoKeys = {
+      title: "Title",
+      author: "Author",
+      subject: "Subject",
+      keywords: "Keywords",
+      creator: "Creator",
+      producer: "Producer",
+      creationDate: "CreationDate",
+      modDate: "ModDate"
+    };
+    var PDFTrailer = class extends PDFDictionary {
+      constructor(size, root, info) {
+        super();
+        this.set("Size", size);
+        this.set("Root", root && root.toReference());
+        const id = new PDFString(info.id).toHexString();
+        this.set("ID", new PDFArray([id, id]));
+        info.creationDate = formatDate(info.creationDate || new Date());
+        if (!info.producer) {
+          info.producer = `pdfjs v${version2} (github.com/rkusa/pdfjs)`;
+        }
+        if ("modDate" in info) {
+          info.modDate = formatDate(info.modDate);
+        }
+        const infoDictionary = {};
+        for (const key in InfoKeys) {
+          if (key in info) {
+            infoDictionary[InfoKeys[key]] = new PDFString(info[key]);
+          }
+        }
+        this.set("Info", new PDFDictionary(infoDictionary));
+      }
+      toString() {
+        return "trailer\n" + PDFDictionary.prototype.toString.call(this);
+      }
+      static parse(xref, lexer) {
+        lexer.skipWhitespace(null, true);
+        if (lexer.readString(7) !== "trailer") {
+          throw new Error("Invalid trailer: trailer expected but not found");
+        }
+        lexer.skipWhitespace(null, true);
+        const dict = PDFDictionary.parse(xref, lexer);
+        return dict;
+      }
+    };
+    module2.exports = PDFTrailer;
+    function formatDate(date) {
+      let str = "D:" + date.getFullYear() + ("00" + (date.getMonth() + 1)).slice(-2) + ("00" + date.getDate()).slice(-2) + ("00" + date.getHours()).slice(-2) + ("00" + date.getMinutes()).slice(-2) + ("00" + date.getSeconds()).slice(-2);
+      let offset = date.getTimezoneOffset();
+      const rel = offset === 0 ? "Z" : offset > 0 ? "-" : "+";
+      offset = Math.abs(offset);
+      const hoursOffset = Math.floor(offset / 60);
+      const minutesOffset = offset - hoursOffset * 60;
+      str += rel + ("00" + hoursOffset).slice(-2) + "'" + ("00" + minutesOffset).slice(-2) + "'";
+      return str;
+    }
+  }
+});
+
+// node_modules/pdfjs/lib/object/xref.js
+var require_xref = __commonJS({
+  "node_modules/pdfjs/lib/object/xref.js"(exports, module2) {
+    "use strict";
+    var PDFObject = require_object();
+    var util = require_util();
+    module2.exports = class PDFXref {
+      constructor() {
+        this.objects = [];
+        this.trailer = null;
+      }
+      add(id, data) {
+        this.objects[id] = data;
+      }
+      get(id) {
+        return this.objects[id] && this.objects[id].obj;
+      }
+      getOffset(id) {
+        return this.objects[id] && this.objects[id].offset || null;
+      }
+      toString() {
+        let xref = "xref\n";
+        let range = { from: 0, refs: [0] };
+        const ranges = [range];
+        for (let i = 1; i < this.objects.length; ++i) {
+          const obj = this.objects[i];
+          if (!obj) {
+            if (range) {
+              range = null;
+            }
+            continue;
+          }
+          if (!range) {
+            range = { from: i, refs: [] };
+            ranges.push(range);
+          }
+          range.refs.push(obj.offset);
+        }
+        ranges.forEach(function(range2) {
+          xref += range2.from + " " + range2.refs.length + "\n";
+          range2.refs.forEach(function(ref, i) {
+            if (range2.from === 0 && i === 0) {
+              xref += "0000000000 65535 f \n";
+            } else {
+              xref += "0000000000".substr(ref.toString().length) + ref + " 00000 n \n";
+            }
+          });
+        });
+        return xref;
+      }
+      static parse(_, lexer, trial) {
+        const xref = new PDFXref();
+        if (lexer.getString(4) !== "xref") {
+          return this.parseXrefObject(_, lexer, trial);
+        }
+        lexer.readString(4);
+        lexer.skipSpace(null, trial);
+        lexer.skipEOL(1, trial);
+        let start;
+        while ((start = lexer.readNumber(true)) !== void 0) {
+          lexer.skipSpace(1);
+          const count = lexer.readNumber();
+          lexer.skipSpace(null, true);
+          lexer.skipEOL(1);
+          for (let i = 0, len = 0 + count; i < len; ++i) {
+            const offset = lexer.readNumber();
+            lexer.skipSpace(1);
+            lexer.readNumber();
+            lexer.skipSpace(1);
+            const key = lexer.readString(1);
+            lexer.skipSpace(null, true);
+            lexer.skipEOL(1);
+            const id = start + i;
+            if (id > 0 && key === "n") {
+              xref.add(id, {
+                offset
+              });
+            }
+          }
+        }
+        return xref;
+      }
+      // TODO: this implementation needs to be improved
+      static parseXrefObject(_, lexer, trial) {
+        const xref = new PDFXref();
+        let obj;
+        try {
+          obj = PDFObject.parse(xref, lexer, trial);
+        } catch (_2) {
+          throw new Error("Invalid xref: xref expected but not found");
+        }
+        let kind = obj.properties.get("Type");
+        if (!kind || kind.name !== "XRef") {
+          throw new Error("Invalid xref object at " + lexer.pos);
+        }
+        const stream = util.inflate(obj);
+        xref.trailer = obj.properties;
+        const index = obj.properties.get("Index");
+        const start = index ? index[0] : 0;
+        const w = obj.properties.get("W");
+        const typeSize = w[0] || 1;
+        const offsetSize = w[1] || 2;
+        const genSize = w[2] || 1;
+        const len = stream.length / (typeSize + offsetSize + genSize);
+        let pos = 0;
+        for (let i = 0; i < len; ++i) {
+          const type = readUint(stream, pos, typeSize);
+          pos += typeSize;
+          const offset = readUint(stream, pos, offsetSize);
+          pos += offsetSize;
+          switch (type) {
+            case 0:
+              pos += genSize;
+              continue;
+            case 1:
+              xref.add(start + i, {
+                offset
+              });
+              pos += genSize;
+              break;
+            case 2:
+              xref.add(start + i, {
+                compressed: true,
+                id: offset,
+                ix: readUint(stream, pos, genSize)
+              });
+              pos += genSize;
+              break;
+            default:
+              continue;
+          }
+        }
+        return xref;
+      }
+    };
+    function readUint(src, pos, size) {
+      let val = 0;
+      for (let i = 0; i < size; ++i) {
+        val += src[pos + size - i - 1] << 8 * i;
+      }
+      return val;
+    }
+  }
+});
+
+// node_modules/pdfjs/lib/object/index.js
+var require_object2 = __commonJS({
+  "node_modules/pdfjs/lib/object/index.js"(exports) {
+    "use strict";
+    exports.PDFArray = exports.Array = require_array();
+    exports.PDFDictionary = exports.Dictionary = require_dictionary();
+    exports.PDFName = exports.Name = require_name();
+    exports.PDFNameTree = exports.NameTree = require_nametree();
+    exports.PDFObject = exports.Object = require_object();
+    exports.PDFReference = exports.Reference = require_reference();
+    exports.PDFStream = exports.Stream = require_stream();
+    exports.PDFString = exports.String = require_string();
+    exports.PDFTrailer = exports.Trailer = require_trailer();
+    exports.PDFXref = exports.Xref = require_xref();
+  }
+});
+
+// node_modules/pdfjs/lib/parser/parser.js
+var require_parser = __commonJS({
+  "node_modules/pdfjs/lib/parser/parser.js"(exports, module2) {
+    "use strict";
+    var Lexer = require_lexer();
+    var PDF = require_object2();
+    var util = require_util();
+    var Parser = class {
+      // ab ... ArrayBuffer
+      constructor(ab) {
+        this.src = new Uint8Array(util.toArrayBuffer(ab));
+      }
+      parse() {
+        let index = lastIndexOf(this.src, "startxref", 128);
+        if (index === -1) {
+          throw new Error("Invalid PDF: startxref not found");
+        }
+        index += "startxref".length;
+        while (Lexer.isWhiteSpace(this.src[++index])) {
+        }
+        let str = "";
+        while (this.src[index] >= 48 && this.src[index] <= 57) {
+          str += String.fromCharCode(this.src[index++]);
+        }
+        const startXRef = parseInt(str, 10);
+        if (isNaN(startXRef)) {
+          throw new Error("Invalid PDF: startxref is not a number");
+        }
+        const lexer = new Lexer(this.src);
+        lexer.shift(startXRef);
+        this.xref = PDF.Xref.parse(null, lexer);
+        this.trailer = this.xref.trailer || PDF.Trailer.parse(this.xref, lexer);
+        let trailer = this.trailer;
+        while (trailer.has("Prev")) {
+          const prevTrailerPos = trailer.get("Prev");
+          if (prevTrailerPos === 0) {
+            break;
+          }
+          lexer.pos = trailer.get("Prev");
+          const xref = PDF.Xref.parse(null, lexer);
+          for (let i = 0; i < xref.objects.length; ++i) {
+            const obj = xref.objects[i];
+            if (obj && !this.xref.objects[i]) {
+              this.xref.objects[i] = obj;
+            }
+          }
+          trailer = xref.trailer || PDF.Trailer.parse(xref, lexer);
+        }
+      }
+      static addObjectsRecursive(objects, value) {
+        switch (true) {
+          case value instanceof PDF.Reference:
+            if (objects.indexOf(value.object) > -1) {
+              break;
+            }
+            objects.push(value.object);
+            Parser.addObjectsRecursive(objects, value.object);
+            break;
+          case value instanceof PDF.Object:
+            Parser.addObjectsRecursive(objects, value.properties);
+            Parser.addObjectsRecursive(objects, value.content);
+            break;
+          case value instanceof PDF.Dictionary:
+            for (const key in value.dictionary) {
+              if (key === "/Parent") {
+                continue;
+              }
+              Parser.addObjectsRecursive(objects, value.dictionary[key]);
+            }
+            break;
+          case Array.isArray(value):
+            value.forEach(function(item) {
+              Parser.addObjectsRecursive(objects, item);
+            });
+            break;
+        }
+      }
+    };
+    module2.exports = Parser;
+    function lastIndexOf(src, key, step) {
+      if (!step)
+        step = 1024;
+      let pos = src.length, index = -1;
+      while (index === -1 && pos > 0) {
+        pos -= step - key.length;
+        index = find(src, key, Math.max(pos, 0), step, true);
+      }
+      return index;
+    }
+    function find(src, key, pos, limit, backwards) {
+      if (pos + limit > src.length) {
+        limit = src.length - pos;
+      }
+      const str = String.fromCharCode.apply(null, src.subarray(pos, pos + limit));
+      let index = backwards ? str.lastIndexOf(key) : str.indexOf(key);
+      if (index > -1) {
+        index += pos;
+      }
+      return index;
+    }
+  }
+});
+
+// node_modules/pdfjs/lib/image/pdf.js
+var require_pdf = __commonJS({
+  "node_modules/pdfjs/lib/image/pdf.js"(exports, module2) {
+    "use strict";
+    var PDF = require_object2();
+    var Parser = require_parser();
+    module2.exports = class PDFImage {
+      constructor(src) {
+        const parser = new Parser(src);
+        parser.parse();
+        const catalog = parser.trailer.get("Root").object.properties;
+        const pages = catalog.get("Pages").object.properties;
+        const first = pages.get("Kids")[0].object.properties;
+        const mediaBox = first.get("MediaBox") || pages.get("MediaBox");
+        this.page = first;
+        this.width = mediaBox[2];
+        this.height = mediaBox[3];
+        const contents = this.page.get("Contents");
+        this.xobjCount = Array.isArray(contents) ? contents.length : 1;
+      }
+      async write(doc, xobjs) {
+        const resources = this.page.get("Resources");
+        const bbox = new PDF.Array([0, 0, this.width, this.height]);
+        for (let i = 0; i < this.xobjCount; ++i) {
+          const xobj = xobjs[i];
+          xobj.prop("Subtype", "Form");
+          xobj.prop("FormType", 1);
+          xobj.prop("BBox", bbox);
+          xobj.prop("Resources", resources instanceof PDF.Object ? resources.toReference() : resources);
+          let contents = this.page.get("Contents");
+          if (Array.isArray(contents)) {
+            contents = contents[i].object;
+          } else {
+            contents = contents.object;
+          }
+          const content = new PDF.Stream(xobj);
+          content.content = contents.content.content;
+          if (contents.properties.has("Filter")) {
+            xobj.prop("Filter", contents.properties.get("Filter"));
+          }
+          xobj.prop("Length", contents.properties.get("Length"));
+          if (contents.properties.has("Length1")) {
+            xobj.prop("Length1", contents.properties.get("Length1"));
+          }
+          const objects = [];
+          Parser.addObjectsRecursive(objects, xobj);
+          for (const obj of objects) {
+            doc._registerObject(obj, true);
+          }
+          for (const obj of objects) {
+            await doc._writeObject(obj);
+          }
+          await doc._writeObject(xobj);
+        }
+      }
+    };
+  }
+});
+
+// node_modules/pdfjs/lib/image/render.js
+var require_render = __commonJS({
+  "node_modules/pdfjs/lib/image/render.js"(exports, module2) {
+    "use strict";
+    var ops = require_ops();
+    var PDFImage = require_pdf();
+    var PDF = require_object2();
+    module2.exports = async function(img, doc, parent, opts) {
+      if (!img) {
+        throw TypeError("No image provided");
+      }
+      if (!doc._currentContent) {
+        await doc._startPage();
+      }
+      const _cursor = parent._cursor;
+      let renderWidth, renderHeight;
+      if (opts.width && opts.height) {
+        renderWidth = opts.width;
+        renderHeight = opts.height;
+      } else if (opts.width) {
+        renderWidth = opts.width;
+        renderHeight = img.height * (opts.width / img.width);
+      } else if (opts.height) {
+        renderHeight = opts.height;
+        renderWidth = img.width * (opts.height / img.height);
+      } else {
+        renderWidth = Math.min(img.width, _cursor.width);
+        renderHeight = img.height * (renderWidth / img.width);
+        if (renderHeight > _cursor.height) {
+          renderHeight = _cursor.height;
+          renderWidth = img.width * (renderHeight / img.height);
+        }
+      }
+      let x = _cursor.x;
+      let y = _cursor.y;
+      if (opts.wrap === false) {
+        if (opts.x !== void 0 && opts.x !== null) {
+          x = opts.x;
+        }
+        if (opts.y !== void 0 && opts.y !== null) {
+          y = opts.y;
+        }
+      } else {
+        if (!_cursor.doesFit(renderHeight)) {
+          await parent._pageBreak(1);
+        }
+        y = _cursor.y;
+        _cursor.y -= renderHeight;
+      }
+      y -= renderHeight;
+      switch (opts.align) {
+        case "right":
+          x += _cursor.width - renderWidth;
+          break;
+        case "center":
+          x += (_cursor.width - renderWidth) / 2;
+          break;
+        case "left":
+        default:
+          break;
+      }
+      if (img instanceof PDFImage) {
+        renderWidth /= img.width;
+        renderHeight /= img.height;
+      }
+      let chunk = ops.q() + ops.cm(renderWidth, 0, 0, renderHeight, x, y);
+      const aliases = doc._useXObject(img);
+      for (const alias of aliases) {
+        chunk += ops.Do(alias);
+      }
+      chunk += ops.Q();
+      if (opts.link) {
+        doc._annotations.push(new PDF.Dictionary({
+          Type: "Annot",
+          Subtype: "Link",
+          Rect: new PDF.Array([x, y, x + renderWidth, y + renderHeight]),
+          Border: new PDF.Array([0, 0, 0]),
+          A: new PDF.Dictionary({
+            Type: "Action",
+            S: "URI",
+            URI: new PDF.String(opts.link)
+          })
+        }));
+      }
+      if (opts.goTo) {
+        doc._annotations.push(new PDF.Dictionary({
+          Type: "Annot",
+          Subtype: "Link",
+          Rect: new PDF.Array([x, y, x + renderWidth, y + renderHeight]),
+          Border: new PDF.Array([0, 0, 0]),
+          A: new PDF.Dictionary({
+            S: "GoTo",
+            D: new PDF.String(opts.goTo)
+          })
+        }));
+      }
+      if (opts.destination) {
+        doc._destinations.set(opts.destination, new PDF.Array([
+          doc._currentPage.toReference(),
+          new PDF.Name("XYZ"),
+          _cursor.x,
+          _cursor.y + renderHeight,
+          null
+        ]));
+      }
+      await doc._write(chunk);
+    };
+  }
+});
+
+// node_modules/pdfjs/lib/image/jpeg.js
+var require_jpeg = __commonJS({
+  "node_modules/pdfjs/lib/image/jpeg.js"(exports, module2) {
+    "use strict";
+    var PDF = require_object2();
+    module2.exports = class JPEGImage {
+      constructor(src) {
+        this.src = src;
+        this.xobjCount = 1;
+        const view = new DataView(src);
+        if (view.getUint8(0) !== 255 || view.getUint8(1) !== 216) {
+          throw new Error("Invalid JPEG image.");
+        }
+        let blockLength = view.getUint8(4) * 256 + view.getUint8(5);
+        const len = view.byteLength;
+        let i = 4;
+        while (i < len) {
+          i += blockLength;
+          if (view.getUint8(i) !== 255) {
+            throw new Error("Could not read JPEG the image size");
+          }
+          if (view.getUint8(i + 1) === 192 || //(SOF) Huffman  - Baseline DCT
+          view.getUint8(i + 1) === 193 || //(SOF) Huffman  - Extended sequential DCT
+          view.getUint8(i + 1) === 194 || // Progressive DCT (SOF2)
+          view.getUint8(i + 1) === 195 || // Spatial (sequential) lossless (SOF3)
+          view.getUint8(i + 1) === 196 || // Differential sequential DCT (SOF5)
+          view.getUint8(i + 1) === 197 || // Differential progressive DCT (SOF6)
+          view.getUint8(i + 1) === 198 || // Differential spatial (SOF7)
+          view.getUint8(i + 1) === 199) {
+            this.height = view.getUint8(i + 5) * 256 + view.getUint8(i + 6);
+            this.width = view.getUint8(i + 7) * 256 + view.getUint8(i + 8);
+            const colorSpace = view.getUint8(i + 9);
+            switch (colorSpace) {
+              case 3:
+                this.colorSpace = "DeviceRGB";
+                break;
+              case 1:
+                this.colorSpace = "DeviceGray";
+                break;
+            }
+            break;
+          } else {
+            i += 2;
+            blockLength = view.getUint8(i) * 256 + view.getUint8(i + 1);
+          }
+        }
+      }
+      async write(doc, xobjs) {
+        const xobj = xobjs[0];
+        xobj.prop("Subtype", "Image");
+        xobj.prop("Width", this.width);
+        xobj.prop("Height", this.height);
+        xobj.prop("ColorSpace", this.colorSpace);
+        xobj.prop("BitsPerComponent", 8);
+        const hex = asHex(this.src);
+        xobj.prop("Filter", new PDF.Array(["/ASCIIHexDecode", "/DCTDecode"]));
+        xobj.prop("Length", hex.length + 1);
+        xobj.prop("Length1", this.src.byteLength);
+        const content = new PDF.Stream(xobj);
+        content.content = hex + ">\n";
+        await doc._writeObject(xobj);
+      }
+    };
+    function asHex(ab) {
+      const view = new Uint8Array(ab);
+      let hex = "";
+      for (let i = 0, len = ab.byteLength; i < len; ++i) {
+        hex += toHex(view[i]);
+      }
+      return hex;
+    }
+    function toHex(n) {
+      if (n < 16)
+        return "0" + n.toString(16);
+      return n.toString(16);
+    }
+  }
+});
+
+// node_modules/tiny-inflate/index.js
+var require_tiny_inflate = __commonJS({
+  "node_modules/tiny-inflate/index.js"(exports, module2) {
+    var TINF_OK = 0;
+    var TINF_DATA_ERROR = -3;
+    function Tree() {
+      this.table = new Uint16Array(16);
+      this.trans = new Uint16Array(288);
+    }
+    function Data(source, dest) {
+      this.source = source;
+      this.sourceIndex = 0;
+      this.tag = 0;
+      this.bitcount = 0;
+      this.dest = dest;
+      this.destLen = 0;
+      this.ltree = new Tree();
+      this.dtree = new Tree();
+    }
+    var sltree = new Tree();
+    var sdtree = new Tree();
+    var length_bits = new Uint8Array(30);
+    var length_base = new Uint16Array(30);
+    var dist_bits = new Uint8Array(30);
+    var dist_base = new Uint16Array(30);
+    var clcidx = new Uint8Array([
+      16,
+      17,
+      18,
+      0,
+      8,
+      7,
+      9,
+      6,
+      10,
+      5,
+      11,
+      4,
+      12,
+      3,
+      13,
+      2,
+      14,
+      1,
+      15
+    ]);
+    var code_tree = new Tree();
+    var lengths = new Uint8Array(288 + 32);
+    function tinf_build_bits_base(bits, base, delta, first) {
+      var i, sum;
+      for (i = 0; i < delta; ++i)
+        bits[i] = 0;
+      for (i = 0; i < 30 - delta; ++i)
+        bits[i + delta] = i / delta | 0;
+      for (sum = first, i = 0; i < 30; ++i) {
+        base[i] = sum;
+        sum += 1 << bits[i];
+      }
+    }
+    function tinf_build_fixed_trees(lt, dt) {
+      var i;
+      for (i = 0; i < 7; ++i)
+        lt.table[i] = 0;
+      lt.table[7] = 24;
+      lt.table[8] = 152;
+      lt.table[9] = 112;
+      for (i = 0; i < 24; ++i)
+        lt.trans[i] = 256 + i;
+      for (i = 0; i < 144; ++i)
+        lt.trans[24 + i] = i;
+      for (i = 0; i < 8; ++i)
+        lt.trans[24 + 144 + i] = 280 + i;
+      for (i = 0; i < 112; ++i)
+        lt.trans[24 + 144 + 8 + i] = 144 + i;
+      for (i = 0; i < 5; ++i)
+        dt.table[i] = 0;
+      dt.table[5] = 32;
+      for (i = 0; i < 32; ++i)
+        dt.trans[i] = i;
+    }
+    var offs = new Uint16Array(16);
+    function tinf_build_tree(t, lengths2, off, num) {
+      var i, sum;
+      for (i = 0; i < 16; ++i)
+        t.table[i] = 0;
+      for (i = 0; i < num; ++i)
+        t.table[lengths2[off + i]]++;
+      t.table[0] = 0;
+      for (sum = 0, i = 0; i < 16; ++i) {
+        offs[i] = sum;
+        sum += t.table[i];
+      }
+      for (i = 0; i < num; ++i) {
+        if (lengths2[off + i])
+          t.trans[offs[lengths2[off + i]]++] = i;
+      }
+    }
+    function tinf_getbit(d) {
+      if (!d.bitcount--) {
+        d.tag = d.source[d.sourceIndex++];
+        d.bitcount = 7;
+      }
+      var bit = d.tag & 1;
+      d.tag >>>= 1;
+      return bit;
+    }
+    function tinf_read_bits(d, num, base) {
+      if (!num)
+        return base;
+      while (d.bitcount < 24) {
+        d.tag |= d.source[d.sourceIndex++] << d.bitcount;
+        d.bitcount += 8;
+      }
+      var val = d.tag & 65535 >>> 16 - num;
+      d.tag >>>= num;
+      d.bitcount -= num;
+      return val + base;
+    }
+    function tinf_decode_symbol(d, t) {
+      while (d.bitcount < 24) {
+        d.tag |= d.source[d.sourceIndex++] << d.bitcount;
+        d.bitcount += 8;
+      }
+      var sum = 0, cur = 0, len = 0;
+      var tag = d.tag;
+      do {
+        cur = 2 * cur + (tag & 1);
+        tag >>>= 1;
+        ++len;
+        sum += t.table[len];
+        cur -= t.table[len];
+      } while (cur >= 0);
+      d.tag = tag;
+      d.bitcount -= len;
+      return t.trans[sum + cur];
+    }
+    function tinf_decode_trees(d, lt, dt) {
+      var hlit, hdist, hclen;
+      var i, num, length;
+      hlit = tinf_read_bits(d, 5, 257);
+      hdist = tinf_read_bits(d, 5, 1);
+      hclen = tinf_read_bits(d, 4, 4);
+      for (i = 0; i < 19; ++i)
+        lengths[i] = 0;
+      for (i = 0; i < hclen; ++i) {
+        var clen = tinf_read_bits(d, 3, 0);
+        lengths[clcidx[i]] = clen;
+      }
+      tinf_build_tree(code_tree, lengths, 0, 19);
+      for (num = 0; num < hlit + hdist; ) {
+        var sym = tinf_decode_symbol(d, code_tree);
+        switch (sym) {
+          case 16:
+            var prev = lengths[num - 1];
+            for (length = tinf_read_bits(d, 2, 3); length; --length) {
+              lengths[num++] = prev;
+            }
+            break;
+          case 17:
+            for (length = tinf_read_bits(d, 3, 3); length; --length) {
+              lengths[num++] = 0;
+            }
+            break;
+          case 18:
+            for (length = tinf_read_bits(d, 7, 11); length; --length) {
+              lengths[num++] = 0;
+            }
+            break;
+          default:
+            lengths[num++] = sym;
+            break;
+        }
+      }
+      tinf_build_tree(lt, lengths, 0, hlit);
+      tinf_build_tree(dt, lengths, hlit, hdist);
+    }
+    function tinf_inflate_block_data(d, lt, dt) {
+      while (1) {
+        var sym = tinf_decode_symbol(d, lt);
+        if (sym === 256) {
+          return TINF_OK;
+        }
+        if (sym < 256) {
+          d.dest[d.destLen++] = sym;
+        } else {
+          var length, dist, offs2;
+          var i;
+          sym -= 257;
+          length = tinf_read_bits(d, length_bits[sym], length_base[sym]);
+          dist = tinf_decode_symbol(d, dt);
+          offs2 = d.destLen - tinf_read_bits(d, dist_bits[dist], dist_base[dist]);
+          for (i = offs2; i < offs2 + length; ++i) {
+            d.dest[d.destLen++] = d.dest[i];
+          }
+        }
+      }
+    }
+    function tinf_inflate_uncompressed_block(d) {
+      var length, invlength;
+      var i;
+      while (d.bitcount > 8) {
+        d.sourceIndex--;
+        d.bitcount -= 8;
+      }
+      length = d.source[d.sourceIndex + 1];
+      length = 256 * length + d.source[d.sourceIndex];
+      invlength = d.source[d.sourceIndex + 3];
+      invlength = 256 * invlength + d.source[d.sourceIndex + 2];
+      if (length !== (~invlength & 65535))
+        return TINF_DATA_ERROR;
+      d.sourceIndex += 4;
+      for (i = length; i; --i)
+        d.dest[d.destLen++] = d.source[d.sourceIndex++];
+      d.bitcount = 0;
+      return TINF_OK;
+    }
+    function tinf_uncompress(source, dest) {
+      var d = new Data(source, dest);
+      var bfinal, btype, res;
+      do {
+        bfinal = tinf_getbit(d);
+        btype = tinf_read_bits(d, 2, 0);
+        switch (btype) {
+          case 0:
+            res = tinf_inflate_uncompressed_block(d);
+            break;
+          case 1:
+            res = tinf_inflate_block_data(d, sltree, sdtree);
+            break;
+          case 2:
+            tinf_decode_trees(d, d.ltree, d.dtree);
+            res = tinf_inflate_block_data(d, d.ltree, d.dtree);
+            break;
+          default:
+            res = TINF_DATA_ERROR;
+        }
+        if (res !== TINF_OK)
+          throw new Error("Data error");
+      } while (!bfinal);
+      if (d.destLen < d.dest.length) {
+        if (typeof d.dest.slice === "function")
+          return d.dest.slice(0, d.destLen);
+        else
+          return d.dest.subarray(0, d.destLen);
+      }
+      return d.dest;
+    }
+    tinf_build_fixed_trees(sltree, sdtree);
+    tinf_build_bits_base(length_bits, length_base, 4, 3);
+    tinf_build_bits_base(dist_bits, dist_base, 2, 1);
+    length_bits[28] = 0;
+    length_base[28] = 258;
+    module2.exports = tinf_uncompress;
+  }
+});
+
+// node_modules/unicode-trie/index.js
+var require_unicode_trie = __commonJS({
+  "node_modules/unicode-trie/index.js"(exports, module2) {
+    var UnicodeTrie;
+    var inflate;
+    inflate = require_tiny_inflate();
+    UnicodeTrie = function() {
+      var DATA_BLOCK_LENGTH, DATA_GRANULARITY, DATA_MASK, INDEX_1_OFFSET, INDEX_2_BLOCK_LENGTH, INDEX_2_BMP_LENGTH, INDEX_2_MASK, INDEX_SHIFT, LSCP_INDEX_2_LENGTH, LSCP_INDEX_2_OFFSET, OMITTED_BMP_INDEX_1_LENGTH, SHIFT_1, SHIFT_1_2, SHIFT_2, UTF8_2B_INDEX_2_LENGTH, UTF8_2B_INDEX_2_OFFSET;
+      SHIFT_1 = 6 + 5;
+      SHIFT_2 = 5;
+      SHIFT_1_2 = SHIFT_1 - SHIFT_2;
+      OMITTED_BMP_INDEX_1_LENGTH = 65536 >> SHIFT_1;
+      INDEX_2_BLOCK_LENGTH = 1 << SHIFT_1_2;
+      INDEX_2_MASK = INDEX_2_BLOCK_LENGTH - 1;
+      INDEX_SHIFT = 2;
+      DATA_BLOCK_LENGTH = 1 << SHIFT_2;
+      DATA_MASK = DATA_BLOCK_LENGTH - 1;
+      LSCP_INDEX_2_OFFSET = 65536 >> SHIFT_2;
+      LSCP_INDEX_2_LENGTH = 1024 >> SHIFT_2;
+      INDEX_2_BMP_LENGTH = LSCP_INDEX_2_OFFSET + LSCP_INDEX_2_LENGTH;
+      UTF8_2B_INDEX_2_OFFSET = INDEX_2_BMP_LENGTH;
+      UTF8_2B_INDEX_2_LENGTH = 2048 >> 6;
+      INDEX_1_OFFSET = UTF8_2B_INDEX_2_OFFSET + UTF8_2B_INDEX_2_LENGTH;
+      DATA_GRANULARITY = 1 << INDEX_SHIFT;
+      function UnicodeTrie2(data) {
+        var isBuffer, uncompressedLength, view;
+        isBuffer = typeof data.readUInt32BE === "function" && typeof data.slice === "function";
+        if (isBuffer || data instanceof Uint8Array) {
+          if (isBuffer) {
+            this.highStart = data.readUInt32BE(0);
+            this.errorValue = data.readUInt32BE(4);
+            uncompressedLength = data.readUInt32BE(8);
+            data = data.slice(12);
+          } else {
+            view = new DataView(data.buffer);
+            this.highStart = view.getUint32(0);
+            this.errorValue = view.getUint32(4);
+            uncompressedLength = view.getUint32(8);
+            data = data.subarray(12);
+          }
+          data = inflate(data, new Uint8Array(uncompressedLength));
+          data = inflate(data, new Uint8Array(uncompressedLength));
+          this.data = new Uint32Array(data.buffer);
+        } else {
+          this.data = data.data, this.highStart = data.highStart, this.errorValue = data.errorValue;
+        }
+      }
+      UnicodeTrie2.prototype.get = function(codePoint) {
+        var index;
+        if (codePoint < 0 || codePoint > 1114111) {
+          return this.errorValue;
+        }
+        if (codePoint < 55296 || codePoint > 56319 && codePoint <= 65535) {
+          index = (this.data[codePoint >> SHIFT_2] << INDEX_SHIFT) + (codePoint & DATA_MASK);
+          return this.data[index];
+        }
+        if (codePoint <= 65535) {
+          index = (this.data[LSCP_INDEX_2_OFFSET + (codePoint - 55296 >> SHIFT_2)] << INDEX_SHIFT) + (codePoint & DATA_MASK);
+          return this.data[index];
+        }
+        if (codePoint < this.highStart) {
+          index = this.data[INDEX_1_OFFSET - OMITTED_BMP_INDEX_1_LENGTH + (codePoint >> SHIFT_1)];
+          index = this.data[index + (codePoint >> SHIFT_2 & INDEX_2_MASK)];
+          index = (index << INDEX_SHIFT) + (codePoint & DATA_MASK);
+          return this.data[index];
+        }
+        return this.data[this.data.length - DATA_GRANULARITY];
+      };
+      return UnicodeTrie2;
+    }();
+    module2.exports = UnicodeTrie;
+  }
+});
+
+// node_modules/@rkusa/linebreak/src/classes.js
+var require_classes = __commonJS({
+  "node_modules/@rkusa/linebreak/src/classes.js"(exports) {
+    exports.OP = 0;
+    exports.CL = 1;
+    exports.CP = 2;
+    exports.QU = 3;
+    exports.GL = 4;
+    exports.NS = 5;
+    exports.EX = 6;
+    exports.SY = 7;
+    exports.IS = 8;
+    exports.PR = 9;
+    exports.PO = 10;
+    exports.NU = 11;
+    exports.AL = 12;
+    exports.HL = 13;
+    exports.ID = 14;
+    exports.IN = 15;
+    exports.HY = 16;
+    exports.BA = 17;
+    exports.BB = 18;
+    exports.B2 = 19;
+    exports.ZW = 20;
+    exports.CM = 21;
+    exports.WJ = 22;
+    exports.H2 = 23;
+    exports.H3 = 24;
+    exports.JL = 25;
+    exports.JV = 26;
+    exports.JT = 27;
+    exports.RI = 28;
+    exports.AI = 29;
+    exports.BK = 30;
+    exports.CB = 31;
+    exports.CJ = 32;
+    exports.CR = 33;
+    exports.LF = 34;
+    exports.NL = 35;
+    exports.SA = 36;
+    exports.SG = 37;
+    exports.SP = 38;
+    exports.XX = 39;
+  }
+});
+
+// node_modules/@rkusa/linebreak/src/pairs.js
+var require_pairs = __commonJS({
+  "node_modules/@rkusa/linebreak/src/pairs.js"(exports) {
+    var DI_BRK = exports.DI_BRK = 0;
+    var IN_BRK = exports.IN_BRK = 1;
+    var CI_BRK = exports.CI_BRK = 2;
+    var CP_BRK = exports.CP_BRK = 3;
+    var PR_BRK = exports.PR_BRK = 4;
+    exports.pairTable = [
+      [PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, CP_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [PR_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, CI_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK],
+      [IN_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, CI_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, IN_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [IN_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK],
+      [IN_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [IN_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [IN_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [IN_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, IN_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, DI_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, IN_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, DI_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [IN_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, CI_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK, PR_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [IN_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK],
+      [IN_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, CI_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, IN_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, IN_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, DI_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, IN_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, IN_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, IN_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, DI_BRK],
+      [DI_BRK, PR_BRK, PR_BRK, IN_BRK, IN_BRK, IN_BRK, PR_BRK, PR_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK, IN_BRK, DI_BRK, DI_BRK, PR_BRK, CI_BRK, PR_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, DI_BRK, IN_BRK]
+    ];
+  }
+});
+
+// node_modules/@rkusa/linebreak/src/classes.json
+var require_classes2 = __commonJS({
+  "node_modules/@rkusa/linebreak/src/classes.json"(exports, module2) {
+    module2.exports = { buf: "000e0800000000000000bde0014f0cb0f3ed9c0bac5c4519c7677befeedddd7b7b6fb7f5b6827d2a6d53211a9428f8a8a0512888f880a0524042154d2a36a692580c098554638d188ba9a98d0535208a586284265aad092026522a02066dd06a82150d4134150801ff939dc94ea7f37e9d6d399bfc3273cebcbef9e69be739672f1c21e4527005f80cd80a76805bc18fc14fc1ee00f71ef05bf030d80f0e807f38a4fb3778ce10fe12181b25640acc030bc052702278e3e820dea9f09f0ece04e7810bc0c560355803d682f5e06ab0116c6269295f85ff8b70bf01773bf836b805dc01ee02bbc01e703fd8071e028f8103e0200b7f1a3ccbc2e9356912d206b3c06c703c58d2ecc7bf04ac80ffe4e620fe69f09fc1ae69f82af83f003ed2eccbf831b89f04ebc067c186665f667abd91fad9f50d70b7b2343be0de0a7e087ec2c237b2f83f63ee2f9b033d507edd1cf020e311f0078618d7c49f11f7ef52fc2771fd8c471e2e3c2fe437a345480b4c82b960616b50df65f0bf0ebca975641eab045b5889f0f780f7096929e7b374ab85fb6be05f0bd6b7fa764fb91afe07e15e077733d802bec5d27e87b9b7c1bd13ec6af5db84b207fefb14b27178fe31bada8bfc1f058f8327c053e010781134c708e9801e380ecc07278013c7fa69dfc0dcb7c07d27381b7c107c145c363628e353f0af1b5397bf5eb8bf01fe8d12d709fecde006b015ec00b7803bc05de017e03eb0173c0a1e074f80a7c02156c6f37067b4d107dbfdeb29b873dbfe3a5bc8d22c857b9247fa5302ca7aab94e65dc2f54a6663e7e0de87c045edbedd5cde76670d580bd6832f80ebc157c08dccbfdd92fe7b82ff768f726b6a6ae2e0e340d572d4d4d4d4d4d4d4d4d41c5dec1c021954dcddee9f87d8f6c83f6ff7cff2a8ff57f0ffa63d08fb5ddb9efe31c439c0e21d84fb9f91fe79cdd3f03fcbf2261d42c6c054a77f1eb8829e3dc2bfa8d34fb71ceeeb3b879f0f51de8c7b1f1ed597fd0e849f09ce02abc0d9e01cf05e706e1d5687d56175581d963cec7c7011b8a433386faf8a4f74aaa5eafad7d40c33b1ebd82bd1c7ae021b3ae1cfe9ae41da4d8af45fc6bdaf836de066709b14e747f41aec06f78207c0432cce41ac4fff58f1d843d93fb3cfea49acadc1c306664d11f27e70fdd49161f748f75ec0f5db6611b21edc3eab7fef2f70e7f730fe83756027380019167509b9146c0377033246c8ffe0ce195773c6783f8e896b11e76621de01c1bf648290cbc076b0a5f1f265ff845d8f35353535c72af3679ae7febf627e7ad2b076f897620dcfc3fe8bb017a4b42fe17aacdbf71fd2bc7bd5c3fda9ee91f9e5625e577d7f81e63e6729c257809315f14e65f74eb7e4918a952dffb5257d176c2fdcb320e379ddfef5856c2df27176fd69b89f039f67d7f4ecf15aa14e5f52d46f19e27cad3b7897f09bf0dfd4b5cb43d3ee03dfd7c4a5e1af457e3bbb87c7df255cb73a87db8ead3cca5ac319e9b1c21e479da42495ecf7331bdb67e84bbf2fd4cf86193a06fc496867ba67fb1bd3cb3fe13e53b18e9eebf6df197c51b2c5d678f5fbec2a91f534097dcc2da8139f365c08b9968193c68f0c3b45716f98390df2bedd20f3bb8f12bb34d5f15c873a98ce8f2e18efbfff7c31732f877b8590e795e3fe67525721cd3596749b58f866b85bc036709394e6bbb8fe8170ef4eda96529cdd0e3679ef51d2ce29a8fab97a953c80761e191d7cbbe0cb23c7809d4c133b3df06ab090b1c4218d2bcb00962904a2107afc86250ae9323fbd477f338430341b99c55cba651d77a4cd98106849d7b921ac0e330a9629974fdbb2c1aea749fd5bfe3247d5275fa3b99f8351d60eb4cf7704a87d2e60703f1f237a6460d33c1d8f3b5b4a2b32225d1392b7bf2dc89cffb0973f6c70fb106d805fbbea4cb62931cd6c4bda1294eab74703a381697484c810da8ef25ac5d6b655db5d2e96335df4c860cee2611da29fc3869d9ed06ed30a7f8bb9b6f97be61011dac65d01799deea35351672d527e7d5fc5d8ecbaffe90a7e59a69c756e117bdd6dfa91c35571791c577da46ed763c1a6e4f1f558c2470f13247c3f5585fde5d4899c868ecd25c655951c3af95ce295b4ed52e5a6daefe764186cdbd5d65deb93a2be3c7e8f5172dc90edb38af611ed3145fbb8f48769c53d9b8e42c775be9e55e5cdef7788bd8f0e43fba4c0d42e361962e65955bff495bba4de63f59b5a8e10fbd7d9f530cc4fa5fa7f884dcb7aa8a2dfebe44ca577930e6ce344ae75367fde50da1e7dfa6ba83ddaf4986b3c4a3d27c4d4dfb7efa5687f97f25cec3dd7782496a15ba788f1426c36e79854da267dfb9b8f1dc89c3024c8727522f39bf0d023df170dbb6e7ced42a593d912e2bd51c1df63d72d05a32c9d7c3623daa18ad4fb4ef9b90677e9af21b836b94aac4d7a0ef74bcf89ae6314ef1fa679db4597a26de99e5ff3e79f31e3a24eded87ee85abe2efd7115737cc5bcaa62aa583fc8eb34533f2abdaeb151b5ac25cba7bf86547f5f596de36428aefb18dffd5648f9bab55289f27dd7b629ca96f72355aeadb9ee9bc235b73d71bd1cba5eccd57e7cddc8e59f2ddd976d8ccfffc3227facdd945cabc9f517afb9be63d731b17b3b5ffb34edf17261d22f8f53e55e70da437fb1a41edf62f752f29aaa14bee5a7d8bff448d8da2295ee747bdfaac6d5181b4975fe906a7cb6cd5739e707d9ae7cde0bd0c99cfa7c2717ae7dc9d65eb28da518bf74f7e4f82eebd22a74cbd7763a1be38c4ad7af50e8468e37871cfe2dc408197cb737a2b816e352a604687efc1b4355bbd072bb16441968394d864e376d265b43886b8a6fb25fd18e75f3c55c455a9f7957ee072edff8f0fa89dfabc8dfb0b8a40fb55fd1fe3b06e46fc07c50a58dc98f937a8c8fd92f73fb96dbccf4fc4e444cd7714c23da8b4ffea93095adfa6e4bf5dd9f095d79bee95cea10430ebd86b499ac67535ba9c2b92b7fe7696b5b952ee43a987467b221177bf0d58fad4f84b6a94a073add98ae53d84faafc5d7516abbb58b954d09ff85c3334af49868b5cb6b262989488c92b66ded391622c4dc544601a553f4a2d978f8da7282b5406575dfae4a3ba76bd2fe7115b3f57bdbba6c9d1bf4df5b6e98de7c3c32735e5a4184f42eaa8d361a939c4a447d55832a9899342e652fab7d5bb343a5bd421f74d954d2fd0c457f507394cec773a3da9e450e5a39247258309175d95b211f17a44030dd37ddf4d7f8d0037c73c1c6aef5ca6927dc4554f5594e9eb56a9b7926597b29554762d633ad7949f91cb67aa2de2f6bcc086eb7b33ba670dba31ca86e91c5e3c3726523dc53150bca63f539f90f3e763a7ea9c5aa5a7390cddd93689d0630cbe737b6a6479f8ffeb3584384dc16f6b2722a5b5c56b0a7e319d0ddd59b52eaeea3e7f5622eb6331f3dbdcdc942ac756be4bbd6d618bc991cf389b12bc4d864dffa9eaafb2bfc5446d87a23dfab038129b4e6cebc51ceda0d38d0ddfe753317370aaf95cb7bef07d1f20e77aca05decf53e9409cab455cdb5796c5f53d899ced99a23cd767a7a1f0ef6bf87ed5654d19f2fc38e67d215bf929dea131d9b9cb78622b2fc77bfeb99ff5d332aaf8e6486e6f5dfd5dde710cb5379ebecaefbf5ce7af9cef7df88e9f72debefa776d57573da8f289a9bfad8fc7d65f661e7865414a97e7bbfe4df96da19c7715df17ca322cad989c6b0dd57c4aa1ffcd3a4dfcfec775d8fe2336167e66e2db1f72ec777ce0ebd354ebb336199c15f1ffdae56b53c2ee4f19ea1f3b17aaf699bc5c57574e67dac336049796cfcf0a789d4de5bbee93f9bba6aa3d7315b6cecb9ecb5c5e4f5956950e1b92eb73c6209f33b43cf3888504ca9eab7caedb86e4e7ef972f76a4aa315384b72f7fa75ab67ffe9f6f2e7669431c371691feb95815fd49259be9eca4aab611c7d75cf5f669bbaa6d95ebc4653f56957cdc9662f72fc3ba9ee1f5ab42afcba5f24b9c6385c8e7b29ef2cdcf345ee99e33bbf62517dbd195635a5396b247179d943e63d451625c4861dfa17dc9f739444e7b31e51fdb0ea97427cf63bedfad87ea39a54d731b10bf470db151f9fd1395ccbeed57c2fee531c47476eab3a74e69afb1e70b2132a7ec1bae65bad6df67ac48a57ffe7f7cfcb9b8fc9e6bcc78e9527fd92e7dd2e71c2f5dc6f19067dcb9c63b15e2af2120c793eff1f844133fb7cc3a3943db3b76de8f6d2fd378e72357ac6e5de60ad39a9387e5e89fa9ec27d75c12228bcfbb4d3928d96f65fdabf637c3507f5bdbe6b69fd43616d22772e65fd2d67cc799dca46e27dfbe935aafbee47ad6e15a7ecc775331e975dfaba4922f04939ee617a2f43331aef7aaca90ef4f685cd7724ad5c9b50f9ac68c547ab59133ef5c750b95ab5479a5ea138af82d9be97fd372d87c89f576aaf56e2e3b75d553c9b33317fe0f" };
+  }
+});
+
+// node_modules/@rkusa/linebreak/src/linebreaker.js
+var require_linebreaker = __commonJS({
+  "node_modules/@rkusa/linebreak/src/linebreaker.js"(exports, module2) {
+    "use strict";
+    var UnicodeTrie = require_unicode_trie();
+    var ref = require_classes();
+    var { BK, CR, LF, NL, CB, BA, SP, WJ, AI, AL, SA, SG, XX, CJ, ID, NS, characterClasses } = require_classes();
+    var { DI_BRK, IN_BRK, CI_BRK, CP_BRK, PR_BRK, pairTable } = require_pairs();
+    var classTrie = new UnicodeTrie(hex2ab(require_classes2().buf));
+    var Break = class {
+      constructor(position, required) {
+        this.position = position;
+        this.required = required != null ? required : false;
+      }
+    };
+    module2.exports = class LineBreaker {
+      constructor(string) {
+        this.string = string;
+        this.pos = 0;
+        this.lastPos = 0;
+        this.curClass = null;
+        this.nextClass = null;
+      }
+      nextCodePoint() {
+        const code = this.string.charCodeAt(this.pos++);
+        const next = this.string.charCodeAt(this.pos);
+        if (55296 <= code && code <= 56319 && (56320 <= next && next <= 57343)) {
+          this.pos++;
+          return (code - 55296) * 1024 + (next - 56320) + 65536;
+        }
+        return code;
+      }
+      nextCharClass(first) {
+        if (first == null) {
+          first = false;
+        }
+        return mapClass(classTrie.get(this.nextCodePoint()));
+      }
+      nextBreak() {
+        if (this.curClass == null) {
+          this.curClass = mapFirst(this.nextCharClass());
+        }
+        while (this.pos < this.string.length) {
+          this.lastPos = this.pos;
+          const lastClass = this.nextClass;
+          this.nextClass = this.nextCharClass();
+          if (this.curClass === BK || this.curClass === CR && this.nextClass !== LF) {
+            this.curClass = mapFirst(mapClass(this.nextClass));
+            return new Break(this.lastPos, true);
+          }
+          let cur = null;
+          switch (this.nextClass) {
+            case SP:
+              cur = this.curClass;
+              break;
+            case BK:
+            case LF:
+            case NL:
+              cur = BK;
+              break;
+            case CR:
+              cur = CR;
+              break;
+            case CB:
+              cur = BA;
+              break;
+          }
+          if (cur != null) {
+            this.curClass = cur;
+            if (this.nextClass === CB) {
+              return new Break(this.lastPos);
+            }
+            continue;
+          }
+          let shouldBreak = false;
+          switch (pairTable[this.curClass][this.nextClass]) {
+            case DI_BRK:
+              shouldBreak = true;
+              break;
+            case IN_BRK:
+              shouldBreak = lastClass === SP;
+              break;
+            case CI_BRK:
+              shouldBreak = lastClass === SP;
+              if (!shouldBreak) {
+                continue;
+              }
+              break;
+            case CP_BRK:
+              if (lastClass !== SP) {
+                continue;
+              }
+          }
+          this.curClass = this.nextClass;
+          if (shouldBreak) {
+            return new Break(this.lastPos);
+          }
+        }
+        if (this.pos >= this.string.length) {
+          if (this.lastPos < this.string.length) {
+            this.lastPos = this.string.length;
+            return new Break(this.string.length);
+          } else {
+            return null;
+          }
+        }
+      }
+    };
+    function mapClass(c) {
+      switch (c) {
+        case AI:
+          return AL;
+        case SA:
+        case SG:
+        case XX:
+          return AL;
+        case CJ:
+          return NS;
+        default:
+          return c;
+      }
+    }
+    function mapFirst(c) {
+      switch (c) {
+        case LF:
+        case NL:
+          return BK;
+        case CB:
+          return BA;
+        case SP:
+          return WJ;
+        default:
+          return c;
+      }
+    }
+    function hex2ab(hex) {
+      const view = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < hex.length; i += 2) {
+        view[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+      }
+      return view;
+    }
+  }
+});
+
+// node_modules/unorm/lib/unorm.js
+var require_unorm = __commonJS({
+  "node_modules/unorm/lib/unorm.js"(exports, module2) {
+    (function(root) {
+      "use strict";
+      var DEFAULT_FEATURE = [null, 0, {}];
+      var CACHE_THRESHOLD = 10;
+      var SBase = 44032, LBase = 4352, VBase = 4449, TBase = 4519, LCount = 19, VCount = 21, TCount = 28;
+      var NCount = VCount * TCount;
+      var SCount = LCount * NCount;
+      var UChar = function(cp, feature) {
+        this.codepoint = cp;
+        this.feature = feature;
+      };
+      var cache = {};
+      var cacheCounter = [];
+      for (var i = 0; i <= 255; ++i) {
+        cacheCounter[i] = 0;
+      }
+      function fromCache(next, cp, needFeature) {
+        var ret = cache[cp];
+        if (!ret) {
+          ret = next(cp, needFeature);
+          if (!!ret.feature && ++cacheCounter[cp >> 8 & 255] > CACHE_THRESHOLD) {
+            cache[cp] = ret;
+          }
+        }
+        return ret;
+      }
+      function fromData(next, cp, needFeature) {
+        var hash = cp & 65280;
+        var dunit = UChar.udata[hash] || {};
+        var f2 = dunit[cp];
+        return f2 ? new UChar(cp, f2) : new UChar(cp, DEFAULT_FEATURE);
+      }
+      function fromCpOnly(next, cp, needFeature) {
+        return !!needFeature ? next(cp, needFeature) : new UChar(cp, null);
+      }
+      function fromRuleBasedJamo(next, cp, needFeature) {
+        var j;
+        if (cp < LBase || LBase + LCount <= cp && cp < SBase || SBase + SCount < cp) {
+          return next(cp, needFeature);
+        }
+        if (LBase <= cp && cp < LBase + LCount) {
+          var c = {};
+          var base = (cp - LBase) * VCount;
+          for (j = 0; j < VCount; ++j) {
+            c[VBase + j] = SBase + TCount * (j + base);
+          }
+          return new UChar(cp, [, , c]);
+        }
+        var SIndex = cp - SBase;
+        var TIndex = SIndex % TCount;
+        var feature = [];
+        if (TIndex !== 0) {
+          feature[0] = [SBase + SIndex - TIndex, TBase + TIndex];
+        } else {
+          feature[0] = [LBase + Math.floor(SIndex / NCount), VBase + Math.floor(SIndex % NCount / TCount)];
+          feature[2] = {};
+          for (j = 1; j < TCount; ++j) {
+            feature[2][TBase + j] = cp + j;
+          }
+        }
+        return new UChar(cp, feature);
+      }
+      function fromCpFilter(next, cp, needFeature) {
+        return cp < 60 || 13311 < cp && cp < 42607 ? new UChar(cp, DEFAULT_FEATURE) : next(cp, needFeature);
+      }
+      var strategies = [fromCpFilter, fromCache, fromCpOnly, fromRuleBasedJamo, fromData];
+      UChar.fromCharCode = strategies.reduceRight(function(next, strategy) {
+        return function(cp, needFeature) {
+          return strategy(next, cp, needFeature);
+        };
+      }, null);
+      UChar.isHighSurrogate = function(cp) {
+        return cp >= 55296 && cp <= 56319;
+      };
+      UChar.isLowSurrogate = function(cp) {
+        return cp >= 56320 && cp <= 57343;
+      };
+      UChar.prototype.prepFeature = function() {
+        if (!this.feature) {
+          this.feature = UChar.fromCharCode(this.codepoint, true).feature;
+        }
+      };
+      UChar.prototype.toString = function() {
+        if (this.codepoint < 65536) {
+          return String.fromCharCode(this.codepoint);
+        } else {
+          var x = this.codepoint - 65536;
+          return String.fromCharCode(Math.floor(x / 1024) + 55296, x % 1024 + 56320);
+        }
+      };
+      UChar.prototype.getDecomp = function() {
+        this.prepFeature();
+        return this.feature[0] || null;
+      };
+      UChar.prototype.isCompatibility = function() {
+        this.prepFeature();
+        return !!this.feature[1] && this.feature[1] & 1 << 8;
+      };
+      UChar.prototype.isExclude = function() {
+        this.prepFeature();
+        return !!this.feature[1] && this.feature[1] & 1 << 9;
+      };
+      UChar.prototype.getCanonicalClass = function() {
+        this.prepFeature();
+        return !!this.feature[1] ? this.feature[1] & 255 : 0;
+      };
+      UChar.prototype.getComposite = function(following) {
+        this.prepFeature();
+        if (!this.feature[2]) {
+          return null;
+        }
+        var cp = this.feature[2][following.codepoint];
+        return cp ? UChar.fromCharCode(cp) : null;
+      };
+      var UCharIterator = function(str) {
+        this.str = str;
+        this.cursor = 0;
+      };
+      UCharIterator.prototype.next = function() {
+        if (!!this.str && this.cursor < this.str.length) {
+          var cp = this.str.charCodeAt(this.cursor++);
+          var d;
+          if (UChar.isHighSurrogate(cp) && this.cursor < this.str.length && UChar.isLowSurrogate(d = this.str.charCodeAt(this.cursor))) {
+            cp = (cp - 55296) * 1024 + (d - 56320) + 65536;
+            ++this.cursor;
+          }
+          return UChar.fromCharCode(cp);
+        } else {
+          this.str = null;
+          return null;
+        }
+      };
+      var RecursDecompIterator = function(it, cano) {
+        this.it = it;
+        this.canonical = cano;
+        this.resBuf = [];
+      };
+      RecursDecompIterator.prototype.next = function() {
+        function recursiveDecomp(cano, uchar2) {
+          var decomp = uchar2.getDecomp();
+          if (!!decomp && !(cano && uchar2.isCompatibility())) {
+            var ret = [];
+            for (var i2 = 0; i2 < decomp.length; ++i2) {
+              var a = recursiveDecomp(cano, UChar.fromCharCode(decomp[i2]));
+              ret = ret.concat(a);
+            }
+            return ret;
+          } else {
+            return [uchar2];
+          }
+        }
+        if (this.resBuf.length === 0) {
+          var uchar = this.it.next();
+          if (!uchar) {
+            return null;
+          }
+          this.resBuf = recursiveDecomp(this.canonical, uchar);
+        }
+        return this.resBuf.shift();
+      };
+      var DecompIterator = function(it) {
+        this.it = it;
+        this.resBuf = [];
+      };
+      DecompIterator.prototype.next = function() {
+        var cc;
+        if (this.resBuf.length === 0) {
+          do {
+            var uchar = this.it.next();
+            if (!uchar) {
+              break;
+            }
+            cc = uchar.getCanonicalClass();
+            var inspt = this.resBuf.length;
+            if (cc !== 0) {
+              for (; inspt > 0; --inspt) {
+                var uchar2 = this.resBuf[inspt - 1];
+                var cc2 = uchar2.getCanonicalClass();
+                if (cc2 <= cc) {
+                  break;
+                }
+              }
+            }
+            this.resBuf.splice(inspt, 0, uchar);
+          } while (cc !== 0);
+        }
+        return this.resBuf.shift();
+      };
+      var CompIterator = function(it) {
+        this.it = it;
+        this.procBuf = [];
+        this.resBuf = [];
+        this.lastClass = null;
+      };
+      CompIterator.prototype.next = function() {
+        while (this.resBuf.length === 0) {
+          var uchar = this.it.next();
+          if (!uchar) {
+            this.resBuf = this.procBuf;
+            this.procBuf = [];
+            break;
+          }
+          if (this.procBuf.length === 0) {
+            this.lastClass = uchar.getCanonicalClass();
+            this.procBuf.push(uchar);
+          } else {
+            var starter = this.procBuf[0];
+            var composite = starter.getComposite(uchar);
+            var cc = uchar.getCanonicalClass();
+            if (!!composite && (this.lastClass < cc || this.lastClass === 0)) {
+              this.procBuf[0] = composite;
+            } else {
+              if (cc === 0) {
+                this.resBuf = this.procBuf;
+                this.procBuf = [];
+              }
+              this.lastClass = cc;
+              this.procBuf.push(uchar);
+            }
+          }
+        }
+        return this.resBuf.shift();
+      };
+      var createIterator = function(mode, str) {
+        switch (mode) {
+          case "NFD":
+            return new DecompIterator(new RecursDecompIterator(new UCharIterator(str), true));
+          case "NFKD":
+            return new DecompIterator(new RecursDecompIterator(new UCharIterator(str), false));
+          case "NFC":
+            return new CompIterator(new DecompIterator(new RecursDecompIterator(new UCharIterator(str), true)));
+          case "NFKC":
+            return new CompIterator(new DecompIterator(new RecursDecompIterator(new UCharIterator(str), false)));
+        }
+        throw mode + " is invalid";
+      };
+      var normalize = function(mode, str) {
+        var it = createIterator(mode, str);
+        var ret = "";
+        var uchar;
+        while (!!(uchar = it.next())) {
+          ret += uchar.toString();
+        }
+        return ret;
+      };
+      function nfd(str) {
+        return normalize("NFD", str);
+      }
+      function nfkd(str) {
+        return normalize("NFKD", str);
+      }
+      function nfc(str) {
+        return normalize("NFC", str);
+      }
+      function nfkc(str) {
+        return normalize("NFKC", str);
+      }
+      UChar.udata = {
+        0: { 60: [, , { 824: 8814 }], 61: [, , { 824: 8800 }], 62: [, , { 824: 8815 }], 65: [, , { 768: 192, 769: 193, 770: 194, 771: 195, 772: 256, 774: 258, 775: 550, 776: 196, 777: 7842, 778: 197, 780: 461, 783: 512, 785: 514, 803: 7840, 805: 7680, 808: 260 }], 66: [, , { 775: 7682, 803: 7684, 817: 7686 }], 67: [, , { 769: 262, 770: 264, 775: 266, 780: 268, 807: 199 }], 68: [, , { 775: 7690, 780: 270, 803: 7692, 807: 7696, 813: 7698, 817: 7694 }], 69: [, , { 768: 200, 769: 201, 770: 202, 771: 7868, 772: 274, 774: 276, 775: 278, 776: 203, 777: 7866, 780: 282, 783: 516, 785: 518, 803: 7864, 807: 552, 808: 280, 813: 7704, 816: 7706 }], 70: [, , { 775: 7710 }], 71: [, , { 769: 500, 770: 284, 772: 7712, 774: 286, 775: 288, 780: 486, 807: 290 }], 72: [, , { 770: 292, 775: 7714, 776: 7718, 780: 542, 803: 7716, 807: 7720, 814: 7722 }], 73: [, , { 768: 204, 769: 205, 770: 206, 771: 296, 772: 298, 774: 300, 775: 304, 776: 207, 777: 7880, 780: 463, 783: 520, 785: 522, 803: 7882, 808: 302, 816: 7724 }], 74: [, , { 770: 308 }], 75: [, , { 769: 7728, 780: 488, 803: 7730, 807: 310, 817: 7732 }], 76: [, , { 769: 313, 780: 317, 803: 7734, 807: 315, 813: 7740, 817: 7738 }], 77: [, , { 769: 7742, 775: 7744, 803: 7746 }], 78: [, , { 768: 504, 769: 323, 771: 209, 775: 7748, 780: 327, 803: 7750, 807: 325, 813: 7754, 817: 7752 }], 79: [, , { 768: 210, 769: 211, 770: 212, 771: 213, 772: 332, 774: 334, 775: 558, 776: 214, 777: 7886, 779: 336, 780: 465, 783: 524, 785: 526, 795: 416, 803: 7884, 808: 490 }], 80: [, , { 769: 7764, 775: 7766 }], 82: [, , { 769: 340, 775: 7768, 780: 344, 783: 528, 785: 530, 803: 7770, 807: 342, 817: 7774 }], 83: [, , { 769: 346, 770: 348, 775: 7776, 780: 352, 803: 7778, 806: 536, 807: 350 }], 84: [, , { 775: 7786, 780: 356, 803: 7788, 806: 538, 807: 354, 813: 7792, 817: 7790 }], 85: [, , { 768: 217, 769: 218, 770: 219, 771: 360, 772: 362, 774: 364, 776: 220, 777: 7910, 778: 366, 779: 368, 780: 467, 783: 532, 785: 534, 795: 431, 803: 7908, 804: 7794, 808: 370, 813: 7798, 816: 7796 }], 86: [, , { 771: 7804, 803: 7806 }], 87: [, , { 768: 7808, 769: 7810, 770: 372, 775: 7814, 776: 7812, 803: 7816 }], 88: [, , { 775: 7818, 776: 7820 }], 89: [, , { 768: 7922, 769: 221, 770: 374, 771: 7928, 772: 562, 775: 7822, 776: 376, 777: 7926, 803: 7924 }], 90: [, , { 769: 377, 770: 7824, 775: 379, 780: 381, 803: 7826, 817: 7828 }], 97: [, , { 768: 224, 769: 225, 770: 226, 771: 227, 772: 257, 774: 259, 775: 551, 776: 228, 777: 7843, 778: 229, 780: 462, 783: 513, 785: 515, 803: 7841, 805: 7681, 808: 261 }], 98: [, , { 775: 7683, 803: 7685, 817: 7687 }], 99: [, , { 769: 263, 770: 265, 775: 267, 780: 269, 807: 231 }], 100: [, , { 775: 7691, 780: 271, 803: 7693, 807: 7697, 813: 7699, 817: 7695 }], 101: [, , { 768: 232, 769: 233, 770: 234, 771: 7869, 772: 275, 774: 277, 775: 279, 776: 235, 777: 7867, 780: 283, 783: 517, 785: 519, 803: 7865, 807: 553, 808: 281, 813: 7705, 816: 7707 }], 102: [, , { 775: 7711 }], 103: [, , { 769: 501, 770: 285, 772: 7713, 774: 287, 775: 289, 780: 487, 807: 291 }], 104: [, , { 770: 293, 775: 7715, 776: 7719, 780: 543, 803: 7717, 807: 7721, 814: 7723, 817: 7830 }], 105: [, , { 768: 236, 769: 237, 770: 238, 771: 297, 772: 299, 774: 301, 776: 239, 777: 7881, 780: 464, 783: 521, 785: 523, 803: 7883, 808: 303, 816: 7725 }], 106: [, , { 770: 309, 780: 496 }], 107: [, , { 769: 7729, 780: 489, 803: 7731, 807: 311, 817: 7733 }], 108: [, , { 769: 314, 780: 318, 803: 7735, 807: 316, 813: 7741, 817: 7739 }], 109: [, , { 769: 7743, 775: 7745, 803: 7747 }], 110: [, , { 768: 505, 769: 324, 771: 241, 775: 7749, 780: 328, 803: 7751, 807: 326, 813: 7755, 817: 7753 }], 111: [, , { 768: 242, 769: 243, 770: 244, 771: 245, 772: 333, 774: 335, 775: 559, 776: 246, 777: 7887, 779: 337, 780: 466, 783: 525, 785: 527, 795: 417, 803: 7885, 808: 491 }], 112: [, , { 769: 7765, 775: 7767 }], 114: [, , { 769: 341, 775: 7769, 780: 345, 783: 529, 785: 531, 803: 7771, 807: 343, 817: 7775 }], 115: [, , { 769: 347, 770: 349, 775: 7777, 780: 353, 803: 7779, 806: 537, 807: 351 }], 116: [, , { 775: 7787, 776: 7831, 780: 357, 803: 7789, 806: 539, 807: 355, 813: 7793, 817: 7791 }], 117: [, , { 768: 249, 769: 250, 770: 251, 771: 361, 772: 363, 774: 365, 776: 252, 777: 7911, 778: 367, 779: 369, 780: 468, 783: 533, 785: 535, 795: 432, 803: 7909, 804: 7795, 808: 371, 813: 7799, 816: 7797 }], 118: [, , { 771: 7805, 803: 7807 }], 119: [, , { 768: 7809, 769: 7811, 770: 373, 775: 7815, 776: 7813, 778: 7832, 803: 7817 }], 120: [, , { 775: 7819, 776: 7821 }], 121: [, , { 768: 7923, 769: 253, 770: 375, 771: 7929, 772: 563, 775: 7823, 776: 255, 777: 7927, 778: 7833, 803: 7925 }], 122: [, , { 769: 378, 770: 7825, 775: 380, 780: 382, 803: 7827, 817: 7829 }], 160: [[32], 256], 168: [[32, 776], 256, { 768: 8173, 769: 901, 834: 8129 }], 170: [[97], 256], 175: [[32, 772], 256], 178: [[50], 256], 179: [[51], 256], 180: [[32, 769], 256], 181: [[956], 256], 184: [[32, 807], 256], 185: [[49], 256], 186: [[111], 256], 188: [[49, 8260, 52], 256], 189: [[49, 8260, 50], 256], 190: [[51, 8260, 52], 256], 192: [[65, 768]], 193: [[65, 769]], 194: [[65, 770], , { 768: 7846, 769: 7844, 771: 7850, 777: 7848 }], 195: [[65, 771]], 196: [[65, 776], , { 772: 478 }], 197: [[65, 778], , { 769: 506 }], 198: [, , { 769: 508, 772: 482 }], 199: [[67, 807], , { 769: 7688 }], 200: [[69, 768]], 201: [[69, 769]], 202: [[69, 770], , { 768: 7872, 769: 7870, 771: 7876, 777: 7874 }], 203: [[69, 776]], 204: [[73, 768]], 205: [[73, 769]], 206: [[73, 770]], 207: [[73, 776], , { 769: 7726 }], 209: [[78, 771]], 210: [[79, 768]], 211: [[79, 769]], 212: [[79, 770], , { 768: 7890, 769: 7888, 771: 7894, 777: 7892 }], 213: [[79, 771], , { 769: 7756, 772: 556, 776: 7758 }], 214: [[79, 776], , { 772: 554 }], 216: [, , { 769: 510 }], 217: [[85, 768]], 218: [[85, 769]], 219: [[85, 770]], 220: [[85, 776], , { 768: 475, 769: 471, 772: 469, 780: 473 }], 221: [[89, 769]], 224: [[97, 768]], 225: [[97, 769]], 226: [[97, 770], , { 768: 7847, 769: 7845, 771: 7851, 777: 7849 }], 227: [[97, 771]], 228: [[97, 776], , { 772: 479 }], 229: [[97, 778], , { 769: 507 }], 230: [, , { 769: 509, 772: 483 }], 231: [[99, 807], , { 769: 7689 }], 232: [[101, 768]], 233: [[101, 769]], 234: [[101, 770], , { 768: 7873, 769: 7871, 771: 7877, 777: 7875 }], 235: [[101, 776]], 236: [[105, 768]], 237: [[105, 769]], 238: [[105, 770]], 239: [[105, 776], , { 769: 7727 }], 241: [[110, 771]], 242: [[111, 768]], 243: [[111, 769]], 244: [[111, 770], , { 768: 7891, 769: 7889, 771: 7895, 777: 7893 }], 245: [[111, 771], , { 769: 7757, 772: 557, 776: 7759 }], 246: [[111, 776], , { 772: 555 }], 248: [, , { 769: 511 }], 249: [[117, 768]], 250: [[117, 769]], 251: [[117, 770]], 252: [[117, 776], , { 768: 476, 769: 472, 772: 470, 780: 474 }], 253: [[121, 769]], 255: [[121, 776]] },
+        256: { 256: [[65, 772]], 257: [[97, 772]], 258: [[65, 774], , { 768: 7856, 769: 7854, 771: 7860, 777: 7858 }], 259: [[97, 774], , { 768: 7857, 769: 7855, 771: 7861, 777: 7859 }], 260: [[65, 808]], 261: [[97, 808]], 262: [[67, 769]], 263: [[99, 769]], 264: [[67, 770]], 265: [[99, 770]], 266: [[67, 775]], 267: [[99, 775]], 268: [[67, 780]], 269: [[99, 780]], 270: [[68, 780]], 271: [[100, 780]], 274: [[69, 772], , { 768: 7700, 769: 7702 }], 275: [[101, 772], , { 768: 7701, 769: 7703 }], 276: [[69, 774]], 277: [[101, 774]], 278: [[69, 775]], 279: [[101, 775]], 280: [[69, 808]], 281: [[101, 808]], 282: [[69, 780]], 283: [[101, 780]], 284: [[71, 770]], 285: [[103, 770]], 286: [[71, 774]], 287: [[103, 774]], 288: [[71, 775]], 289: [[103, 775]], 290: [[71, 807]], 291: [[103, 807]], 292: [[72, 770]], 293: [[104, 770]], 296: [[73, 771]], 297: [[105, 771]], 298: [[73, 772]], 299: [[105, 772]], 300: [[73, 774]], 301: [[105, 774]], 302: [[73, 808]], 303: [[105, 808]], 304: [[73, 775]], 306: [[73, 74], 256], 307: [[105, 106], 256], 308: [[74, 770]], 309: [[106, 770]], 310: [[75, 807]], 311: [[107, 807]], 313: [[76, 769]], 314: [[108, 769]], 315: [[76, 807]], 316: [[108, 807]], 317: [[76, 780]], 318: [[108, 780]], 319: [[76, 183], 256], 320: [[108, 183], 256], 323: [[78, 769]], 324: [[110, 769]], 325: [[78, 807]], 326: [[110, 807]], 327: [[78, 780]], 328: [[110, 780]], 329: [[700, 110], 256], 332: [[79, 772], , { 768: 7760, 769: 7762 }], 333: [[111, 772], , { 768: 7761, 769: 7763 }], 334: [[79, 774]], 335: [[111, 774]], 336: [[79, 779]], 337: [[111, 779]], 340: [[82, 769]], 341: [[114, 769]], 342: [[82, 807]], 343: [[114, 807]], 344: [[82, 780]], 345: [[114, 780]], 346: [[83, 769], , { 775: 7780 }], 347: [[115, 769], , { 775: 7781 }], 348: [[83, 770]], 349: [[115, 770]], 350: [[83, 807]], 351: [[115, 807]], 352: [[83, 780], , { 775: 7782 }], 353: [[115, 780], , { 775: 7783 }], 354: [[84, 807]], 355: [[116, 807]], 356: [[84, 780]], 357: [[116, 780]], 360: [[85, 771], , { 769: 7800 }], 361: [[117, 771], , { 769: 7801 }], 362: [[85, 772], , { 776: 7802 }], 363: [[117, 772], , { 776: 7803 }], 364: [[85, 774]], 365: [[117, 774]], 366: [[85, 778]], 367: [[117, 778]], 368: [[85, 779]], 369: [[117, 779]], 370: [[85, 808]], 371: [[117, 808]], 372: [[87, 770]], 373: [[119, 770]], 374: [[89, 770]], 375: [[121, 770]], 376: [[89, 776]], 377: [[90, 769]], 378: [[122, 769]], 379: [[90, 775]], 380: [[122, 775]], 381: [[90, 780]], 382: [[122, 780]], 383: [[115], 256, { 775: 7835 }], 416: [[79, 795], , { 768: 7900, 769: 7898, 771: 7904, 777: 7902, 803: 7906 }], 417: [[111, 795], , { 768: 7901, 769: 7899, 771: 7905, 777: 7903, 803: 7907 }], 431: [[85, 795], , { 768: 7914, 769: 7912, 771: 7918, 777: 7916, 803: 7920 }], 432: [[117, 795], , { 768: 7915, 769: 7913, 771: 7919, 777: 7917, 803: 7921 }], 439: [, , { 780: 494 }], 452: [[68, 381], 256], 453: [[68, 382], 256], 454: [[100, 382], 256], 455: [[76, 74], 256], 456: [[76, 106], 256], 457: [[108, 106], 256], 458: [[78, 74], 256], 459: [[78, 106], 256], 460: [[110, 106], 256], 461: [[65, 780]], 462: [[97, 780]], 463: [[73, 780]], 464: [[105, 780]], 465: [[79, 780]], 466: [[111, 780]], 467: [[85, 780]], 468: [[117, 780]], 469: [[220, 772]], 470: [[252, 772]], 471: [[220, 769]], 472: [[252, 769]], 473: [[220, 780]], 474: [[252, 780]], 475: [[220, 768]], 476: [[252, 768]], 478: [[196, 772]], 479: [[228, 772]], 480: [[550, 772]], 481: [[551, 772]], 482: [[198, 772]], 483: [[230, 772]], 486: [[71, 780]], 487: [[103, 780]], 488: [[75, 780]], 489: [[107, 780]], 490: [[79, 808], , { 772: 492 }], 491: [[111, 808], , { 772: 493 }], 492: [[490, 772]], 493: [[491, 772]], 494: [[439, 780]], 495: [[658, 780]], 496: [[106, 780]], 497: [[68, 90], 256], 498: [[68, 122], 256], 499: [[100, 122], 256], 500: [[71, 769]], 501: [[103, 769]], 504: [[78, 768]], 505: [[110, 768]], 506: [[197, 769]], 507: [[229, 769]], 508: [[198, 769]], 509: [[230, 769]], 510: [[216, 769]], 511: [[248, 769]], 66045: [, 220] },
+        512: { 512: [[65, 783]], 513: [[97, 783]], 514: [[65, 785]], 515: [[97, 785]], 516: [[69, 783]], 517: [[101, 783]], 518: [[69, 785]], 519: [[101, 785]], 520: [[73, 783]], 521: [[105, 783]], 522: [[73, 785]], 523: [[105, 785]], 524: [[79, 783]], 525: [[111, 783]], 526: [[79, 785]], 527: [[111, 785]], 528: [[82, 783]], 529: [[114, 783]], 530: [[82, 785]], 531: [[114, 785]], 532: [[85, 783]], 533: [[117, 783]], 534: [[85, 785]], 535: [[117, 785]], 536: [[83, 806]], 537: [[115, 806]], 538: [[84, 806]], 539: [[116, 806]], 542: [[72, 780]], 543: [[104, 780]], 550: [[65, 775], , { 772: 480 }], 551: [[97, 775], , { 772: 481 }], 552: [[69, 807], , { 774: 7708 }], 553: [[101, 807], , { 774: 7709 }], 554: [[214, 772]], 555: [[246, 772]], 556: [[213, 772]], 557: [[245, 772]], 558: [[79, 775], , { 772: 560 }], 559: [[111, 775], , { 772: 561 }], 560: [[558, 772]], 561: [[559, 772]], 562: [[89, 772]], 563: [[121, 772]], 658: [, , { 780: 495 }], 688: [[104], 256], 689: [[614], 256], 690: [[106], 256], 691: [[114], 256], 692: [[633], 256], 693: [[635], 256], 694: [[641], 256], 695: [[119], 256], 696: [[121], 256], 728: [[32, 774], 256], 729: [[32, 775], 256], 730: [[32, 778], 256], 731: [[32, 808], 256], 732: [[32, 771], 256], 733: [[32, 779], 256], 736: [[611], 256], 737: [[108], 256], 738: [[115], 256], 739: [[120], 256], 740: [[661], 256], 66272: [, 220] },
+        768: { 768: [, 230], 769: [, 230], 770: [, 230], 771: [, 230], 772: [, 230], 773: [, 230], 774: [, 230], 775: [, 230], 776: [, 230, { 769: 836 }], 777: [, 230], 778: [, 230], 779: [, 230], 780: [, 230], 781: [, 230], 782: [, 230], 783: [, 230], 784: [, 230], 785: [, 230], 786: [, 230], 787: [, 230], 788: [, 230], 789: [, 232], 790: [, 220], 791: [, 220], 792: [, 220], 793: [, 220], 794: [, 232], 795: [, 216], 796: [, 220], 797: [, 220], 798: [, 220], 799: [, 220], 800: [, 220], 801: [, 202], 802: [, 202], 803: [, 220], 804: [, 220], 805: [, 220], 806: [, 220], 807: [, 202], 808: [, 202], 809: [, 220], 810: [, 220], 811: [, 220], 812: [, 220], 813: [, 220], 814: [, 220], 815: [, 220], 816: [, 220], 817: [, 220], 818: [, 220], 819: [, 220], 820: [, 1], 821: [, 1], 822: [, 1], 823: [, 1], 824: [, 1], 825: [, 220], 826: [, 220], 827: [, 220], 828: [, 220], 829: [, 230], 830: [, 230], 831: [, 230], 832: [[768], 230], 833: [[769], 230], 834: [, 230], 835: [[787], 230], 836: [[776, 769], 230], 837: [, 240], 838: [, 230], 839: [, 220], 840: [, 220], 841: [, 220], 842: [, 230], 843: [, 230], 844: [, 230], 845: [, 220], 846: [, 220], 848: [, 230], 849: [, 230], 850: [, 230], 851: [, 220], 852: [, 220], 853: [, 220], 854: [, 220], 855: [, 230], 856: [, 232], 857: [, 220], 858: [, 220], 859: [, 230], 860: [, 233], 861: [, 234], 862: [, 234], 863: [, 233], 864: [, 234], 865: [, 234], 866: [, 233], 867: [, 230], 868: [, 230], 869: [, 230], 870: [, 230], 871: [, 230], 872: [, 230], 873: [, 230], 874: [, 230], 875: [, 230], 876: [, 230], 877: [, 230], 878: [, 230], 879: [, 230], 884: [[697]], 890: [[32, 837], 256], 894: [[59]], 900: [[32, 769], 256], 901: [[168, 769]], 902: [[913, 769]], 903: [[183]], 904: [[917, 769]], 905: [[919, 769]], 906: [[921, 769]], 908: [[927, 769]], 910: [[933, 769]], 911: [[937, 769]], 912: [[970, 769]], 913: [, , { 768: 8122, 769: 902, 772: 8121, 774: 8120, 787: 7944, 788: 7945, 837: 8124 }], 917: [, , { 768: 8136, 769: 904, 787: 7960, 788: 7961 }], 919: [, , { 768: 8138, 769: 905, 787: 7976, 788: 7977, 837: 8140 }], 921: [, , { 768: 8154, 769: 906, 772: 8153, 774: 8152, 776: 938, 787: 7992, 788: 7993 }], 927: [, , { 768: 8184, 769: 908, 787: 8008, 788: 8009 }], 929: [, , { 788: 8172 }], 933: [, , { 768: 8170, 769: 910, 772: 8169, 774: 8168, 776: 939, 788: 8025 }], 937: [, , { 768: 8186, 769: 911, 787: 8040, 788: 8041, 837: 8188 }], 938: [[921, 776]], 939: [[933, 776]], 940: [[945, 769], , { 837: 8116 }], 941: [[949, 769]], 942: [[951, 769], , { 837: 8132 }], 943: [[953, 769]], 944: [[971, 769]], 945: [, , { 768: 8048, 769: 940, 772: 8113, 774: 8112, 787: 7936, 788: 7937, 834: 8118, 837: 8115 }], 949: [, , { 768: 8050, 769: 941, 787: 7952, 788: 7953 }], 951: [, , { 768: 8052, 769: 942, 787: 7968, 788: 7969, 834: 8134, 837: 8131 }], 953: [, , { 768: 8054, 769: 943, 772: 8145, 774: 8144, 776: 970, 787: 7984, 788: 7985, 834: 8150 }], 959: [, , { 768: 8056, 769: 972, 787: 8e3, 788: 8001 }], 961: [, , { 787: 8164, 788: 8165 }], 965: [, , { 768: 8058, 769: 973, 772: 8161, 774: 8160, 776: 971, 787: 8016, 788: 8017, 834: 8166 }], 969: [, , { 768: 8060, 769: 974, 787: 8032, 788: 8033, 834: 8182, 837: 8179 }], 970: [[953, 776], , { 768: 8146, 769: 912, 834: 8151 }], 971: [[965, 776], , { 768: 8162, 769: 944, 834: 8167 }], 972: [[959, 769]], 973: [[965, 769]], 974: [[969, 769], , { 837: 8180 }], 976: [[946], 256], 977: [[952], 256], 978: [[933], 256, { 769: 979, 776: 980 }], 979: [[978, 769]], 980: [[978, 776]], 981: [[966], 256], 982: [[960], 256], 1008: [[954], 256], 1009: [[961], 256], 1010: [[962], 256], 1012: [[920], 256], 1013: [[949], 256], 1017: [[931], 256], 66422: [, 230], 66423: [, 230], 66424: [, 230], 66425: [, 230], 66426: [, 230] },
+        1024: { 1024: [[1045, 768]], 1025: [[1045, 776]], 1027: [[1043, 769]], 1030: [, , { 776: 1031 }], 1031: [[1030, 776]], 1036: [[1050, 769]], 1037: [[1048, 768]], 1038: [[1059, 774]], 1040: [, , { 774: 1232, 776: 1234 }], 1043: [, , { 769: 1027 }], 1045: [, , { 768: 1024, 774: 1238, 776: 1025 }], 1046: [, , { 774: 1217, 776: 1244 }], 1047: [, , { 776: 1246 }], 1048: [, , { 768: 1037, 772: 1250, 774: 1049, 776: 1252 }], 1049: [[1048, 774]], 1050: [, , { 769: 1036 }], 1054: [, , { 776: 1254 }], 1059: [, , { 772: 1262, 774: 1038, 776: 1264, 779: 1266 }], 1063: [, , { 776: 1268 }], 1067: [, , { 776: 1272 }], 1069: [, , { 776: 1260 }], 1072: [, , { 774: 1233, 776: 1235 }], 1075: [, , { 769: 1107 }], 1077: [, , { 768: 1104, 774: 1239, 776: 1105 }], 1078: [, , { 774: 1218, 776: 1245 }], 1079: [, , { 776: 1247 }], 1080: [, , { 768: 1117, 772: 1251, 774: 1081, 776: 1253 }], 1081: [[1080, 774]], 1082: [, , { 769: 1116 }], 1086: [, , { 776: 1255 }], 1091: [, , { 772: 1263, 774: 1118, 776: 1265, 779: 1267 }], 1095: [, , { 776: 1269 }], 1099: [, , { 776: 1273 }], 1101: [, , { 776: 1261 }], 1104: [[1077, 768]], 1105: [[1077, 776]], 1107: [[1075, 769]], 1110: [, , { 776: 1111 }], 1111: [[1110, 776]], 1116: [[1082, 769]], 1117: [[1080, 768]], 1118: [[1091, 774]], 1140: [, , { 783: 1142 }], 1141: [, , { 783: 1143 }], 1142: [[1140, 783]], 1143: [[1141, 783]], 1155: [, 230], 1156: [, 230], 1157: [, 230], 1158: [, 230], 1159: [, 230], 1217: [[1046, 774]], 1218: [[1078, 774]], 1232: [[1040, 774]], 1233: [[1072, 774]], 1234: [[1040, 776]], 1235: [[1072, 776]], 1238: [[1045, 774]], 1239: [[1077, 774]], 1240: [, , { 776: 1242 }], 1241: [, , { 776: 1243 }], 1242: [[1240, 776]], 1243: [[1241, 776]], 1244: [[1046, 776]], 1245: [[1078, 776]], 1246: [[1047, 776]], 1247: [[1079, 776]], 1250: [[1048, 772]], 1251: [[1080, 772]], 1252: [[1048, 776]], 1253: [[1080, 776]], 1254: [[1054, 776]], 1255: [[1086, 776]], 1256: [, , { 776: 1258 }], 1257: [, , { 776: 1259 }], 1258: [[1256, 776]], 1259: [[1257, 776]], 1260: [[1069, 776]], 1261: [[1101, 776]], 1262: [[1059, 772]], 1263: [[1091, 772]], 1264: [[1059, 776]], 1265: [[1091, 776]], 1266: [[1059, 779]], 1267: [[1091, 779]], 1268: [[1063, 776]], 1269: [[1095, 776]], 1272: [[1067, 776]], 1273: [[1099, 776]] },
+        1280: { 1415: [[1381, 1410], 256], 1425: [, 220], 1426: [, 230], 1427: [, 230], 1428: [, 230], 1429: [, 230], 1430: [, 220], 1431: [, 230], 1432: [, 230], 1433: [, 230], 1434: [, 222], 1435: [, 220], 1436: [, 230], 1437: [, 230], 1438: [, 230], 1439: [, 230], 1440: [, 230], 1441: [, 230], 1442: [, 220], 1443: [, 220], 1444: [, 220], 1445: [, 220], 1446: [, 220], 1447: [, 220], 1448: [, 230], 1449: [, 230], 1450: [, 220], 1451: [, 230], 1452: [, 230], 1453: [, 222], 1454: [, 228], 1455: [, 230], 1456: [, 10], 1457: [, 11], 1458: [, 12], 1459: [, 13], 1460: [, 14], 1461: [, 15], 1462: [, 16], 1463: [, 17], 1464: [, 18], 1465: [, 19], 1466: [, 19], 1467: [, 20], 1468: [, 21], 1469: [, 22], 1471: [, 23], 1473: [, 24], 1474: [, 25], 1476: [, 230], 1477: [, 220], 1479: [, 18] },
+        1536: { 1552: [, 230], 1553: [, 230], 1554: [, 230], 1555: [, 230], 1556: [, 230], 1557: [, 230], 1558: [, 230], 1559: [, 230], 1560: [, 30], 1561: [, 31], 1562: [, 32], 1570: [[1575, 1619]], 1571: [[1575, 1620]], 1572: [[1608, 1620]], 1573: [[1575, 1621]], 1574: [[1610, 1620]], 1575: [, , { 1619: 1570, 1620: 1571, 1621: 1573 }], 1608: [, , { 1620: 1572 }], 1610: [, , { 1620: 1574 }], 1611: [, 27], 1612: [, 28], 1613: [, 29], 1614: [, 30], 1615: [, 31], 1616: [, 32], 1617: [, 33], 1618: [, 34], 1619: [, 230], 1620: [, 230], 1621: [, 220], 1622: [, 220], 1623: [, 230], 1624: [, 230], 1625: [, 230], 1626: [, 230], 1627: [, 230], 1628: [, 220], 1629: [, 230], 1630: [, 230], 1631: [, 220], 1648: [, 35], 1653: [[1575, 1652], 256], 1654: [[1608, 1652], 256], 1655: [[1735, 1652], 256], 1656: [[1610, 1652], 256], 1728: [[1749, 1620]], 1729: [, , { 1620: 1730 }], 1730: [[1729, 1620]], 1746: [, , { 1620: 1747 }], 1747: [[1746, 1620]], 1749: [, , { 1620: 1728 }], 1750: [, 230], 1751: [, 230], 1752: [, 230], 1753: [, 230], 1754: [, 230], 1755: [, 230], 1756: [, 230], 1759: [, 230], 1760: [, 230], 1761: [, 230], 1762: [, 230], 1763: [, 220], 1764: [, 230], 1767: [, 230], 1768: [, 230], 1770: [, 220], 1771: [, 230], 1772: [, 230], 1773: [, 220] },
+        1792: { 1809: [, 36], 1840: [, 230], 1841: [, 220], 1842: [, 230], 1843: [, 230], 1844: [, 220], 1845: [, 230], 1846: [, 230], 1847: [, 220], 1848: [, 220], 1849: [, 220], 1850: [, 230], 1851: [, 220], 1852: [, 220], 1853: [, 230], 1854: [, 220], 1855: [, 230], 1856: [, 230], 1857: [, 230], 1858: [, 220], 1859: [, 230], 1860: [, 220], 1861: [, 230], 1862: [, 220], 1863: [, 230], 1864: [, 220], 1865: [, 230], 1866: [, 230], 2027: [, 230], 2028: [, 230], 2029: [, 230], 2030: [, 230], 2031: [, 230], 2032: [, 230], 2033: [, 230], 2034: [, 220], 2035: [, 230] },
+        2048: { 2070: [, 230], 2071: [, 230], 2072: [, 230], 2073: [, 230], 2075: [, 230], 2076: [, 230], 2077: [, 230], 2078: [, 230], 2079: [, 230], 2080: [, 230], 2081: [, 230], 2082: [, 230], 2083: [, 230], 2085: [, 230], 2086: [, 230], 2087: [, 230], 2089: [, 230], 2090: [, 230], 2091: [, 230], 2092: [, 230], 2093: [, 230], 2137: [, 220], 2138: [, 220], 2139: [, 220], 2276: [, 230], 2277: [, 230], 2278: [, 220], 2279: [, 230], 2280: [, 230], 2281: [, 220], 2282: [, 230], 2283: [, 230], 2284: [, 230], 2285: [, 220], 2286: [, 220], 2287: [, 220], 2288: [, 27], 2289: [, 28], 2290: [, 29], 2291: [, 230], 2292: [, 230], 2293: [, 230], 2294: [, 220], 2295: [, 230], 2296: [, 230], 2297: [, 220], 2298: [, 220], 2299: [, 230], 2300: [, 230], 2301: [, 230], 2302: [, 230], 2303: [, 230] },
+        2304: { 2344: [, , { 2364: 2345 }], 2345: [[2344, 2364]], 2352: [, , { 2364: 2353 }], 2353: [[2352, 2364]], 2355: [, , { 2364: 2356 }], 2356: [[2355, 2364]], 2364: [, 7], 2381: [, 9], 2385: [, 230], 2386: [, 220], 2387: [, 230], 2388: [, 230], 2392: [[2325, 2364], 512], 2393: [[2326, 2364], 512], 2394: [[2327, 2364], 512], 2395: [[2332, 2364], 512], 2396: [[2337, 2364], 512], 2397: [[2338, 2364], 512], 2398: [[2347, 2364], 512], 2399: [[2351, 2364], 512], 2492: [, 7], 2503: [, , { 2494: 2507, 2519: 2508 }], 2507: [[2503, 2494]], 2508: [[2503, 2519]], 2509: [, 9], 2524: [[2465, 2492], 512], 2525: [[2466, 2492], 512], 2527: [[2479, 2492], 512] },
+        2560: { 2611: [[2610, 2620], 512], 2614: [[2616, 2620], 512], 2620: [, 7], 2637: [, 9], 2649: [[2582, 2620], 512], 2650: [[2583, 2620], 512], 2651: [[2588, 2620], 512], 2654: [[2603, 2620], 512], 2748: [, 7], 2765: [, 9], 68109: [, 220], 68111: [, 230], 68152: [, 230], 68153: [, 1], 68154: [, 220], 68159: [, 9], 68325: [, 230], 68326: [, 220] },
+        2816: { 2876: [, 7], 2887: [, , { 2878: 2891, 2902: 2888, 2903: 2892 }], 2888: [[2887, 2902]], 2891: [[2887, 2878]], 2892: [[2887, 2903]], 2893: [, 9], 2908: [[2849, 2876], 512], 2909: [[2850, 2876], 512], 2962: [, , { 3031: 2964 }], 2964: [[2962, 3031]], 3014: [, , { 3006: 3018, 3031: 3020 }], 3015: [, , { 3006: 3019 }], 3018: [[3014, 3006]], 3019: [[3015, 3006]], 3020: [[3014, 3031]], 3021: [, 9] },
+        3072: { 3142: [, , { 3158: 3144 }], 3144: [[3142, 3158]], 3149: [, 9], 3157: [, 84], 3158: [, 91], 3260: [, 7], 3263: [, , { 3285: 3264 }], 3264: [[3263, 3285]], 3270: [, , { 3266: 3274, 3285: 3271, 3286: 3272 }], 3271: [[3270, 3285]], 3272: [[3270, 3286]], 3274: [[3270, 3266], , { 3285: 3275 }], 3275: [[3274, 3285]], 3277: [, 9] },
+        3328: { 3398: [, , { 3390: 3402, 3415: 3404 }], 3399: [, , { 3390: 3403 }], 3402: [[3398, 3390]], 3403: [[3399, 3390]], 3404: [[3398, 3415]], 3405: [, 9], 3530: [, 9], 3545: [, , { 3530: 3546, 3535: 3548, 3551: 3550 }], 3546: [[3545, 3530]], 3548: [[3545, 3535], , { 3530: 3549 }], 3549: [[3548, 3530]], 3550: [[3545, 3551]] },
+        3584: { 3635: [[3661, 3634], 256], 3640: [, 103], 3641: [, 103], 3642: [, 9], 3656: [, 107], 3657: [, 107], 3658: [, 107], 3659: [, 107], 3763: [[3789, 3762], 256], 3768: [, 118], 3769: [, 118], 3784: [, 122], 3785: [, 122], 3786: [, 122], 3787: [, 122], 3804: [[3755, 3737], 256], 3805: [[3755, 3745], 256] },
+        3840: { 3852: [[3851], 256], 3864: [, 220], 3865: [, 220], 3893: [, 220], 3895: [, 220], 3897: [, 216], 3907: [[3906, 4023], 512], 3917: [[3916, 4023], 512], 3922: [[3921, 4023], 512], 3927: [[3926, 4023], 512], 3932: [[3931, 4023], 512], 3945: [[3904, 4021], 512], 3953: [, 129], 3954: [, 130], 3955: [[3953, 3954], 512], 3956: [, 132], 3957: [[3953, 3956], 512], 3958: [[4018, 3968], 512], 3959: [[4018, 3969], 256], 3960: [[4019, 3968], 512], 3961: [[4019, 3969], 256], 3962: [, 130], 3963: [, 130], 3964: [, 130], 3965: [, 130], 3968: [, 130], 3969: [[3953, 3968], 512], 3970: [, 230], 3971: [, 230], 3972: [, 9], 3974: [, 230], 3975: [, 230], 3987: [[3986, 4023], 512], 3997: [[3996, 4023], 512], 4002: [[4001, 4023], 512], 4007: [[4006, 4023], 512], 4012: [[4011, 4023], 512], 4025: [[3984, 4021], 512], 4038: [, 220] },
+        4096: { 4133: [, , { 4142: 4134 }], 4134: [[4133, 4142]], 4151: [, 7], 4153: [, 9], 4154: [, 9], 4237: [, 220], 4348: [[4316], 256], 69702: [, 9], 69759: [, 9], 69785: [, , { 69818: 69786 }], 69786: [[69785, 69818]], 69787: [, , { 69818: 69788 }], 69788: [[69787, 69818]], 69797: [, , { 69818: 69803 }], 69803: [[69797, 69818]], 69817: [, 9], 69818: [, 7] },
+        4352: { 69888: [, 230], 69889: [, 230], 69890: [, 230], 69934: [[69937, 69927]], 69935: [[69938, 69927]], 69937: [, , { 69927: 69934 }], 69938: [, , { 69927: 69935 }], 69939: [, 9], 69940: [, 9], 70003: [, 7], 70080: [, 9] },
+        4608: { 70197: [, 9], 70198: [, 7], 70377: [, 7], 70378: [, 9] },
+        4864: { 4957: [, 230], 4958: [, 230], 4959: [, 230], 70460: [, 7], 70471: [, , { 70462: 70475, 70487: 70476 }], 70475: [[70471, 70462]], 70476: [[70471, 70487]], 70477: [, 9], 70502: [, 230], 70503: [, 230], 70504: [, 230], 70505: [, 230], 70506: [, 230], 70507: [, 230], 70508: [, 230], 70512: [, 230], 70513: [, 230], 70514: [, 230], 70515: [, 230], 70516: [, 230] },
+        5120: { 70841: [, , { 70832: 70844, 70842: 70843, 70845: 70846 }], 70843: [[70841, 70842]], 70844: [[70841, 70832]], 70846: [[70841, 70845]], 70850: [, 9], 70851: [, 7] },
+        5376: { 71096: [, , { 71087: 71098 }], 71097: [, , { 71087: 71099 }], 71098: [[71096, 71087]], 71099: [[71097, 71087]], 71103: [, 9], 71104: [, 7] },
+        5632: { 71231: [, 9], 71350: [, 9], 71351: [, 7] },
+        5888: { 5908: [, 9], 5940: [, 9], 6098: [, 9], 6109: [, 230] },
+        6144: { 6313: [, 228] },
+        6400: { 6457: [, 222], 6458: [, 230], 6459: [, 220] },
+        6656: { 6679: [, 230], 6680: [, 220], 6752: [, 9], 6773: [, 230], 6774: [, 230], 6775: [, 230], 6776: [, 230], 6777: [, 230], 6778: [, 230], 6779: [, 230], 6780: [, 230], 6783: [, 220], 6832: [, 230], 6833: [, 230], 6834: [, 230], 6835: [, 230], 6836: [, 230], 6837: [, 220], 6838: [, 220], 6839: [, 220], 6840: [, 220], 6841: [, 220], 6842: [, 220], 6843: [, 230], 6844: [, 230], 6845: [, 220] },
+        6912: { 6917: [, , { 6965: 6918 }], 6918: [[6917, 6965]], 6919: [, , { 6965: 6920 }], 6920: [[6919, 6965]], 6921: [, , { 6965: 6922 }], 6922: [[6921, 6965]], 6923: [, , { 6965: 6924 }], 6924: [[6923, 6965]], 6925: [, , { 6965: 6926 }], 6926: [[6925, 6965]], 6929: [, , { 6965: 6930 }], 6930: [[6929, 6965]], 6964: [, 7], 6970: [, , { 6965: 6971 }], 6971: [[6970, 6965]], 6972: [, , { 6965: 6973 }], 6973: [[6972, 6965]], 6974: [, , { 6965: 6976 }], 6975: [, , { 6965: 6977 }], 6976: [[6974, 6965]], 6977: [[6975, 6965]], 6978: [, , { 6965: 6979 }], 6979: [[6978, 6965]], 6980: [, 9], 7019: [, 230], 7020: [, 220], 7021: [, 230], 7022: [, 230], 7023: [, 230], 7024: [, 230], 7025: [, 230], 7026: [, 230], 7027: [, 230], 7082: [, 9], 7083: [, 9], 7142: [, 7], 7154: [, 9], 7155: [, 9] },
+        7168: { 7223: [, 7], 7376: [, 230], 7377: [, 230], 7378: [, 230], 7380: [, 1], 7381: [, 220], 7382: [, 220], 7383: [, 220], 7384: [, 220], 7385: [, 220], 7386: [, 230], 7387: [, 230], 7388: [, 220], 7389: [, 220], 7390: [, 220], 7391: [, 220], 7392: [, 230], 7394: [, 1], 7395: [, 1], 7396: [, 1], 7397: [, 1], 7398: [, 1], 7399: [, 1], 7400: [, 1], 7405: [, 220], 7412: [, 230], 7416: [, 230], 7417: [, 230] },
+        7424: { 7468: [[65], 256], 7469: [[198], 256], 7470: [[66], 256], 7472: [[68], 256], 7473: [[69], 256], 7474: [[398], 256], 7475: [[71], 256], 7476: [[72], 256], 7477: [[73], 256], 7478: [[74], 256], 7479: [[75], 256], 7480: [[76], 256], 7481: [[77], 256], 7482: [[78], 256], 7484: [[79], 256], 7485: [[546], 256], 7486: [[80], 256], 7487: [[82], 256], 7488: [[84], 256], 7489: [[85], 256], 7490: [[87], 256], 7491: [[97], 256], 7492: [[592], 256], 7493: [[593], 256], 7494: [[7426], 256], 7495: [[98], 256], 7496: [[100], 256], 7497: [[101], 256], 7498: [[601], 256], 7499: [[603], 256], 7500: [[604], 256], 7501: [[103], 256], 7503: [[107], 256], 7504: [[109], 256], 7505: [[331], 256], 7506: [[111], 256], 7507: [[596], 256], 7508: [[7446], 256], 7509: [[7447], 256], 7510: [[112], 256], 7511: [[116], 256], 7512: [[117], 256], 7513: [[7453], 256], 7514: [[623], 256], 7515: [[118], 256], 7516: [[7461], 256], 7517: [[946], 256], 7518: [[947], 256], 7519: [[948], 256], 7520: [[966], 256], 7521: [[967], 256], 7522: [[105], 256], 7523: [[114], 256], 7524: [[117], 256], 7525: [[118], 256], 7526: [[946], 256], 7527: [[947], 256], 7528: [[961], 256], 7529: [[966], 256], 7530: [[967], 256], 7544: [[1085], 256], 7579: [[594], 256], 7580: [[99], 256], 7581: [[597], 256], 7582: [[240], 256], 7583: [[604], 256], 7584: [[102], 256], 7585: [[607], 256], 7586: [[609], 256], 7587: [[613], 256], 7588: [[616], 256], 7589: [[617], 256], 7590: [[618], 256], 7591: [[7547], 256], 7592: [[669], 256], 7593: [[621], 256], 7594: [[7557], 256], 7595: [[671], 256], 7596: [[625], 256], 7597: [[624], 256], 7598: [[626], 256], 7599: [[627], 256], 7600: [[628], 256], 7601: [[629], 256], 7602: [[632], 256], 7603: [[642], 256], 7604: [[643], 256], 7605: [[427], 256], 7606: [[649], 256], 7607: [[650], 256], 7608: [[7452], 256], 7609: [[651], 256], 7610: [[652], 256], 7611: [[122], 256], 7612: [[656], 256], 7613: [[657], 256], 7614: [[658], 256], 7615: [[952], 256], 7616: [, 230], 7617: [, 230], 7618: [, 220], 7619: [, 230], 7620: [, 230], 7621: [, 230], 7622: [, 230], 7623: [, 230], 7624: [, 230], 7625: [, 230], 7626: [, 220], 7627: [, 230], 7628: [, 230], 7629: [, 234], 7630: [, 214], 7631: [, 220], 7632: [, 202], 7633: [, 230], 7634: [, 230], 7635: [, 230], 7636: [, 230], 7637: [, 230], 7638: [, 230], 7639: [, 230], 7640: [, 230], 7641: [, 230], 7642: [, 230], 7643: [, 230], 7644: [, 230], 7645: [, 230], 7646: [, 230], 7647: [, 230], 7648: [, 230], 7649: [, 230], 7650: [, 230], 7651: [, 230], 7652: [, 230], 7653: [, 230], 7654: [, 230], 7655: [, 230], 7656: [, 230], 7657: [, 230], 7658: [, 230], 7659: [, 230], 7660: [, 230], 7661: [, 230], 7662: [, 230], 7663: [, 230], 7664: [, 230], 7665: [, 230], 7666: [, 230], 7667: [, 230], 7668: [, 230], 7669: [, 230], 7676: [, 233], 7677: [, 220], 7678: [, 230], 7679: [, 220] },
+        7680: { 7680: [[65, 805]], 7681: [[97, 805]], 7682: [[66, 775]], 7683: [[98, 775]], 7684: [[66, 803]], 7685: [[98, 803]], 7686: [[66, 817]], 7687: [[98, 817]], 7688: [[199, 769]], 7689: [[231, 769]], 7690: [[68, 775]], 7691: [[100, 775]], 7692: [[68, 803]], 7693: [[100, 803]], 7694: [[68, 817]], 7695: [[100, 817]], 7696: [[68, 807]], 7697: [[100, 807]], 7698: [[68, 813]], 7699: [[100, 813]], 7700: [[274, 768]], 7701: [[275, 768]], 7702: [[274, 769]], 7703: [[275, 769]], 7704: [[69, 813]], 7705: [[101, 813]], 7706: [[69, 816]], 7707: [[101, 816]], 7708: [[552, 774]], 7709: [[553, 774]], 7710: [[70, 775]], 7711: [[102, 775]], 7712: [[71, 772]], 7713: [[103, 772]], 7714: [[72, 775]], 7715: [[104, 775]], 7716: [[72, 803]], 7717: [[104, 803]], 7718: [[72, 776]], 7719: [[104, 776]], 7720: [[72, 807]], 7721: [[104, 807]], 7722: [[72, 814]], 7723: [[104, 814]], 7724: [[73, 816]], 7725: [[105, 816]], 7726: [[207, 769]], 7727: [[239, 769]], 7728: [[75, 769]], 7729: [[107, 769]], 7730: [[75, 803]], 7731: [[107, 803]], 7732: [[75, 817]], 7733: [[107, 817]], 7734: [[76, 803], , { 772: 7736 }], 7735: [[108, 803], , { 772: 7737 }], 7736: [[7734, 772]], 7737: [[7735, 772]], 7738: [[76, 817]], 7739: [[108, 817]], 7740: [[76, 813]], 7741: [[108, 813]], 7742: [[77, 769]], 7743: [[109, 769]], 7744: [[77, 775]], 7745: [[109, 775]], 7746: [[77, 803]], 7747: [[109, 803]], 7748: [[78, 775]], 7749: [[110, 775]], 7750: [[78, 803]], 7751: [[110, 803]], 7752: [[78, 817]], 7753: [[110, 817]], 7754: [[78, 813]], 7755: [[110, 813]], 7756: [[213, 769]], 7757: [[245, 769]], 7758: [[213, 776]], 7759: [[245, 776]], 7760: [[332, 768]], 7761: [[333, 768]], 7762: [[332, 769]], 7763: [[333, 769]], 7764: [[80, 769]], 7765: [[112, 769]], 7766: [[80, 775]], 7767: [[112, 775]], 7768: [[82, 775]], 7769: [[114, 775]], 7770: [[82, 803], , { 772: 7772 }], 7771: [[114, 803], , { 772: 7773 }], 7772: [[7770, 772]], 7773: [[7771, 772]], 7774: [[82, 817]], 7775: [[114, 817]], 7776: [[83, 775]], 7777: [[115, 775]], 7778: [[83, 803], , { 775: 7784 }], 7779: [[115, 803], , { 775: 7785 }], 7780: [[346, 775]], 7781: [[347, 775]], 7782: [[352, 775]], 7783: [[353, 775]], 7784: [[7778, 775]], 7785: [[7779, 775]], 7786: [[84, 775]], 7787: [[116, 775]], 7788: [[84, 803]], 7789: [[116, 803]], 7790: [[84, 817]], 7791: [[116, 817]], 7792: [[84, 813]], 7793: [[116, 813]], 7794: [[85, 804]], 7795: [[117, 804]], 7796: [[85, 816]], 7797: [[117, 816]], 7798: [[85, 813]], 7799: [[117, 813]], 7800: [[360, 769]], 7801: [[361, 769]], 7802: [[362, 776]], 7803: [[363, 776]], 7804: [[86, 771]], 7805: [[118, 771]], 7806: [[86, 803]], 7807: [[118, 803]], 7808: [[87, 768]], 7809: [[119, 768]], 7810: [[87, 769]], 7811: [[119, 769]], 7812: [[87, 776]], 7813: [[119, 776]], 7814: [[87, 775]], 7815: [[119, 775]], 7816: [[87, 803]], 7817: [[119, 803]], 7818: [[88, 775]], 7819: [[120, 775]], 7820: [[88, 776]], 7821: [[120, 776]], 7822: [[89, 775]], 7823: [[121, 775]], 7824: [[90, 770]], 7825: [[122, 770]], 7826: [[90, 803]], 7827: [[122, 803]], 7828: [[90, 817]], 7829: [[122, 817]], 7830: [[104, 817]], 7831: [[116, 776]], 7832: [[119, 778]], 7833: [[121, 778]], 7834: [[97, 702], 256], 7835: [[383, 775]], 7840: [[65, 803], , { 770: 7852, 774: 7862 }], 7841: [[97, 803], , { 770: 7853, 774: 7863 }], 7842: [[65, 777]], 7843: [[97, 777]], 7844: [[194, 769]], 7845: [[226, 769]], 7846: [[194, 768]], 7847: [[226, 768]], 7848: [[194, 777]], 7849: [[226, 777]], 7850: [[194, 771]], 7851: [[226, 771]], 7852: [[7840, 770]], 7853: [[7841, 770]], 7854: [[258, 769]], 7855: [[259, 769]], 7856: [[258, 768]], 7857: [[259, 768]], 7858: [[258, 777]], 7859: [[259, 777]], 7860: [[258, 771]], 7861: [[259, 771]], 7862: [[7840, 774]], 7863: [[7841, 774]], 7864: [[69, 803], , { 770: 7878 }], 7865: [[101, 803], , { 770: 7879 }], 7866: [[69, 777]], 7867: [[101, 777]], 7868: [[69, 771]], 7869: [[101, 771]], 7870: [[202, 769]], 7871: [[234, 769]], 7872: [[202, 768]], 7873: [[234, 768]], 7874: [[202, 777]], 7875: [[234, 777]], 7876: [[202, 771]], 7877: [[234, 771]], 7878: [[7864, 770]], 7879: [[7865, 770]], 7880: [[73, 777]], 7881: [[105, 777]], 7882: [[73, 803]], 7883: [[105, 803]], 7884: [[79, 803], , { 770: 7896 }], 7885: [[111, 803], , { 770: 7897 }], 7886: [[79, 777]], 7887: [[111, 777]], 7888: [[212, 769]], 7889: [[244, 769]], 7890: [[212, 768]], 7891: [[244, 768]], 7892: [[212, 777]], 7893: [[244, 777]], 7894: [[212, 771]], 7895: [[244, 771]], 7896: [[7884, 770]], 7897: [[7885, 770]], 7898: [[416, 769]], 7899: [[417, 769]], 7900: [[416, 768]], 7901: [[417, 768]], 7902: [[416, 777]], 7903: [[417, 777]], 7904: [[416, 771]], 7905: [[417, 771]], 7906: [[416, 803]], 7907: [[417, 803]], 7908: [[85, 803]], 7909: [[117, 803]], 7910: [[85, 777]], 7911: [[117, 777]], 7912: [[431, 769]], 7913: [[432, 769]], 7914: [[431, 768]], 7915: [[432, 768]], 7916: [[431, 777]], 7917: [[432, 777]], 7918: [[431, 771]], 7919: [[432, 771]], 7920: [[431, 803]], 7921: [[432, 803]], 7922: [[89, 768]], 7923: [[121, 768]], 7924: [[89, 803]], 7925: [[121, 803]], 7926: [[89, 777]], 7927: [[121, 777]], 7928: [[89, 771]], 7929: [[121, 771]] },
+        7936: { 7936: [[945, 787], , { 768: 7938, 769: 7940, 834: 7942, 837: 8064 }], 7937: [[945, 788], , { 768: 7939, 769: 7941, 834: 7943, 837: 8065 }], 7938: [[7936, 768], , { 837: 8066 }], 7939: [[7937, 768], , { 837: 8067 }], 7940: [[7936, 769], , { 837: 8068 }], 7941: [[7937, 769], , { 837: 8069 }], 7942: [[7936, 834], , { 837: 8070 }], 7943: [[7937, 834], , { 837: 8071 }], 7944: [[913, 787], , { 768: 7946, 769: 7948, 834: 7950, 837: 8072 }], 7945: [[913, 788], , { 768: 7947, 769: 7949, 834: 7951, 837: 8073 }], 7946: [[7944, 768], , { 837: 8074 }], 7947: [[7945, 768], , { 837: 8075 }], 7948: [[7944, 769], , { 837: 8076 }], 7949: [[7945, 769], , { 837: 8077 }], 7950: [[7944, 834], , { 837: 8078 }], 7951: [[7945, 834], , { 837: 8079 }], 7952: [[949, 787], , { 768: 7954, 769: 7956 }], 7953: [[949, 788], , { 768: 7955, 769: 7957 }], 7954: [[7952, 768]], 7955: [[7953, 768]], 7956: [[7952, 769]], 7957: [[7953, 769]], 7960: [[917, 787], , { 768: 7962, 769: 7964 }], 7961: [[917, 788], , { 768: 7963, 769: 7965 }], 7962: [[7960, 768]], 7963: [[7961, 768]], 7964: [[7960, 769]], 7965: [[7961, 769]], 7968: [[951, 787], , { 768: 7970, 769: 7972, 834: 7974, 837: 8080 }], 7969: [[951, 788], , { 768: 7971, 769: 7973, 834: 7975, 837: 8081 }], 7970: [[7968, 768], , { 837: 8082 }], 7971: [[7969, 768], , { 837: 8083 }], 7972: [[7968, 769], , { 837: 8084 }], 7973: [[7969, 769], , { 837: 8085 }], 7974: [[7968, 834], , { 837: 8086 }], 7975: [[7969, 834], , { 837: 8087 }], 7976: [[919, 787], , { 768: 7978, 769: 7980, 834: 7982, 837: 8088 }], 7977: [[919, 788], , { 768: 7979, 769: 7981, 834: 7983, 837: 8089 }], 7978: [[7976, 768], , { 837: 8090 }], 7979: [[7977, 768], , { 837: 8091 }], 7980: [[7976, 769], , { 837: 8092 }], 7981: [[7977, 769], , { 837: 8093 }], 7982: [[7976, 834], , { 837: 8094 }], 7983: [[7977, 834], , { 837: 8095 }], 7984: [[953, 787], , { 768: 7986, 769: 7988, 834: 7990 }], 7985: [[953, 788], , { 768: 7987, 769: 7989, 834: 7991 }], 7986: [[7984, 768]], 7987: [[7985, 768]], 7988: [[7984, 769]], 7989: [[7985, 769]], 7990: [[7984, 834]], 7991: [[7985, 834]], 7992: [[921, 787], , { 768: 7994, 769: 7996, 834: 7998 }], 7993: [[921, 788], , { 768: 7995, 769: 7997, 834: 7999 }], 7994: [[7992, 768]], 7995: [[7993, 768]], 7996: [[7992, 769]], 7997: [[7993, 769]], 7998: [[7992, 834]], 7999: [[7993, 834]], 8e3: [[959, 787], , { 768: 8002, 769: 8004 }], 8001: [[959, 788], , { 768: 8003, 769: 8005 }], 8002: [[8e3, 768]], 8003: [[8001, 768]], 8004: [[8e3, 769]], 8005: [[8001, 769]], 8008: [[927, 787], , { 768: 8010, 769: 8012 }], 8009: [[927, 788], , { 768: 8011, 769: 8013 }], 8010: [[8008, 768]], 8011: [[8009, 768]], 8012: [[8008, 769]], 8013: [[8009, 769]], 8016: [[965, 787], , { 768: 8018, 769: 8020, 834: 8022 }], 8017: [[965, 788], , { 768: 8019, 769: 8021, 834: 8023 }], 8018: [[8016, 768]], 8019: [[8017, 768]], 8020: [[8016, 769]], 8021: [[8017, 769]], 8022: [[8016, 834]], 8023: [[8017, 834]], 8025: [[933, 788], , { 768: 8027, 769: 8029, 834: 8031 }], 8027: [[8025, 768]], 8029: [[8025, 769]], 8031: [[8025, 834]], 8032: [[969, 787], , { 768: 8034, 769: 8036, 834: 8038, 837: 8096 }], 8033: [[969, 788], , { 768: 8035, 769: 8037, 834: 8039, 837: 8097 }], 8034: [[8032, 768], , { 837: 8098 }], 8035: [[8033, 768], , { 837: 8099 }], 8036: [[8032, 769], , { 837: 8100 }], 8037: [[8033, 769], , { 837: 8101 }], 8038: [[8032, 834], , { 837: 8102 }], 8039: [[8033, 834], , { 837: 8103 }], 8040: [[937, 787], , { 768: 8042, 769: 8044, 834: 8046, 837: 8104 }], 8041: [[937, 788], , { 768: 8043, 769: 8045, 834: 8047, 837: 8105 }], 8042: [[8040, 768], , { 837: 8106 }], 8043: [[8041, 768], , { 837: 8107 }], 8044: [[8040, 769], , { 837: 8108 }], 8045: [[8041, 769], , { 837: 8109 }], 8046: [[8040, 834], , { 837: 8110 }], 8047: [[8041, 834], , { 837: 8111 }], 8048: [[945, 768], , { 837: 8114 }], 8049: [[940]], 8050: [[949, 768]], 8051: [[941]], 8052: [[951, 768], , { 837: 8130 }], 8053: [[942]], 8054: [[953, 768]], 8055: [[943]], 8056: [[959, 768]], 8057: [[972]], 8058: [[965, 768]], 8059: [[973]], 8060: [[969, 768], , { 837: 8178 }], 8061: [[974]], 8064: [[7936, 837]], 8065: [[7937, 837]], 8066: [[7938, 837]], 8067: [[7939, 837]], 8068: [[7940, 837]], 8069: [[7941, 837]], 8070: [[7942, 837]], 8071: [[7943, 837]], 8072: [[7944, 837]], 8073: [[7945, 837]], 8074: [[7946, 837]], 8075: [[7947, 837]], 8076: [[7948, 837]], 8077: [[7949, 837]], 8078: [[7950, 837]], 8079: [[7951, 837]], 8080: [[7968, 837]], 8081: [[7969, 837]], 8082: [[7970, 837]], 8083: [[7971, 837]], 8084: [[7972, 837]], 8085: [[7973, 837]], 8086: [[7974, 837]], 8087: [[7975, 837]], 8088: [[7976, 837]], 8089: [[7977, 837]], 8090: [[7978, 837]], 8091: [[7979, 837]], 8092: [[7980, 837]], 8093: [[7981, 837]], 8094: [[7982, 837]], 8095: [[7983, 837]], 8096: [[8032, 837]], 8097: [[8033, 837]], 8098: [[8034, 837]], 8099: [[8035, 837]], 8100: [[8036, 837]], 8101: [[8037, 837]], 8102: [[8038, 837]], 8103: [[8039, 837]], 8104: [[8040, 837]], 8105: [[8041, 837]], 8106: [[8042, 837]], 8107: [[8043, 837]], 8108: [[8044, 837]], 8109: [[8045, 837]], 8110: [[8046, 837]], 8111: [[8047, 837]], 8112: [[945, 774]], 8113: [[945, 772]], 8114: [[8048, 837]], 8115: [[945, 837]], 8116: [[940, 837]], 8118: [[945, 834], , { 837: 8119 }], 8119: [[8118, 837]], 8120: [[913, 774]], 8121: [[913, 772]], 8122: [[913, 768]], 8123: [[902]], 8124: [[913, 837]], 8125: [[32, 787], 256], 8126: [[953]], 8127: [[32, 787], 256, { 768: 8141, 769: 8142, 834: 8143 }], 8128: [[32, 834], 256], 8129: [[168, 834]], 8130: [[8052, 837]], 8131: [[951, 837]], 8132: [[942, 837]], 8134: [[951, 834], , { 837: 8135 }], 8135: [[8134, 837]], 8136: [[917, 768]], 8137: [[904]], 8138: [[919, 768]], 8139: [[905]], 8140: [[919, 837]], 8141: [[8127, 768]], 8142: [[8127, 769]], 8143: [[8127, 834]], 8144: [[953, 774]], 8145: [[953, 772]], 8146: [[970, 768]], 8147: [[912]], 8150: [[953, 834]], 8151: [[970, 834]], 8152: [[921, 774]], 8153: [[921, 772]], 8154: [[921, 768]], 8155: [[906]], 8157: [[8190, 768]], 8158: [[8190, 769]], 8159: [[8190, 834]], 8160: [[965, 774]], 8161: [[965, 772]], 8162: [[971, 768]], 8163: [[944]], 8164: [[961, 787]], 8165: [[961, 788]], 8166: [[965, 834]], 8167: [[971, 834]], 8168: [[933, 774]], 8169: [[933, 772]], 8170: [[933, 768]], 8171: [[910]], 8172: [[929, 788]], 8173: [[168, 768]], 8174: [[901]], 8175: [[96]], 8178: [[8060, 837]], 8179: [[969, 837]], 8180: [[974, 837]], 8182: [[969, 834], , { 837: 8183 }], 8183: [[8182, 837]], 8184: [[927, 768]], 8185: [[908]], 8186: [[937, 768]], 8187: [[911]], 8188: [[937, 837]], 8189: [[180]], 8190: [[32, 788], 256, { 768: 8157, 769: 8158, 834: 8159 }] },
+        8192: { 8192: [[8194]], 8193: [[8195]], 8194: [[32], 256], 8195: [[32], 256], 8196: [[32], 256], 8197: [[32], 256], 8198: [[32], 256], 8199: [[32], 256], 8200: [[32], 256], 8201: [[32], 256], 8202: [[32], 256], 8209: [[8208], 256], 8215: [[32, 819], 256], 8228: [[46], 256], 8229: [[46, 46], 256], 8230: [[46, 46, 46], 256], 8239: [[32], 256], 8243: [[8242, 8242], 256], 8244: [[8242, 8242, 8242], 256], 8246: [[8245, 8245], 256], 8247: [[8245, 8245, 8245], 256], 8252: [[33, 33], 256], 8254: [[32, 773], 256], 8263: [[63, 63], 256], 8264: [[63, 33], 256], 8265: [[33, 63], 256], 8279: [[8242, 8242, 8242, 8242], 256], 8287: [[32], 256], 8304: [[48], 256], 8305: [[105], 256], 8308: [[52], 256], 8309: [[53], 256], 8310: [[54], 256], 8311: [[55], 256], 8312: [[56], 256], 8313: [[57], 256], 8314: [[43], 256], 8315: [[8722], 256], 8316: [[61], 256], 8317: [[40], 256], 8318: [[41], 256], 8319: [[110], 256], 8320: [[48], 256], 8321: [[49], 256], 8322: [[50], 256], 8323: [[51], 256], 8324: [[52], 256], 8325: [[53], 256], 8326: [[54], 256], 8327: [[55], 256], 8328: [[56], 256], 8329: [[57], 256], 8330: [[43], 256], 8331: [[8722], 256], 8332: [[61], 256], 8333: [[40], 256], 8334: [[41], 256], 8336: [[97], 256], 8337: [[101], 256], 8338: [[111], 256], 8339: [[120], 256], 8340: [[601], 256], 8341: [[104], 256], 8342: [[107], 256], 8343: [[108], 256], 8344: [[109], 256], 8345: [[110], 256], 8346: [[112], 256], 8347: [[115], 256], 8348: [[116], 256], 8360: [[82, 115], 256], 8400: [, 230], 8401: [, 230], 8402: [, 1], 8403: [, 1], 8404: [, 230], 8405: [, 230], 8406: [, 230], 8407: [, 230], 8408: [, 1], 8409: [, 1], 8410: [, 1], 8411: [, 230], 8412: [, 230], 8417: [, 230], 8421: [, 1], 8422: [, 1], 8423: [, 230], 8424: [, 220], 8425: [, 230], 8426: [, 1], 8427: [, 1], 8428: [, 220], 8429: [, 220], 8430: [, 220], 8431: [, 220], 8432: [, 230] },
+        8448: { 8448: [[97, 47, 99], 256], 8449: [[97, 47, 115], 256], 8450: [[67], 256], 8451: [[176, 67], 256], 8453: [[99, 47, 111], 256], 8454: [[99, 47, 117], 256], 8455: [[400], 256], 8457: [[176, 70], 256], 8458: [[103], 256], 8459: [[72], 256], 8460: [[72], 256], 8461: [[72], 256], 8462: [[104], 256], 8463: [[295], 256], 8464: [[73], 256], 8465: [[73], 256], 8466: [[76], 256], 8467: [[108], 256], 8469: [[78], 256], 8470: [[78, 111], 256], 8473: [[80], 256], 8474: [[81], 256], 8475: [[82], 256], 8476: [[82], 256], 8477: [[82], 256], 8480: [[83, 77], 256], 8481: [[84, 69, 76], 256], 8482: [[84, 77], 256], 8484: [[90], 256], 8486: [[937]], 8488: [[90], 256], 8490: [[75]], 8491: [[197]], 8492: [[66], 256], 8493: [[67], 256], 8495: [[101], 256], 8496: [[69], 256], 8497: [[70], 256], 8499: [[77], 256], 8500: [[111], 256], 8501: [[1488], 256], 8502: [[1489], 256], 8503: [[1490], 256], 8504: [[1491], 256], 8505: [[105], 256], 8507: [[70, 65, 88], 256], 8508: [[960], 256], 8509: [[947], 256], 8510: [[915], 256], 8511: [[928], 256], 8512: [[8721], 256], 8517: [[68], 256], 8518: [[100], 256], 8519: [[101], 256], 8520: [[105], 256], 8521: [[106], 256], 8528: [[49, 8260, 55], 256], 8529: [[49, 8260, 57], 256], 8530: [[49, 8260, 49, 48], 256], 8531: [[49, 8260, 51], 256], 8532: [[50, 8260, 51], 256], 8533: [[49, 8260, 53], 256], 8534: [[50, 8260, 53], 256], 8535: [[51, 8260, 53], 256], 8536: [[52, 8260, 53], 256], 8537: [[49, 8260, 54], 256], 8538: [[53, 8260, 54], 256], 8539: [[49, 8260, 56], 256], 8540: [[51, 8260, 56], 256], 8541: [[53, 8260, 56], 256], 8542: [[55, 8260, 56], 256], 8543: [[49, 8260], 256], 8544: [[73], 256], 8545: [[73, 73], 256], 8546: [[73, 73, 73], 256], 8547: [[73, 86], 256], 8548: [[86], 256], 8549: [[86, 73], 256], 8550: [[86, 73, 73], 256], 8551: [[86, 73, 73, 73], 256], 8552: [[73, 88], 256], 8553: [[88], 256], 8554: [[88, 73], 256], 8555: [[88, 73, 73], 256], 8556: [[76], 256], 8557: [[67], 256], 8558: [[68], 256], 8559: [[77], 256], 8560: [[105], 256], 8561: [[105, 105], 256], 8562: [[105, 105, 105], 256], 8563: [[105, 118], 256], 8564: [[118], 256], 8565: [[118, 105], 256], 8566: [[118, 105, 105], 256], 8567: [[118, 105, 105, 105], 256], 8568: [[105, 120], 256], 8569: [[120], 256], 8570: [[120, 105], 256], 8571: [[120, 105, 105], 256], 8572: [[108], 256], 8573: [[99], 256], 8574: [[100], 256], 8575: [[109], 256], 8585: [[48, 8260, 51], 256], 8592: [, , { 824: 8602 }], 8594: [, , { 824: 8603 }], 8596: [, , { 824: 8622 }], 8602: [[8592, 824]], 8603: [[8594, 824]], 8622: [[8596, 824]], 8653: [[8656, 824]], 8654: [[8660, 824]], 8655: [[8658, 824]], 8656: [, , { 824: 8653 }], 8658: [, , { 824: 8655 }], 8660: [, , { 824: 8654 }] },
+        8704: { 8707: [, , { 824: 8708 }], 8708: [[8707, 824]], 8712: [, , { 824: 8713 }], 8713: [[8712, 824]], 8715: [, , { 824: 8716 }], 8716: [[8715, 824]], 8739: [, , { 824: 8740 }], 8740: [[8739, 824]], 8741: [, , { 824: 8742 }], 8742: [[8741, 824]], 8748: [[8747, 8747], 256], 8749: [[8747, 8747, 8747], 256], 8751: [[8750, 8750], 256], 8752: [[8750, 8750, 8750], 256], 8764: [, , { 824: 8769 }], 8769: [[8764, 824]], 8771: [, , { 824: 8772 }], 8772: [[8771, 824]], 8773: [, , { 824: 8775 }], 8775: [[8773, 824]], 8776: [, , { 824: 8777 }], 8777: [[8776, 824]], 8781: [, , { 824: 8813 }], 8800: [[61, 824]], 8801: [, , { 824: 8802 }], 8802: [[8801, 824]], 8804: [, , { 824: 8816 }], 8805: [, , { 824: 8817 }], 8813: [[8781, 824]], 8814: [[60, 824]], 8815: [[62, 824]], 8816: [[8804, 824]], 8817: [[8805, 824]], 8818: [, , { 824: 8820 }], 8819: [, , { 824: 8821 }], 8820: [[8818, 824]], 8821: [[8819, 824]], 8822: [, , { 824: 8824 }], 8823: [, , { 824: 8825 }], 8824: [[8822, 824]], 8825: [[8823, 824]], 8826: [, , { 824: 8832 }], 8827: [, , { 824: 8833 }], 8828: [, , { 824: 8928 }], 8829: [, , { 824: 8929 }], 8832: [[8826, 824]], 8833: [[8827, 824]], 8834: [, , { 824: 8836 }], 8835: [, , { 824: 8837 }], 8836: [[8834, 824]], 8837: [[8835, 824]], 8838: [, , { 824: 8840 }], 8839: [, , { 824: 8841 }], 8840: [[8838, 824]], 8841: [[8839, 824]], 8849: [, , { 824: 8930 }], 8850: [, , { 824: 8931 }], 8866: [, , { 824: 8876 }], 8872: [, , { 824: 8877 }], 8873: [, , { 824: 8878 }], 8875: [, , { 824: 8879 }], 8876: [[8866, 824]], 8877: [[8872, 824]], 8878: [[8873, 824]], 8879: [[8875, 824]], 8882: [, , { 824: 8938 }], 8883: [, , { 824: 8939 }], 8884: [, , { 824: 8940 }], 8885: [, , { 824: 8941 }], 8928: [[8828, 824]], 8929: [[8829, 824]], 8930: [[8849, 824]], 8931: [[8850, 824]], 8938: [[8882, 824]], 8939: [[8883, 824]], 8940: [[8884, 824]], 8941: [[8885, 824]] },
+        8960: { 9001: [[12296]], 9002: [[12297]] },
+        9216: { 9312: [[49], 256], 9313: [[50], 256], 9314: [[51], 256], 9315: [[52], 256], 9316: [[53], 256], 9317: [[54], 256], 9318: [[55], 256], 9319: [[56], 256], 9320: [[57], 256], 9321: [[49, 48], 256], 9322: [[49, 49], 256], 9323: [[49, 50], 256], 9324: [[49, 51], 256], 9325: [[49, 52], 256], 9326: [[49, 53], 256], 9327: [[49, 54], 256], 9328: [[49, 55], 256], 9329: [[49, 56], 256], 9330: [[49, 57], 256], 9331: [[50, 48], 256], 9332: [[40, 49, 41], 256], 9333: [[40, 50, 41], 256], 9334: [[40, 51, 41], 256], 9335: [[40, 52, 41], 256], 9336: [[40, 53, 41], 256], 9337: [[40, 54, 41], 256], 9338: [[40, 55, 41], 256], 9339: [[40, 56, 41], 256], 9340: [[40, 57, 41], 256], 9341: [[40, 49, 48, 41], 256], 9342: [[40, 49, 49, 41], 256], 9343: [[40, 49, 50, 41], 256], 9344: [[40, 49, 51, 41], 256], 9345: [[40, 49, 52, 41], 256], 9346: [[40, 49, 53, 41], 256], 9347: [[40, 49, 54, 41], 256], 9348: [[40, 49, 55, 41], 256], 9349: [[40, 49, 56, 41], 256], 9350: [[40, 49, 57, 41], 256], 9351: [[40, 50, 48, 41], 256], 9352: [[49, 46], 256], 9353: [[50, 46], 256], 9354: [[51, 46], 256], 9355: [[52, 46], 256], 9356: [[53, 46], 256], 9357: [[54, 46], 256], 9358: [[55, 46], 256], 9359: [[56, 46], 256], 9360: [[57, 46], 256], 9361: [[49, 48, 46], 256], 9362: [[49, 49, 46], 256], 9363: [[49, 50, 46], 256], 9364: [[49, 51, 46], 256], 9365: [[49, 52, 46], 256], 9366: [[49, 53, 46], 256], 9367: [[49, 54, 46], 256], 9368: [[49, 55, 46], 256], 9369: [[49, 56, 46], 256], 9370: [[49, 57, 46], 256], 9371: [[50, 48, 46], 256], 9372: [[40, 97, 41], 256], 9373: [[40, 98, 41], 256], 9374: [[40, 99, 41], 256], 9375: [[40, 100, 41], 256], 9376: [[40, 101, 41], 256], 9377: [[40, 102, 41], 256], 9378: [[40, 103, 41], 256], 9379: [[40, 104, 41], 256], 9380: [[40, 105, 41], 256], 9381: [[40, 106, 41], 256], 9382: [[40, 107, 41], 256], 9383: [[40, 108, 41], 256], 9384: [[40, 109, 41], 256], 9385: [[40, 110, 41], 256], 9386: [[40, 111, 41], 256], 9387: [[40, 112, 41], 256], 9388: [[40, 113, 41], 256], 9389: [[40, 114, 41], 256], 9390: [[40, 115, 41], 256], 9391: [[40, 116, 41], 256], 9392: [[40, 117, 41], 256], 9393: [[40, 118, 41], 256], 9394: [[40, 119, 41], 256], 9395: [[40, 120, 41], 256], 9396: [[40, 121, 41], 256], 9397: [[40, 122, 41], 256], 9398: [[65], 256], 9399: [[66], 256], 9400: [[67], 256], 9401: [[68], 256], 9402: [[69], 256], 9403: [[70], 256], 9404: [[71], 256], 9405: [[72], 256], 9406: [[73], 256], 9407: [[74], 256], 9408: [[75], 256], 9409: [[76], 256], 9410: [[77], 256], 9411: [[78], 256], 9412: [[79], 256], 9413: [[80], 256], 9414: [[81], 256], 9415: [[82], 256], 9416: [[83], 256], 9417: [[84], 256], 9418: [[85], 256], 9419: [[86], 256], 9420: [[87], 256], 9421: [[88], 256], 9422: [[89], 256], 9423: [[90], 256], 9424: [[97], 256], 9425: [[98], 256], 9426: [[99], 256], 9427: [[100], 256], 9428: [[101], 256], 9429: [[102], 256], 9430: [[103], 256], 9431: [[104], 256], 9432: [[105], 256], 9433: [[106], 256], 9434: [[107], 256], 9435: [[108], 256], 9436: [[109], 256], 9437: [[110], 256], 9438: [[111], 256], 9439: [[112], 256], 9440: [[113], 256], 9441: [[114], 256], 9442: [[115], 256], 9443: [[116], 256], 9444: [[117], 256], 9445: [[118], 256], 9446: [[119], 256], 9447: [[120], 256], 9448: [[121], 256], 9449: [[122], 256], 9450: [[48], 256] },
+        10752: { 10764: [[8747, 8747, 8747, 8747], 256], 10868: [[58, 58, 61], 256], 10869: [[61, 61], 256], 10870: [[61, 61, 61], 256], 10972: [[10973, 824], 512] },
+        11264: { 11388: [[106], 256], 11389: [[86], 256], 11503: [, 230], 11504: [, 230], 11505: [, 230] },
+        11520: { 11631: [[11617], 256], 11647: [, 9], 11744: [, 230], 11745: [, 230], 11746: [, 230], 11747: [, 230], 11748: [, 230], 11749: [, 230], 11750: [, 230], 11751: [, 230], 11752: [, 230], 11753: [, 230], 11754: [, 230], 11755: [, 230], 11756: [, 230], 11757: [, 230], 11758: [, 230], 11759: [, 230], 11760: [, 230], 11761: [, 230], 11762: [, 230], 11763: [, 230], 11764: [, 230], 11765: [, 230], 11766: [, 230], 11767: [, 230], 11768: [, 230], 11769: [, 230], 11770: [, 230], 11771: [, 230], 11772: [, 230], 11773: [, 230], 11774: [, 230], 11775: [, 230] },
+        11776: { 11935: [[27597], 256], 12019: [[40863], 256] },
+        12032: { 12032: [[19968], 256], 12033: [[20008], 256], 12034: [[20022], 256], 12035: [[20031], 256], 12036: [[20057], 256], 12037: [[20101], 256], 12038: [[20108], 256], 12039: [[20128], 256], 12040: [[20154], 256], 12041: [[20799], 256], 12042: [[20837], 256], 12043: [[20843], 256], 12044: [[20866], 256], 12045: [[20886], 256], 12046: [[20907], 256], 12047: [[20960], 256], 12048: [[20981], 256], 12049: [[20992], 256], 12050: [[21147], 256], 12051: [[21241], 256], 12052: [[21269], 256], 12053: [[21274], 256], 12054: [[21304], 256], 12055: [[21313], 256], 12056: [[21340], 256], 12057: [[21353], 256], 12058: [[21378], 256], 12059: [[21430], 256], 12060: [[21448], 256], 12061: [[21475], 256], 12062: [[22231], 256], 12063: [[22303], 256], 12064: [[22763], 256], 12065: [[22786], 256], 12066: [[22794], 256], 12067: [[22805], 256], 12068: [[22823], 256], 12069: [[22899], 256], 12070: [[23376], 256], 12071: [[23424], 256], 12072: [[23544], 256], 12073: [[23567], 256], 12074: [[23586], 256], 12075: [[23608], 256], 12076: [[23662], 256], 12077: [[23665], 256], 12078: [[24027], 256], 12079: [[24037], 256], 12080: [[24049], 256], 12081: [[24062], 256], 12082: [[24178], 256], 12083: [[24186], 256], 12084: [[24191], 256], 12085: [[24308], 256], 12086: [[24318], 256], 12087: [[24331], 256], 12088: [[24339], 256], 12089: [[24400], 256], 12090: [[24417], 256], 12091: [[24435], 256], 12092: [[24515], 256], 12093: [[25096], 256], 12094: [[25142], 256], 12095: [[25163], 256], 12096: [[25903], 256], 12097: [[25908], 256], 12098: [[25991], 256], 12099: [[26007], 256], 12100: [[26020], 256], 12101: [[26041], 256], 12102: [[26080], 256], 12103: [[26085], 256], 12104: [[26352], 256], 12105: [[26376], 256], 12106: [[26408], 256], 12107: [[27424], 256], 12108: [[27490], 256], 12109: [[27513], 256], 12110: [[27571], 256], 12111: [[27595], 256], 12112: [[27604], 256], 12113: [[27611], 256], 12114: [[27663], 256], 12115: [[27668], 256], 12116: [[27700], 256], 12117: [[28779], 256], 12118: [[29226], 256], 12119: [[29238], 256], 12120: [[29243], 256], 12121: [[29247], 256], 12122: [[29255], 256], 12123: [[29273], 256], 12124: [[29275], 256], 12125: [[29356], 256], 12126: [[29572], 256], 12127: [[29577], 256], 12128: [[29916], 256], 12129: [[29926], 256], 12130: [[29976], 256], 12131: [[29983], 256], 12132: [[29992], 256], 12133: [[3e4], 256], 12134: [[30091], 256], 12135: [[30098], 256], 12136: [[30326], 256], 12137: [[30333], 256], 12138: [[30382], 256], 12139: [[30399], 256], 12140: [[30446], 256], 12141: [[30683], 256], 12142: [[30690], 256], 12143: [[30707], 256], 12144: [[31034], 256], 12145: [[31160], 256], 12146: [[31166], 256], 12147: [[31348], 256], 12148: [[31435], 256], 12149: [[31481], 256], 12150: [[31859], 256], 12151: [[31992], 256], 12152: [[32566], 256], 12153: [[32593], 256], 12154: [[32650], 256], 12155: [[32701], 256], 12156: [[32769], 256], 12157: [[32780], 256], 12158: [[32786], 256], 12159: [[32819], 256], 12160: [[32895], 256], 12161: [[32905], 256], 12162: [[33251], 256], 12163: [[33258], 256], 12164: [[33267], 256], 12165: [[33276], 256], 12166: [[33292], 256], 12167: [[33307], 256], 12168: [[33311], 256], 12169: [[33390], 256], 12170: [[33394], 256], 12171: [[33400], 256], 12172: [[34381], 256], 12173: [[34411], 256], 12174: [[34880], 256], 12175: [[34892], 256], 12176: [[34915], 256], 12177: [[35198], 256], 12178: [[35211], 256], 12179: [[35282], 256], 12180: [[35328], 256], 12181: [[35895], 256], 12182: [[35910], 256], 12183: [[35925], 256], 12184: [[35960], 256], 12185: [[35997], 256], 12186: [[36196], 256], 12187: [[36208], 256], 12188: [[36275], 256], 12189: [[36523], 256], 12190: [[36554], 256], 12191: [[36763], 256], 12192: [[36784], 256], 12193: [[36789], 256], 12194: [[37009], 256], 12195: [[37193], 256], 12196: [[37318], 256], 12197: [[37324], 256], 12198: [[37329], 256], 12199: [[38263], 256], 12200: [[38272], 256], 12201: [[38428], 256], 12202: [[38582], 256], 12203: [[38585], 256], 12204: [[38632], 256], 12205: [[38737], 256], 12206: [[38750], 256], 12207: [[38754], 256], 12208: [[38761], 256], 12209: [[38859], 256], 12210: [[38893], 256], 12211: [[38899], 256], 12212: [[38913], 256], 12213: [[39080], 256], 12214: [[39131], 256], 12215: [[39135], 256], 12216: [[39318], 256], 12217: [[39321], 256], 12218: [[39340], 256], 12219: [[39592], 256], 12220: [[39640], 256], 12221: [[39647], 256], 12222: [[39717], 256], 12223: [[39727], 256], 12224: [[39730], 256], 12225: [[39740], 256], 12226: [[39770], 256], 12227: [[40165], 256], 12228: [[40565], 256], 12229: [[40575], 256], 12230: [[40613], 256], 12231: [[40635], 256], 12232: [[40643], 256], 12233: [[40653], 256], 12234: [[40657], 256], 12235: [[40697], 256], 12236: [[40701], 256], 12237: [[40718], 256], 12238: [[40723], 256], 12239: [[40736], 256], 12240: [[40763], 256], 12241: [[40778], 256], 12242: [[40786], 256], 12243: [[40845], 256], 12244: [[40860], 256], 12245: [[40864], 256] },
+        12288: { 12288: [[32], 256], 12330: [, 218], 12331: [, 228], 12332: [, 232], 12333: [, 222], 12334: [, 224], 12335: [, 224], 12342: [[12306], 256], 12344: [[21313], 256], 12345: [[21316], 256], 12346: [[21317], 256], 12358: [, , { 12441: 12436 }], 12363: [, , { 12441: 12364 }], 12364: [[12363, 12441]], 12365: [, , { 12441: 12366 }], 12366: [[12365, 12441]], 12367: [, , { 12441: 12368 }], 12368: [[12367, 12441]], 12369: [, , { 12441: 12370 }], 12370: [[12369, 12441]], 12371: [, , { 12441: 12372 }], 12372: [[12371, 12441]], 12373: [, , { 12441: 12374 }], 12374: [[12373, 12441]], 12375: [, , { 12441: 12376 }], 12376: [[12375, 12441]], 12377: [, , { 12441: 12378 }], 12378: [[12377, 12441]], 12379: [, , { 12441: 12380 }], 12380: [[12379, 12441]], 12381: [, , { 12441: 12382 }], 12382: [[12381, 12441]], 12383: [, , { 12441: 12384 }], 12384: [[12383, 12441]], 12385: [, , { 12441: 12386 }], 12386: [[12385, 12441]], 12388: [, , { 12441: 12389 }], 12389: [[12388, 12441]], 12390: [, , { 12441: 12391 }], 12391: [[12390, 12441]], 12392: [, , { 12441: 12393 }], 12393: [[12392, 12441]], 12399: [, , { 12441: 12400, 12442: 12401 }], 12400: [[12399, 12441]], 12401: [[12399, 12442]], 12402: [, , { 12441: 12403, 12442: 12404 }], 12403: [[12402, 12441]], 12404: [[12402, 12442]], 12405: [, , { 12441: 12406, 12442: 12407 }], 12406: [[12405, 12441]], 12407: [[12405, 12442]], 12408: [, , { 12441: 12409, 12442: 12410 }], 12409: [[12408, 12441]], 12410: [[12408, 12442]], 12411: [, , { 12441: 12412, 12442: 12413 }], 12412: [[12411, 12441]], 12413: [[12411, 12442]], 12436: [[12358, 12441]], 12441: [, 8], 12442: [, 8], 12443: [[32, 12441], 256], 12444: [[32, 12442], 256], 12445: [, , { 12441: 12446 }], 12446: [[12445, 12441]], 12447: [[12424, 12426], 256], 12454: [, , { 12441: 12532 }], 12459: [, , { 12441: 12460 }], 12460: [[12459, 12441]], 12461: [, , { 12441: 12462 }], 12462: [[12461, 12441]], 12463: [, , { 12441: 12464 }], 12464: [[12463, 12441]], 12465: [, , { 12441: 12466 }], 12466: [[12465, 12441]], 12467: [, , { 12441: 12468 }], 12468: [[12467, 12441]], 12469: [, , { 12441: 12470 }], 12470: [[12469, 12441]], 12471: [, , { 12441: 12472 }], 12472: [[12471, 12441]], 12473: [, , { 12441: 12474 }], 12474: [[12473, 12441]], 12475: [, , { 12441: 12476 }], 12476: [[12475, 12441]], 12477: [, , { 12441: 12478 }], 12478: [[12477, 12441]], 12479: [, , { 12441: 12480 }], 12480: [[12479, 12441]], 12481: [, , { 12441: 12482 }], 12482: [[12481, 12441]], 12484: [, , { 12441: 12485 }], 12485: [[12484, 12441]], 12486: [, , { 12441: 12487 }], 12487: [[12486, 12441]], 12488: [, , { 12441: 12489 }], 12489: [[12488, 12441]], 12495: [, , { 12441: 12496, 12442: 12497 }], 12496: [[12495, 12441]], 12497: [[12495, 12442]], 12498: [, , { 12441: 12499, 12442: 12500 }], 12499: [[12498, 12441]], 12500: [[12498, 12442]], 12501: [, , { 12441: 12502, 12442: 12503 }], 12502: [[12501, 12441]], 12503: [[12501, 12442]], 12504: [, , { 12441: 12505, 12442: 12506 }], 12505: [[12504, 12441]], 12506: [[12504, 12442]], 12507: [, , { 12441: 12508, 12442: 12509 }], 12508: [[12507, 12441]], 12509: [[12507, 12442]], 12527: [, , { 12441: 12535 }], 12528: [, , { 12441: 12536 }], 12529: [, , { 12441: 12537 }], 12530: [, , { 12441: 12538 }], 12532: [[12454, 12441]], 12535: [[12527, 12441]], 12536: [[12528, 12441]], 12537: [[12529, 12441]], 12538: [[12530, 12441]], 12541: [, , { 12441: 12542 }], 12542: [[12541, 12441]], 12543: [[12467, 12488], 256] },
+        12544: { 12593: [[4352], 256], 12594: [[4353], 256], 12595: [[4522], 256], 12596: [[4354], 256], 12597: [[4524], 256], 12598: [[4525], 256], 12599: [[4355], 256], 12600: [[4356], 256], 12601: [[4357], 256], 12602: [[4528], 256], 12603: [[4529], 256], 12604: [[4530], 256], 12605: [[4531], 256], 12606: [[4532], 256], 12607: [[4533], 256], 12608: [[4378], 256], 12609: [[4358], 256], 12610: [[4359], 256], 12611: [[4360], 256], 12612: [[4385], 256], 12613: [[4361], 256], 12614: [[4362], 256], 12615: [[4363], 256], 12616: [[4364], 256], 12617: [[4365], 256], 12618: [[4366], 256], 12619: [[4367], 256], 12620: [[4368], 256], 12621: [[4369], 256], 12622: [[4370], 256], 12623: [[4449], 256], 12624: [[4450], 256], 12625: [[4451], 256], 12626: [[4452], 256], 12627: [[4453], 256], 12628: [[4454], 256], 12629: [[4455], 256], 12630: [[4456], 256], 12631: [[4457], 256], 12632: [[4458], 256], 12633: [[4459], 256], 12634: [[4460], 256], 12635: [[4461], 256], 12636: [[4462], 256], 12637: [[4463], 256], 12638: [[4464], 256], 12639: [[4465], 256], 12640: [[4466], 256], 12641: [[4467], 256], 12642: [[4468], 256], 12643: [[4469], 256], 12644: [[4448], 256], 12645: [[4372], 256], 12646: [[4373], 256], 12647: [[4551], 256], 12648: [[4552], 256], 12649: [[4556], 256], 12650: [[4558], 256], 12651: [[4563], 256], 12652: [[4567], 256], 12653: [[4569], 256], 12654: [[4380], 256], 12655: [[4573], 256], 12656: [[4575], 256], 12657: [[4381], 256], 12658: [[4382], 256], 12659: [[4384], 256], 12660: [[4386], 256], 12661: [[4387], 256], 12662: [[4391], 256], 12663: [[4393], 256], 12664: [[4395], 256], 12665: [[4396], 256], 12666: [[4397], 256], 12667: [[4398], 256], 12668: [[4399], 256], 12669: [[4402], 256], 12670: [[4406], 256], 12671: [[4416], 256], 12672: [[4423], 256], 12673: [[4428], 256], 12674: [[4593], 256], 12675: [[4594], 256], 12676: [[4439], 256], 12677: [[4440], 256], 12678: [[4441], 256], 12679: [[4484], 256], 12680: [[4485], 256], 12681: [[4488], 256], 12682: [[4497], 256], 12683: [[4498], 256], 12684: [[4500], 256], 12685: [[4510], 256], 12686: [[4513], 256], 12690: [[19968], 256], 12691: [[20108], 256], 12692: [[19977], 256], 12693: [[22235], 256], 12694: [[19978], 256], 12695: [[20013], 256], 12696: [[19979], 256], 12697: [[30002], 256], 12698: [[20057], 256], 12699: [[19993], 256], 12700: [[19969], 256], 12701: [[22825], 256], 12702: [[22320], 256], 12703: [[20154], 256] },
+        12800: { 12800: [[40, 4352, 41], 256], 12801: [[40, 4354, 41], 256], 12802: [[40, 4355, 41], 256], 12803: [[40, 4357, 41], 256], 12804: [[40, 4358, 41], 256], 12805: [[40, 4359, 41], 256], 12806: [[40, 4361, 41], 256], 12807: [[40, 4363, 41], 256], 12808: [[40, 4364, 41], 256], 12809: [[40, 4366, 41], 256], 12810: [[40, 4367, 41], 256], 12811: [[40, 4368, 41], 256], 12812: [[40, 4369, 41], 256], 12813: [[40, 4370, 41], 256], 12814: [[40, 4352, 4449, 41], 256], 12815: [[40, 4354, 4449, 41], 256], 12816: [[40, 4355, 4449, 41], 256], 12817: [[40, 4357, 4449, 41], 256], 12818: [[40, 4358, 4449, 41], 256], 12819: [[40, 4359, 4449, 41], 256], 12820: [[40, 4361, 4449, 41], 256], 12821: [[40, 4363, 4449, 41], 256], 12822: [[40, 4364, 4449, 41], 256], 12823: [[40, 4366, 4449, 41], 256], 12824: [[40, 4367, 4449, 41], 256], 12825: [[40, 4368, 4449, 41], 256], 12826: [[40, 4369, 4449, 41], 256], 12827: [[40, 4370, 4449, 41], 256], 12828: [[40, 4364, 4462, 41], 256], 12829: [[40, 4363, 4457, 4364, 4453, 4523, 41], 256], 12830: [[40, 4363, 4457, 4370, 4462, 41], 256], 12832: [[40, 19968, 41], 256], 12833: [[40, 20108, 41], 256], 12834: [[40, 19977, 41], 256], 12835: [[40, 22235, 41], 256], 12836: [[40, 20116, 41], 256], 12837: [[40, 20845, 41], 256], 12838: [[40, 19971, 41], 256], 12839: [[40, 20843, 41], 256], 12840: [[40, 20061, 41], 256], 12841: [[40, 21313, 41], 256], 12842: [[40, 26376, 41], 256], 12843: [[40, 28779, 41], 256], 12844: [[40, 27700, 41], 256], 12845: [[40, 26408, 41], 256], 12846: [[40, 37329, 41], 256], 12847: [[40, 22303, 41], 256], 12848: [[40, 26085, 41], 256], 12849: [[40, 26666, 41], 256], 12850: [[40, 26377, 41], 256], 12851: [[40, 31038, 41], 256], 12852: [[40, 21517, 41], 256], 12853: [[40, 29305, 41], 256], 12854: [[40, 36001, 41], 256], 12855: [[40, 31069, 41], 256], 12856: [[40, 21172, 41], 256], 12857: [[40, 20195, 41], 256], 12858: [[40, 21628, 41], 256], 12859: [[40, 23398, 41], 256], 12860: [[40, 30435, 41], 256], 12861: [[40, 20225, 41], 256], 12862: [[40, 36039, 41], 256], 12863: [[40, 21332, 41], 256], 12864: [[40, 31085, 41], 256], 12865: [[40, 20241, 41], 256], 12866: [[40, 33258, 41], 256], 12867: [[40, 33267, 41], 256], 12868: [[21839], 256], 12869: [[24188], 256], 12870: [[25991], 256], 12871: [[31631], 256], 12880: [[80, 84, 69], 256], 12881: [[50, 49], 256], 12882: [[50, 50], 256], 12883: [[50, 51], 256], 12884: [[50, 52], 256], 12885: [[50, 53], 256], 12886: [[50, 54], 256], 12887: [[50, 55], 256], 12888: [[50, 56], 256], 12889: [[50, 57], 256], 12890: [[51, 48], 256], 12891: [[51, 49], 256], 12892: [[51, 50], 256], 12893: [[51, 51], 256], 12894: [[51, 52], 256], 12895: [[51, 53], 256], 12896: [[4352], 256], 12897: [[4354], 256], 12898: [[4355], 256], 12899: [[4357], 256], 12900: [[4358], 256], 12901: [[4359], 256], 12902: [[4361], 256], 12903: [[4363], 256], 12904: [[4364], 256], 12905: [[4366], 256], 12906: [[4367], 256], 12907: [[4368], 256], 12908: [[4369], 256], 12909: [[4370], 256], 12910: [[4352, 4449], 256], 12911: [[4354, 4449], 256], 12912: [[4355, 4449], 256], 12913: [[4357, 4449], 256], 12914: [[4358, 4449], 256], 12915: [[4359, 4449], 256], 12916: [[4361, 4449], 256], 12917: [[4363, 4449], 256], 12918: [[4364, 4449], 256], 12919: [[4366, 4449], 256], 12920: [[4367, 4449], 256], 12921: [[4368, 4449], 256], 12922: [[4369, 4449], 256], 12923: [[4370, 4449], 256], 12924: [[4366, 4449, 4535, 4352, 4457], 256], 12925: [[4364, 4462, 4363, 4468], 256], 12926: [[4363, 4462], 256], 12928: [[19968], 256], 12929: [[20108], 256], 12930: [[19977], 256], 12931: [[22235], 256], 12932: [[20116], 256], 12933: [[20845], 256], 12934: [[19971], 256], 12935: [[20843], 256], 12936: [[20061], 256], 12937: [[21313], 256], 12938: [[26376], 256], 12939: [[28779], 256], 12940: [[27700], 256], 12941: [[26408], 256], 12942: [[37329], 256], 12943: [[22303], 256], 12944: [[26085], 256], 12945: [[26666], 256], 12946: [[26377], 256], 12947: [[31038], 256], 12948: [[21517], 256], 12949: [[29305], 256], 12950: [[36001], 256], 12951: [[31069], 256], 12952: [[21172], 256], 12953: [[31192], 256], 12954: [[30007], 256], 12955: [[22899], 256], 12956: [[36969], 256], 12957: [[20778], 256], 12958: [[21360], 256], 12959: [[27880], 256], 12960: [[38917], 256], 12961: [[20241], 256], 12962: [[20889], 256], 12963: [[27491], 256], 12964: [[19978], 256], 12965: [[20013], 256], 12966: [[19979], 256], 12967: [[24038], 256], 12968: [[21491], 256], 12969: [[21307], 256], 12970: [[23447], 256], 12971: [[23398], 256], 12972: [[30435], 256], 12973: [[20225], 256], 12974: [[36039], 256], 12975: [[21332], 256], 12976: [[22812], 256], 12977: [[51, 54], 256], 12978: [[51, 55], 256], 12979: [[51, 56], 256], 12980: [[51, 57], 256], 12981: [[52, 48], 256], 12982: [[52, 49], 256], 12983: [[52, 50], 256], 12984: [[52, 51], 256], 12985: [[52, 52], 256], 12986: [[52, 53], 256], 12987: [[52, 54], 256], 12988: [[52, 55], 256], 12989: [[52, 56], 256], 12990: [[52, 57], 256], 12991: [[53, 48], 256], 12992: [[49, 26376], 256], 12993: [[50, 26376], 256], 12994: [[51, 26376], 256], 12995: [[52, 26376], 256], 12996: [[53, 26376], 256], 12997: [[54, 26376], 256], 12998: [[55, 26376], 256], 12999: [[56, 26376], 256], 13e3: [[57, 26376], 256], 13001: [[49, 48, 26376], 256], 13002: [[49, 49, 26376], 256], 13003: [[49, 50, 26376], 256], 13004: [[72, 103], 256], 13005: [[101, 114, 103], 256], 13006: [[101, 86], 256], 13007: [[76, 84, 68], 256], 13008: [[12450], 256], 13009: [[12452], 256], 13010: [[12454], 256], 13011: [[12456], 256], 13012: [[12458], 256], 13013: [[12459], 256], 13014: [[12461], 256], 13015: [[12463], 256], 13016: [[12465], 256], 13017: [[12467], 256], 13018: [[12469], 256], 13019: [[12471], 256], 13020: [[12473], 256], 13021: [[12475], 256], 13022: [[12477], 256], 13023: [[12479], 256], 13024: [[12481], 256], 13025: [[12484], 256], 13026: [[12486], 256], 13027: [[12488], 256], 13028: [[12490], 256], 13029: [[12491], 256], 13030: [[12492], 256], 13031: [[12493], 256], 13032: [[12494], 256], 13033: [[12495], 256], 13034: [[12498], 256], 13035: [[12501], 256], 13036: [[12504], 256], 13037: [[12507], 256], 13038: [[12510], 256], 13039: [[12511], 256], 13040: [[12512], 256], 13041: [[12513], 256], 13042: [[12514], 256], 13043: [[12516], 256], 13044: [[12518], 256], 13045: [[12520], 256], 13046: [[12521], 256], 13047: [[12522], 256], 13048: [[12523], 256], 13049: [[12524], 256], 13050: [[12525], 256], 13051: [[12527], 256], 13052: [[12528], 256], 13053: [[12529], 256], 13054: [[12530], 256] },
+        13056: { 13056: [[12450, 12497, 12540, 12488], 256], 13057: [[12450, 12523, 12501, 12449], 256], 13058: [[12450, 12531, 12506, 12450], 256], 13059: [[12450, 12540, 12523], 256], 13060: [[12452, 12491, 12531, 12464], 256], 13061: [[12452, 12531, 12481], 256], 13062: [[12454, 12457, 12531], 256], 13063: [[12456, 12473, 12463, 12540, 12489], 256], 13064: [[12456, 12540, 12459, 12540], 256], 13065: [[12458, 12531, 12473], 256], 13066: [[12458, 12540, 12512], 256], 13067: [[12459, 12452, 12522], 256], 13068: [[12459, 12521, 12483, 12488], 256], 13069: [[12459, 12525, 12522, 12540], 256], 13070: [[12460, 12525, 12531], 256], 13071: [[12460, 12531, 12510], 256], 13072: [[12462, 12460], 256], 13073: [[12462, 12491, 12540], 256], 13074: [[12461, 12517, 12522, 12540], 256], 13075: [[12462, 12523, 12480, 12540], 256], 13076: [[12461, 12525], 256], 13077: [[12461, 12525, 12464, 12521, 12512], 256], 13078: [[12461, 12525, 12513, 12540, 12488, 12523], 256], 13079: [[12461, 12525, 12527, 12483, 12488], 256], 13080: [[12464, 12521, 12512], 256], 13081: [[12464, 12521, 12512, 12488, 12531], 256], 13082: [[12463, 12523, 12476, 12452, 12525], 256], 13083: [[12463, 12525, 12540, 12493], 256], 13084: [[12465, 12540, 12473], 256], 13085: [[12467, 12523, 12490], 256], 13086: [[12467, 12540, 12509], 256], 13087: [[12469, 12452, 12463, 12523], 256], 13088: [[12469, 12531, 12481, 12540, 12512], 256], 13089: [[12471, 12522, 12531, 12464], 256], 13090: [[12475, 12531, 12481], 256], 13091: [[12475, 12531, 12488], 256], 13092: [[12480, 12540, 12473], 256], 13093: [[12487, 12471], 256], 13094: [[12489, 12523], 256], 13095: [[12488, 12531], 256], 13096: [[12490, 12494], 256], 13097: [[12494, 12483, 12488], 256], 13098: [[12495, 12452, 12484], 256], 13099: [[12497, 12540, 12475, 12531, 12488], 256], 13100: [[12497, 12540, 12484], 256], 13101: [[12496, 12540, 12524, 12523], 256], 13102: [[12500, 12450, 12473, 12488, 12523], 256], 13103: [[12500, 12463, 12523], 256], 13104: [[12500, 12467], 256], 13105: [[12499, 12523], 256], 13106: [[12501, 12449, 12521, 12483, 12489], 256], 13107: [[12501, 12451, 12540, 12488], 256], 13108: [[12502, 12483, 12471, 12455, 12523], 256], 13109: [[12501, 12521, 12531], 256], 13110: [[12504, 12463, 12479, 12540, 12523], 256], 13111: [[12506, 12477], 256], 13112: [[12506, 12491, 12498], 256], 13113: [[12504, 12523, 12484], 256], 13114: [[12506, 12531, 12473], 256], 13115: [[12506, 12540, 12472], 256], 13116: [[12505, 12540, 12479], 256], 13117: [[12509, 12452, 12531, 12488], 256], 13118: [[12508, 12523, 12488], 256], 13119: [[12507, 12531], 256], 13120: [[12509, 12531, 12489], 256], 13121: [[12507, 12540, 12523], 256], 13122: [[12507, 12540, 12531], 256], 13123: [[12510, 12452, 12463, 12525], 256], 13124: [[12510, 12452, 12523], 256], 13125: [[12510, 12483, 12495], 256], 13126: [[12510, 12523, 12463], 256], 13127: [[12510, 12531, 12471, 12519, 12531], 256], 13128: [[12511, 12463, 12525, 12531], 256], 13129: [[12511, 12522], 256], 13130: [[12511, 12522, 12496, 12540, 12523], 256], 13131: [[12513, 12460], 256], 13132: [[12513, 12460, 12488, 12531], 256], 13133: [[12513, 12540, 12488, 12523], 256], 13134: [[12516, 12540, 12489], 256], 13135: [[12516, 12540, 12523], 256], 13136: [[12518, 12450, 12531], 256], 13137: [[12522, 12483, 12488, 12523], 256], 13138: [[12522, 12521], 256], 13139: [[12523, 12500, 12540], 256], 13140: [[12523, 12540, 12502, 12523], 256], 13141: [[12524, 12512], 256], 13142: [[12524, 12531, 12488, 12466, 12531], 256], 13143: [[12527, 12483, 12488], 256], 13144: [[48, 28857], 256], 13145: [[49, 28857], 256], 13146: [[50, 28857], 256], 13147: [[51, 28857], 256], 13148: [[52, 28857], 256], 13149: [[53, 28857], 256], 13150: [[54, 28857], 256], 13151: [[55, 28857], 256], 13152: [[56, 28857], 256], 13153: [[57, 28857], 256], 13154: [[49, 48, 28857], 256], 13155: [[49, 49, 28857], 256], 13156: [[49, 50, 28857], 256], 13157: [[49, 51, 28857], 256], 13158: [[49, 52, 28857], 256], 13159: [[49, 53, 28857], 256], 13160: [[49, 54, 28857], 256], 13161: [[49, 55, 28857], 256], 13162: [[49, 56, 28857], 256], 13163: [[49, 57, 28857], 256], 13164: [[50, 48, 28857], 256], 13165: [[50, 49, 28857], 256], 13166: [[50, 50, 28857], 256], 13167: [[50, 51, 28857], 256], 13168: [[50, 52, 28857], 256], 13169: [[104, 80, 97], 256], 13170: [[100, 97], 256], 13171: [[65, 85], 256], 13172: [[98, 97, 114], 256], 13173: [[111, 86], 256], 13174: [[112, 99], 256], 13175: [[100, 109], 256], 13176: [[100, 109, 178], 256], 13177: [[100, 109, 179], 256], 13178: [[73, 85], 256], 13179: [[24179, 25104], 256], 13180: [[26157, 21644], 256], 13181: [[22823, 27491], 256], 13182: [[26126, 27835], 256], 13183: [[26666, 24335, 20250, 31038], 256], 13184: [[112, 65], 256], 13185: [[110, 65], 256], 13186: [[956, 65], 256], 13187: [[109, 65], 256], 13188: [[107, 65], 256], 13189: [[75, 66], 256], 13190: [[77, 66], 256], 13191: [[71, 66], 256], 13192: [[99, 97, 108], 256], 13193: [[107, 99, 97, 108], 256], 13194: [[112, 70], 256], 13195: [[110, 70], 256], 13196: [[956, 70], 256], 13197: [[956, 103], 256], 13198: [[109, 103], 256], 13199: [[107, 103], 256], 13200: [[72, 122], 256], 13201: [[107, 72, 122], 256], 13202: [[77, 72, 122], 256], 13203: [[71, 72, 122], 256], 13204: [[84, 72, 122], 256], 13205: [[956, 8467], 256], 13206: [[109, 8467], 256], 13207: [[100, 8467], 256], 13208: [[107, 8467], 256], 13209: [[102, 109], 256], 13210: [[110, 109], 256], 13211: [[956, 109], 256], 13212: [[109, 109], 256], 13213: [[99, 109], 256], 13214: [[107, 109], 256], 13215: [[109, 109, 178], 256], 13216: [[99, 109, 178], 256], 13217: [[109, 178], 256], 13218: [[107, 109, 178], 256], 13219: [[109, 109, 179], 256], 13220: [[99, 109, 179], 256], 13221: [[109, 179], 256], 13222: [[107, 109, 179], 256], 13223: [[109, 8725, 115], 256], 13224: [[109, 8725, 115, 178], 256], 13225: [[80, 97], 256], 13226: [[107, 80, 97], 256], 13227: [[77, 80, 97], 256], 13228: [[71, 80, 97], 256], 13229: [[114, 97, 100], 256], 13230: [[114, 97, 100, 8725, 115], 256], 13231: [[114, 97, 100, 8725, 115, 178], 256], 13232: [[112, 115], 256], 13233: [[110, 115], 256], 13234: [[956, 115], 256], 13235: [[109, 115], 256], 13236: [[112, 86], 256], 13237: [[110, 86], 256], 13238: [[956, 86], 256], 13239: [[109, 86], 256], 13240: [[107, 86], 256], 13241: [[77, 86], 256], 13242: [[112, 87], 256], 13243: [[110, 87], 256], 13244: [[956, 87], 256], 13245: [[109, 87], 256], 13246: [[107, 87], 256], 13247: [[77, 87], 256], 13248: [[107, 937], 256], 13249: [[77, 937], 256], 13250: [[97, 46, 109, 46], 256], 13251: [[66, 113], 256], 13252: [[99, 99], 256], 13253: [[99, 100], 256], 13254: [[67, 8725, 107, 103], 256], 13255: [[67, 111, 46], 256], 13256: [[100, 66], 256], 13257: [[71, 121], 256], 13258: [[104, 97], 256], 13259: [[72, 80], 256], 13260: [[105, 110], 256], 13261: [[75, 75], 256], 13262: [[75, 77], 256], 13263: [[107, 116], 256], 13264: [[108, 109], 256], 13265: [[108, 110], 256], 13266: [[108, 111, 103], 256], 13267: [[108, 120], 256], 13268: [[109, 98], 256], 13269: [[109, 105, 108], 256], 13270: [[109, 111, 108], 256], 13271: [[80, 72], 256], 13272: [[112, 46, 109, 46], 256], 13273: [[80, 80, 77], 256], 13274: [[80, 82], 256], 13275: [[115, 114], 256], 13276: [[83, 118], 256], 13277: [[87, 98], 256], 13278: [[86, 8725, 109], 256], 13279: [[65, 8725, 109], 256], 13280: [[49, 26085], 256], 13281: [[50, 26085], 256], 13282: [[51, 26085], 256], 13283: [[52, 26085], 256], 13284: [[53, 26085], 256], 13285: [[54, 26085], 256], 13286: [[55, 26085], 256], 13287: [[56, 26085], 256], 13288: [[57, 26085], 256], 13289: [[49, 48, 26085], 256], 13290: [[49, 49, 26085], 256], 13291: [[49, 50, 26085], 256], 13292: [[49, 51, 26085], 256], 13293: [[49, 52, 26085], 256], 13294: [[49, 53, 26085], 256], 13295: [[49, 54, 26085], 256], 13296: [[49, 55, 26085], 256], 13297: [[49, 56, 26085], 256], 13298: [[49, 57, 26085], 256], 13299: [[50, 48, 26085], 256], 13300: [[50, 49, 26085], 256], 13301: [[50, 50, 26085], 256], 13302: [[50, 51, 26085], 256], 13303: [[50, 52, 26085], 256], 13304: [[50, 53, 26085], 256], 13305: [[50, 54, 26085], 256], 13306: [[50, 55, 26085], 256], 13307: [[50, 56, 26085], 256], 13308: [[50, 57, 26085], 256], 13309: [[51, 48, 26085], 256], 13310: [[51, 49, 26085], 256], 13311: [[103, 97, 108], 256] },
+        27136: { 92912: [, 1], 92913: [, 1], 92914: [, 1], 92915: [, 1], 92916: [, 1] },
+        27392: { 92976: [, 230], 92977: [, 230], 92978: [, 230], 92979: [, 230], 92980: [, 230], 92981: [, 230], 92982: [, 230] },
+        42496: { 42607: [, 230], 42612: [, 230], 42613: [, 230], 42614: [, 230], 42615: [, 230], 42616: [, 230], 42617: [, 230], 42618: [, 230], 42619: [, 230], 42620: [, 230], 42621: [, 230], 42652: [[1098], 256], 42653: [[1100], 256], 42655: [, 230], 42736: [, 230], 42737: [, 230] },
+        42752: { 42864: [[42863], 256], 43e3: [[294], 256], 43001: [[339], 256] },
+        43008: { 43014: [, 9], 43204: [, 9], 43232: [, 230], 43233: [, 230], 43234: [, 230], 43235: [, 230], 43236: [, 230], 43237: [, 230], 43238: [, 230], 43239: [, 230], 43240: [, 230], 43241: [, 230], 43242: [, 230], 43243: [, 230], 43244: [, 230], 43245: [, 230], 43246: [, 230], 43247: [, 230], 43248: [, 230], 43249: [, 230] },
+        43264: { 43307: [, 220], 43308: [, 220], 43309: [, 220], 43347: [, 9], 43443: [, 7], 43456: [, 9] },
+        43520: { 43696: [, 230], 43698: [, 230], 43699: [, 230], 43700: [, 220], 43703: [, 230], 43704: [, 230], 43710: [, 230], 43711: [, 230], 43713: [, 230], 43766: [, 9] },
+        43776: { 43868: [[42791], 256], 43869: [[43831], 256], 43870: [[619], 256], 43871: [[43858], 256], 44013: [, 9] },
+        48128: { 113822: [, 1] },
+        53504: { 119134: [[119127, 119141], 512], 119135: [[119128, 119141], 512], 119136: [[119135, 119150], 512], 119137: [[119135, 119151], 512], 119138: [[119135, 119152], 512], 119139: [[119135, 119153], 512], 119140: [[119135, 119154], 512], 119141: [, 216], 119142: [, 216], 119143: [, 1], 119144: [, 1], 119145: [, 1], 119149: [, 226], 119150: [, 216], 119151: [, 216], 119152: [, 216], 119153: [, 216], 119154: [, 216], 119163: [, 220], 119164: [, 220], 119165: [, 220], 119166: [, 220], 119167: [, 220], 119168: [, 220], 119169: [, 220], 119170: [, 220], 119173: [, 230], 119174: [, 230], 119175: [, 230], 119176: [, 230], 119177: [, 230], 119178: [, 220], 119179: [, 220], 119210: [, 230], 119211: [, 230], 119212: [, 230], 119213: [, 230], 119227: [[119225, 119141], 512], 119228: [[119226, 119141], 512], 119229: [[119227, 119150], 512], 119230: [[119228, 119150], 512], 119231: [[119227, 119151], 512], 119232: [[119228, 119151], 512] },
+        53760: { 119362: [, 230], 119363: [, 230], 119364: [, 230] },
+        54272: { 119808: [[65], 256], 119809: [[66], 256], 119810: [[67], 256], 119811: [[68], 256], 119812: [[69], 256], 119813: [[70], 256], 119814: [[71], 256], 119815: [[72], 256], 119816: [[73], 256], 119817: [[74], 256], 119818: [[75], 256], 119819: [[76], 256], 119820: [[77], 256], 119821: [[78], 256], 119822: [[79], 256], 119823: [[80], 256], 119824: [[81], 256], 119825: [[82], 256], 119826: [[83], 256], 119827: [[84], 256], 119828: [[85], 256], 119829: [[86], 256], 119830: [[87], 256], 119831: [[88], 256], 119832: [[89], 256], 119833: [[90], 256], 119834: [[97], 256], 119835: [[98], 256], 119836: [[99], 256], 119837: [[100], 256], 119838: [[101], 256], 119839: [[102], 256], 119840: [[103], 256], 119841: [[104], 256], 119842: [[105], 256], 119843: [[106], 256], 119844: [[107], 256], 119845: [[108], 256], 119846: [[109], 256], 119847: [[110], 256], 119848: [[111], 256], 119849: [[112], 256], 119850: [[113], 256], 119851: [[114], 256], 119852: [[115], 256], 119853: [[116], 256], 119854: [[117], 256], 119855: [[118], 256], 119856: [[119], 256], 119857: [[120], 256], 119858: [[121], 256], 119859: [[122], 256], 119860: [[65], 256], 119861: [[66], 256], 119862: [[67], 256], 119863: [[68], 256], 119864: [[69], 256], 119865: [[70], 256], 119866: [[71], 256], 119867: [[72], 256], 119868: [[73], 256], 119869: [[74], 256], 119870: [[75], 256], 119871: [[76], 256], 119872: [[77], 256], 119873: [[78], 256], 119874: [[79], 256], 119875: [[80], 256], 119876: [[81], 256], 119877: [[82], 256], 119878: [[83], 256], 119879: [[84], 256], 119880: [[85], 256], 119881: [[86], 256], 119882: [[87], 256], 119883: [[88], 256], 119884: [[89], 256], 119885: [[90], 256], 119886: [[97], 256], 119887: [[98], 256], 119888: [[99], 256], 119889: [[100], 256], 119890: [[101], 256], 119891: [[102], 256], 119892: [[103], 256], 119894: [[105], 256], 119895: [[106], 256], 119896: [[107], 256], 119897: [[108], 256], 119898: [[109], 256], 119899: [[110], 256], 119900: [[111], 256], 119901: [[112], 256], 119902: [[113], 256], 119903: [[114], 256], 119904: [[115], 256], 119905: [[116], 256], 119906: [[117], 256], 119907: [[118], 256], 119908: [[119], 256], 119909: [[120], 256], 119910: [[121], 256], 119911: [[122], 256], 119912: [[65], 256], 119913: [[66], 256], 119914: [[67], 256], 119915: [[68], 256], 119916: [[69], 256], 119917: [[70], 256], 119918: [[71], 256], 119919: [[72], 256], 119920: [[73], 256], 119921: [[74], 256], 119922: [[75], 256], 119923: [[76], 256], 119924: [[77], 256], 119925: [[78], 256], 119926: [[79], 256], 119927: [[80], 256], 119928: [[81], 256], 119929: [[82], 256], 119930: [[83], 256], 119931: [[84], 256], 119932: [[85], 256], 119933: [[86], 256], 119934: [[87], 256], 119935: [[88], 256], 119936: [[89], 256], 119937: [[90], 256], 119938: [[97], 256], 119939: [[98], 256], 119940: [[99], 256], 119941: [[100], 256], 119942: [[101], 256], 119943: [[102], 256], 119944: [[103], 256], 119945: [[104], 256], 119946: [[105], 256], 119947: [[106], 256], 119948: [[107], 256], 119949: [[108], 256], 119950: [[109], 256], 119951: [[110], 256], 119952: [[111], 256], 119953: [[112], 256], 119954: [[113], 256], 119955: [[114], 256], 119956: [[115], 256], 119957: [[116], 256], 119958: [[117], 256], 119959: [[118], 256], 119960: [[119], 256], 119961: [[120], 256], 119962: [[121], 256], 119963: [[122], 256], 119964: [[65], 256], 119966: [[67], 256], 119967: [[68], 256], 119970: [[71], 256], 119973: [[74], 256], 119974: [[75], 256], 119977: [[78], 256], 119978: [[79], 256], 119979: [[80], 256], 119980: [[81], 256], 119982: [[83], 256], 119983: [[84], 256], 119984: [[85], 256], 119985: [[86], 256], 119986: [[87], 256], 119987: [[88], 256], 119988: [[89], 256], 119989: [[90], 256], 119990: [[97], 256], 119991: [[98], 256], 119992: [[99], 256], 119993: [[100], 256], 119995: [[102], 256], 119997: [[104], 256], 119998: [[105], 256], 119999: [[106], 256], 12e4: [[107], 256], 120001: [[108], 256], 120002: [[109], 256], 120003: [[110], 256], 120005: [[112], 256], 120006: [[113], 256], 120007: [[114], 256], 120008: [[115], 256], 120009: [[116], 256], 120010: [[117], 256], 120011: [[118], 256], 120012: [[119], 256], 120013: [[120], 256], 120014: [[121], 256], 120015: [[122], 256], 120016: [[65], 256], 120017: [[66], 256], 120018: [[67], 256], 120019: [[68], 256], 120020: [[69], 256], 120021: [[70], 256], 120022: [[71], 256], 120023: [[72], 256], 120024: [[73], 256], 120025: [[74], 256], 120026: [[75], 256], 120027: [[76], 256], 120028: [[77], 256], 120029: [[78], 256], 120030: [[79], 256], 120031: [[80], 256], 120032: [[81], 256], 120033: [[82], 256], 120034: [[83], 256], 120035: [[84], 256], 120036: [[85], 256], 120037: [[86], 256], 120038: [[87], 256], 120039: [[88], 256], 120040: [[89], 256], 120041: [[90], 256], 120042: [[97], 256], 120043: [[98], 256], 120044: [[99], 256], 120045: [[100], 256], 120046: [[101], 256], 120047: [[102], 256], 120048: [[103], 256], 120049: [[104], 256], 120050: [[105], 256], 120051: [[106], 256], 120052: [[107], 256], 120053: [[108], 256], 120054: [[109], 256], 120055: [[110], 256], 120056: [[111], 256], 120057: [[112], 256], 120058: [[113], 256], 120059: [[114], 256], 120060: [[115], 256], 120061: [[116], 256], 120062: [[117], 256], 120063: [[118], 256] },
+        54528: { 120064: [[119], 256], 120065: [[120], 256], 120066: [[121], 256], 120067: [[122], 256], 120068: [[65], 256], 120069: [[66], 256], 120071: [[68], 256], 120072: [[69], 256], 120073: [[70], 256], 120074: [[71], 256], 120077: [[74], 256], 120078: [[75], 256], 120079: [[76], 256], 120080: [[77], 256], 120081: [[78], 256], 120082: [[79], 256], 120083: [[80], 256], 120084: [[81], 256], 120086: [[83], 256], 120087: [[84], 256], 120088: [[85], 256], 120089: [[86], 256], 120090: [[87], 256], 120091: [[88], 256], 120092: [[89], 256], 120094: [[97], 256], 120095: [[98], 256], 120096: [[99], 256], 120097: [[100], 256], 120098: [[101], 256], 120099: [[102], 256], 120100: [[103], 256], 120101: [[104], 256], 120102: [[105], 256], 120103: [[106], 256], 120104: [[107], 256], 120105: [[108], 256], 120106: [[109], 256], 120107: [[110], 256], 120108: [[111], 256], 120109: [[112], 256], 120110: [[113], 256], 120111: [[114], 256], 120112: [[115], 256], 120113: [[116], 256], 120114: [[117], 256], 120115: [[118], 256], 120116: [[119], 256], 120117: [[120], 256], 120118: [[121], 256], 120119: [[122], 256], 120120: [[65], 256], 120121: [[66], 256], 120123: [[68], 256], 120124: [[69], 256], 120125: [[70], 256], 120126: [[71], 256], 120128: [[73], 256], 120129: [[74], 256], 120130: [[75], 256], 120131: [[76], 256], 120132: [[77], 256], 120134: [[79], 256], 120138: [[83], 256], 120139: [[84], 256], 120140: [[85], 256], 120141: [[86], 256], 120142: [[87], 256], 120143: [[88], 256], 120144: [[89], 256], 120146: [[97], 256], 120147: [[98], 256], 120148: [[99], 256], 120149: [[100], 256], 120150: [[101], 256], 120151: [[102], 256], 120152: [[103], 256], 120153: [[104], 256], 120154: [[105], 256], 120155: [[106], 256], 120156: [[107], 256], 120157: [[108], 256], 120158: [[109], 256], 120159: [[110], 256], 120160: [[111], 256], 120161: [[112], 256], 120162: [[113], 256], 120163: [[114], 256], 120164: [[115], 256], 120165: [[116], 256], 120166: [[117], 256], 120167: [[118], 256], 120168: [[119], 256], 120169: [[120], 256], 120170: [[121], 256], 120171: [[122], 256], 120172: [[65], 256], 120173: [[66], 256], 120174: [[67], 256], 120175: [[68], 256], 120176: [[69], 256], 120177: [[70], 256], 120178: [[71], 256], 120179: [[72], 256], 120180: [[73], 256], 120181: [[74], 256], 120182: [[75], 256], 120183: [[76], 256], 120184: [[77], 256], 120185: [[78], 256], 120186: [[79], 256], 120187: [[80], 256], 120188: [[81], 256], 120189: [[82], 256], 120190: [[83], 256], 120191: [[84], 256], 120192: [[85], 256], 120193: [[86], 256], 120194: [[87], 256], 120195: [[88], 256], 120196: [[89], 256], 120197: [[90], 256], 120198: [[97], 256], 120199: [[98], 256], 120200: [[99], 256], 120201: [[100], 256], 120202: [[101], 256], 120203: [[102], 256], 120204: [[103], 256], 120205: [[104], 256], 120206: [[105], 256], 120207: [[106], 256], 120208: [[107], 256], 120209: [[108], 256], 120210: [[109], 256], 120211: [[110], 256], 120212: [[111], 256], 120213: [[112], 256], 120214: [[113], 256], 120215: [[114], 256], 120216: [[115], 256], 120217: [[116], 256], 120218: [[117], 256], 120219: [[118], 256], 120220: [[119], 256], 120221: [[120], 256], 120222: [[121], 256], 120223: [[122], 256], 120224: [[65], 256], 120225: [[66], 256], 120226: [[67], 256], 120227: [[68], 256], 120228: [[69], 256], 120229: [[70], 256], 120230: [[71], 256], 120231: [[72], 256], 120232: [[73], 256], 120233: [[74], 256], 120234: [[75], 256], 120235: [[76], 256], 120236: [[77], 256], 120237: [[78], 256], 120238: [[79], 256], 120239: [[80], 256], 120240: [[81], 256], 120241: [[82], 256], 120242: [[83], 256], 120243: [[84], 256], 120244: [[85], 256], 120245: [[86], 256], 120246: [[87], 256], 120247: [[88], 256], 120248: [[89], 256], 120249: [[90], 256], 120250: [[97], 256], 120251: [[98], 256], 120252: [[99], 256], 120253: [[100], 256], 120254: [[101], 256], 120255: [[102], 256], 120256: [[103], 256], 120257: [[104], 256], 120258: [[105], 256], 120259: [[106], 256], 120260: [[107], 256], 120261: [[108], 256], 120262: [[109], 256], 120263: [[110], 256], 120264: [[111], 256], 120265: [[112], 256], 120266: [[113], 256], 120267: [[114], 256], 120268: [[115], 256], 120269: [[116], 256], 120270: [[117], 256], 120271: [[118], 256], 120272: [[119], 256], 120273: [[120], 256], 120274: [[121], 256], 120275: [[122], 256], 120276: [[65], 256], 120277: [[66], 256], 120278: [[67], 256], 120279: [[68], 256], 120280: [[69], 256], 120281: [[70], 256], 120282: [[71], 256], 120283: [[72], 256], 120284: [[73], 256], 120285: [[74], 256], 120286: [[75], 256], 120287: [[76], 256], 120288: [[77], 256], 120289: [[78], 256], 120290: [[79], 256], 120291: [[80], 256], 120292: [[81], 256], 120293: [[82], 256], 120294: [[83], 256], 120295: [[84], 256], 120296: [[85], 256], 120297: [[86], 256], 120298: [[87], 256], 120299: [[88], 256], 120300: [[89], 256], 120301: [[90], 256], 120302: [[97], 256], 120303: [[98], 256], 120304: [[99], 256], 120305: [[100], 256], 120306: [[101], 256], 120307: [[102], 256], 120308: [[103], 256], 120309: [[104], 256], 120310: [[105], 256], 120311: [[106], 256], 120312: [[107], 256], 120313: [[108], 256], 120314: [[109], 256], 120315: [[110], 256], 120316: [[111], 256], 120317: [[112], 256], 120318: [[113], 256], 120319: [[114], 256] },
+        54784: { 120320: [[115], 256], 120321: [[116], 256], 120322: [[117], 256], 120323: [[118], 256], 120324: [[119], 256], 120325: [[120], 256], 120326: [[121], 256], 120327: [[122], 256], 120328: [[65], 256], 120329: [[66], 256], 120330: [[67], 256], 120331: [[68], 256], 120332: [[69], 256], 120333: [[70], 256], 120334: [[71], 256], 120335: [[72], 256], 120336: [[73], 256], 120337: [[74], 256], 120338: [[75], 256], 120339: [[76], 256], 120340: [[77], 256], 120341: [[78], 256], 120342: [[79], 256], 120343: [[80], 256], 120344: [[81], 256], 120345: [[82], 256], 120346: [[83], 256], 120347: [[84], 256], 120348: [[85], 256], 120349: [[86], 256], 120350: [[87], 256], 120351: [[88], 256], 120352: [[89], 256], 120353: [[90], 256], 120354: [[97], 256], 120355: [[98], 256], 120356: [[99], 256], 120357: [[100], 256], 120358: [[101], 256], 120359: [[102], 256], 120360: [[103], 256], 120361: [[104], 256], 120362: [[105], 256], 120363: [[106], 256], 120364: [[107], 256], 120365: [[108], 256], 120366: [[109], 256], 120367: [[110], 256], 120368: [[111], 256], 120369: [[112], 256], 120370: [[113], 256], 120371: [[114], 256], 120372: [[115], 256], 120373: [[116], 256], 120374: [[117], 256], 120375: [[118], 256], 120376: [[119], 256], 120377: [[120], 256], 120378: [[121], 256], 120379: [[122], 256], 120380: [[65], 256], 120381: [[66], 256], 120382: [[67], 256], 120383: [[68], 256], 120384: [[69], 256], 120385: [[70], 256], 120386: [[71], 256], 120387: [[72], 256], 120388: [[73], 256], 120389: [[74], 256], 120390: [[75], 256], 120391: [[76], 256], 120392: [[77], 256], 120393: [[78], 256], 120394: [[79], 256], 120395: [[80], 256], 120396: [[81], 256], 120397: [[82], 256], 120398: [[83], 256], 120399: [[84], 256], 120400: [[85], 256], 120401: [[86], 256], 120402: [[87], 256], 120403: [[88], 256], 120404: [[89], 256], 120405: [[90], 256], 120406: [[97], 256], 120407: [[98], 256], 120408: [[99], 256], 120409: [[100], 256], 120410: [[101], 256], 120411: [[102], 256], 120412: [[103], 256], 120413: [[104], 256], 120414: [[105], 256], 120415: [[106], 256], 120416: [[107], 256], 120417: [[108], 256], 120418: [[109], 256], 120419: [[110], 256], 120420: [[111], 256], 120421: [[112], 256], 120422: [[113], 256], 120423: [[114], 256], 120424: [[115], 256], 120425: [[116], 256], 120426: [[117], 256], 120427: [[118], 256], 120428: [[119], 256], 120429: [[120], 256], 120430: [[121], 256], 120431: [[122], 256], 120432: [[65], 256], 120433: [[66], 256], 120434: [[67], 256], 120435: [[68], 256], 120436: [[69], 256], 120437: [[70], 256], 120438: [[71], 256], 120439: [[72], 256], 120440: [[73], 256], 120441: [[74], 256], 120442: [[75], 256], 120443: [[76], 256], 120444: [[77], 256], 120445: [[78], 256], 120446: [[79], 256], 120447: [[80], 256], 120448: [[81], 256], 120449: [[82], 256], 120450: [[83], 256], 120451: [[84], 256], 120452: [[85], 256], 120453: [[86], 256], 120454: [[87], 256], 120455: [[88], 256], 120456: [[89], 256], 120457: [[90], 256], 120458: [[97], 256], 120459: [[98], 256], 120460: [[99], 256], 120461: [[100], 256], 120462: [[101], 256], 120463: [[102], 256], 120464: [[103], 256], 120465: [[104], 256], 120466: [[105], 256], 120467: [[106], 256], 120468: [[107], 256], 120469: [[108], 256], 120470: [[109], 256], 120471: [[110], 256], 120472: [[111], 256], 120473: [[112], 256], 120474: [[113], 256], 120475: [[114], 256], 120476: [[115], 256], 120477: [[116], 256], 120478: [[117], 256], 120479: [[118], 256], 120480: [[119], 256], 120481: [[120], 256], 120482: [[121], 256], 120483: [[122], 256], 120484: [[305], 256], 120485: [[567], 256], 120488: [[913], 256], 120489: [[914], 256], 120490: [[915], 256], 120491: [[916], 256], 120492: [[917], 256], 120493: [[918], 256], 120494: [[919], 256], 120495: [[920], 256], 120496: [[921], 256], 120497: [[922], 256], 120498: [[923], 256], 120499: [[924], 256], 120500: [[925], 256], 120501: [[926], 256], 120502: [[927], 256], 120503: [[928], 256], 120504: [[929], 256], 120505: [[1012], 256], 120506: [[931], 256], 120507: [[932], 256], 120508: [[933], 256], 120509: [[934], 256], 120510: [[935], 256], 120511: [[936], 256], 120512: [[937], 256], 120513: [[8711], 256], 120514: [[945], 256], 120515: [[946], 256], 120516: [[947], 256], 120517: [[948], 256], 120518: [[949], 256], 120519: [[950], 256], 120520: [[951], 256], 120521: [[952], 256], 120522: [[953], 256], 120523: [[954], 256], 120524: [[955], 256], 120525: [[956], 256], 120526: [[957], 256], 120527: [[958], 256], 120528: [[959], 256], 120529: [[960], 256], 120530: [[961], 256], 120531: [[962], 256], 120532: [[963], 256], 120533: [[964], 256], 120534: [[965], 256], 120535: [[966], 256], 120536: [[967], 256], 120537: [[968], 256], 120538: [[969], 256], 120539: [[8706], 256], 120540: [[1013], 256], 120541: [[977], 256], 120542: [[1008], 256], 120543: [[981], 256], 120544: [[1009], 256], 120545: [[982], 256], 120546: [[913], 256], 120547: [[914], 256], 120548: [[915], 256], 120549: [[916], 256], 120550: [[917], 256], 120551: [[918], 256], 120552: [[919], 256], 120553: [[920], 256], 120554: [[921], 256], 120555: [[922], 256], 120556: [[923], 256], 120557: [[924], 256], 120558: [[925], 256], 120559: [[926], 256], 120560: [[927], 256], 120561: [[928], 256], 120562: [[929], 256], 120563: [[1012], 256], 120564: [[931], 256], 120565: [[932], 256], 120566: [[933], 256], 120567: [[934], 256], 120568: [[935], 256], 120569: [[936], 256], 120570: [[937], 256], 120571: [[8711], 256], 120572: [[945], 256], 120573: [[946], 256], 120574: [[947], 256], 120575: [[948], 256] },
+        55040: { 120576: [[949], 256], 120577: [[950], 256], 120578: [[951], 256], 120579: [[952], 256], 120580: [[953], 256], 120581: [[954], 256], 120582: [[955], 256], 120583: [[956], 256], 120584: [[957], 256], 120585: [[958], 256], 120586: [[959], 256], 120587: [[960], 256], 120588: [[961], 256], 120589: [[962], 256], 120590: [[963], 256], 120591: [[964], 256], 120592: [[965], 256], 120593: [[966], 256], 120594: [[967], 256], 120595: [[968], 256], 120596: [[969], 256], 120597: [[8706], 256], 120598: [[1013], 256], 120599: [[977], 256], 120600: [[1008], 256], 120601: [[981], 256], 120602: [[1009], 256], 120603: [[982], 256], 120604: [[913], 256], 120605: [[914], 256], 120606: [[915], 256], 120607: [[916], 256], 120608: [[917], 256], 120609: [[918], 256], 120610: [[919], 256], 120611: [[920], 256], 120612: [[921], 256], 120613: [[922], 256], 120614: [[923], 256], 120615: [[924], 256], 120616: [[925], 256], 120617: [[926], 256], 120618: [[927], 256], 120619: [[928], 256], 120620: [[929], 256], 120621: [[1012], 256], 120622: [[931], 256], 120623: [[932], 256], 120624: [[933], 256], 120625: [[934], 256], 120626: [[935], 256], 120627: [[936], 256], 120628: [[937], 256], 120629: [[8711], 256], 120630: [[945], 256], 120631: [[946], 256], 120632: [[947], 256], 120633: [[948], 256], 120634: [[949], 256], 120635: [[950], 256], 120636: [[951], 256], 120637: [[952], 256], 120638: [[953], 256], 120639: [[954], 256], 120640: [[955], 256], 120641: [[956], 256], 120642: [[957], 256], 120643: [[958], 256], 120644: [[959], 256], 120645: [[960], 256], 120646: [[961], 256], 120647: [[962], 256], 120648: [[963], 256], 120649: [[964], 256], 120650: [[965], 256], 120651: [[966], 256], 120652: [[967], 256], 120653: [[968], 256], 120654: [[969], 256], 120655: [[8706], 256], 120656: [[1013], 256], 120657: [[977], 256], 120658: [[1008], 256], 120659: [[981], 256], 120660: [[1009], 256], 120661: [[982], 256], 120662: [[913], 256], 120663: [[914], 256], 120664: [[915], 256], 120665: [[916], 256], 120666: [[917], 256], 120667: [[918], 256], 120668: [[919], 256], 120669: [[920], 256], 120670: [[921], 256], 120671: [[922], 256], 120672: [[923], 256], 120673: [[924], 256], 120674: [[925], 256], 120675: [[926], 256], 120676: [[927], 256], 120677: [[928], 256], 120678: [[929], 256], 120679: [[1012], 256], 120680: [[931], 256], 120681: [[932], 256], 120682: [[933], 256], 120683: [[934], 256], 120684: [[935], 256], 120685: [[936], 256], 120686: [[937], 256], 120687: [[8711], 256], 120688: [[945], 256], 120689: [[946], 256], 120690: [[947], 256], 120691: [[948], 256], 120692: [[949], 256], 120693: [[950], 256], 120694: [[951], 256], 120695: [[952], 256], 120696: [[953], 256], 120697: [[954], 256], 120698: [[955], 256], 120699: [[956], 256], 120700: [[957], 256], 120701: [[958], 256], 120702: [[959], 256], 120703: [[960], 256], 120704: [[961], 256], 120705: [[962], 256], 120706: [[963], 256], 120707: [[964], 256], 120708: [[965], 256], 120709: [[966], 256], 120710: [[967], 256], 120711: [[968], 256], 120712: [[969], 256], 120713: [[8706], 256], 120714: [[1013], 256], 120715: [[977], 256], 120716: [[1008], 256], 120717: [[981], 256], 120718: [[1009], 256], 120719: [[982], 256], 120720: [[913], 256], 120721: [[914], 256], 120722: [[915], 256], 120723: [[916], 256], 120724: [[917], 256], 120725: [[918], 256], 120726: [[919], 256], 120727: [[920], 256], 120728: [[921], 256], 120729: [[922], 256], 120730: [[923], 256], 120731: [[924], 256], 120732: [[925], 256], 120733: [[926], 256], 120734: [[927], 256], 120735: [[928], 256], 120736: [[929], 256], 120737: [[1012], 256], 120738: [[931], 256], 120739: [[932], 256], 120740: [[933], 256], 120741: [[934], 256], 120742: [[935], 256], 120743: [[936], 256], 120744: [[937], 256], 120745: [[8711], 256], 120746: [[945], 256], 120747: [[946], 256], 120748: [[947], 256], 120749: [[948], 256], 120750: [[949], 256], 120751: [[950], 256], 120752: [[951], 256], 120753: [[952], 256], 120754: [[953], 256], 120755: [[954], 256], 120756: [[955], 256], 120757: [[956], 256], 120758: [[957], 256], 120759: [[958], 256], 120760: [[959], 256], 120761: [[960], 256], 120762: [[961], 256], 120763: [[962], 256], 120764: [[963], 256], 120765: [[964], 256], 120766: [[965], 256], 120767: [[966], 256], 120768: [[967], 256], 120769: [[968], 256], 120770: [[969], 256], 120771: [[8706], 256], 120772: [[1013], 256], 120773: [[977], 256], 120774: [[1008], 256], 120775: [[981], 256], 120776: [[1009], 256], 120777: [[982], 256], 120778: [[988], 256], 120779: [[989], 256], 120782: [[48], 256], 120783: [[49], 256], 120784: [[50], 256], 120785: [[51], 256], 120786: [[52], 256], 120787: [[53], 256], 120788: [[54], 256], 120789: [[55], 256], 120790: [[56], 256], 120791: [[57], 256], 120792: [[48], 256], 120793: [[49], 256], 120794: [[50], 256], 120795: [[51], 256], 120796: [[52], 256], 120797: [[53], 256], 120798: [[54], 256], 120799: [[55], 256], 120800: [[56], 256], 120801: [[57], 256], 120802: [[48], 256], 120803: [[49], 256], 120804: [[50], 256], 120805: [[51], 256], 120806: [[52], 256], 120807: [[53], 256], 120808: [[54], 256], 120809: [[55], 256], 120810: [[56], 256], 120811: [[57], 256], 120812: [[48], 256], 120813: [[49], 256], 120814: [[50], 256], 120815: [[51], 256], 120816: [[52], 256], 120817: [[53], 256], 120818: [[54], 256], 120819: [[55], 256], 120820: [[56], 256], 120821: [[57], 256], 120822: [[48], 256], 120823: [[49], 256], 120824: [[50], 256], 120825: [[51], 256], 120826: [[52], 256], 120827: [[53], 256], 120828: [[54], 256], 120829: [[55], 256], 120830: [[56], 256], 120831: [[57], 256] },
+        59392: { 125136: [, 220], 125137: [, 220], 125138: [, 220], 125139: [, 220], 125140: [, 220], 125141: [, 220], 125142: [, 220] },
+        60928: { 126464: [[1575], 256], 126465: [[1576], 256], 126466: [[1580], 256], 126467: [[1583], 256], 126469: [[1608], 256], 126470: [[1586], 256], 126471: [[1581], 256], 126472: [[1591], 256], 126473: [[1610], 256], 126474: [[1603], 256], 126475: [[1604], 256], 126476: [[1605], 256], 126477: [[1606], 256], 126478: [[1587], 256], 126479: [[1593], 256], 126480: [[1601], 256], 126481: [[1589], 256], 126482: [[1602], 256], 126483: [[1585], 256], 126484: [[1588], 256], 126485: [[1578], 256], 126486: [[1579], 256], 126487: [[1582], 256], 126488: [[1584], 256], 126489: [[1590], 256], 126490: [[1592], 256], 126491: [[1594], 256], 126492: [[1646], 256], 126493: [[1722], 256], 126494: [[1697], 256], 126495: [[1647], 256], 126497: [[1576], 256], 126498: [[1580], 256], 126500: [[1607], 256], 126503: [[1581], 256], 126505: [[1610], 256], 126506: [[1603], 256], 126507: [[1604], 256], 126508: [[1605], 256], 126509: [[1606], 256], 126510: [[1587], 256], 126511: [[1593], 256], 126512: [[1601], 256], 126513: [[1589], 256], 126514: [[1602], 256], 126516: [[1588], 256], 126517: [[1578], 256], 126518: [[1579], 256], 126519: [[1582], 256], 126521: [[1590], 256], 126523: [[1594], 256], 126530: [[1580], 256], 126535: [[1581], 256], 126537: [[1610], 256], 126539: [[1604], 256], 126541: [[1606], 256], 126542: [[1587], 256], 126543: [[1593], 256], 126545: [[1589], 256], 126546: [[1602], 256], 126548: [[1588], 256], 126551: [[1582], 256], 126553: [[1590], 256], 126555: [[1594], 256], 126557: [[1722], 256], 126559: [[1647], 256], 126561: [[1576], 256], 126562: [[1580], 256], 126564: [[1607], 256], 126567: [[1581], 256], 126568: [[1591], 256], 126569: [[1610], 256], 126570: [[1603], 256], 126572: [[1605], 256], 126573: [[1606], 256], 126574: [[1587], 256], 126575: [[1593], 256], 126576: [[1601], 256], 126577: [[1589], 256], 126578: [[1602], 256], 126580: [[1588], 256], 126581: [[1578], 256], 126582: [[1579], 256], 126583: [[1582], 256], 126585: [[1590], 256], 126586: [[1592], 256], 126587: [[1594], 256], 126588: [[1646], 256], 126590: [[1697], 256], 126592: [[1575], 256], 126593: [[1576], 256], 126594: [[1580], 256], 126595: [[1583], 256], 126596: [[1607], 256], 126597: [[1608], 256], 126598: [[1586], 256], 126599: [[1581], 256], 126600: [[1591], 256], 126601: [[1610], 256], 126603: [[1604], 256], 126604: [[1605], 256], 126605: [[1606], 256], 126606: [[1587], 256], 126607: [[1593], 256], 126608: [[1601], 256], 126609: [[1589], 256], 126610: [[1602], 256], 126611: [[1585], 256], 126612: [[1588], 256], 126613: [[1578], 256], 126614: [[1579], 256], 126615: [[1582], 256], 126616: [[1584], 256], 126617: [[1590], 256], 126618: [[1592], 256], 126619: [[1594], 256], 126625: [[1576], 256], 126626: [[1580], 256], 126627: [[1583], 256], 126629: [[1608], 256], 126630: [[1586], 256], 126631: [[1581], 256], 126632: [[1591], 256], 126633: [[1610], 256], 126635: [[1604], 256], 126636: [[1605], 256], 126637: [[1606], 256], 126638: [[1587], 256], 126639: [[1593], 256], 126640: [[1601], 256], 126641: [[1589], 256], 126642: [[1602], 256], 126643: [[1585], 256], 126644: [[1588], 256], 126645: [[1578], 256], 126646: [[1579], 256], 126647: [[1582], 256], 126648: [[1584], 256], 126649: [[1590], 256], 126650: [[1592], 256], 126651: [[1594], 256] },
+        61696: { 127232: [[48, 46], 256], 127233: [[48, 44], 256], 127234: [[49, 44], 256], 127235: [[50, 44], 256], 127236: [[51, 44], 256], 127237: [[52, 44], 256], 127238: [[53, 44], 256], 127239: [[54, 44], 256], 127240: [[55, 44], 256], 127241: [[56, 44], 256], 127242: [[57, 44], 256], 127248: [[40, 65, 41], 256], 127249: [[40, 66, 41], 256], 127250: [[40, 67, 41], 256], 127251: [[40, 68, 41], 256], 127252: [[40, 69, 41], 256], 127253: [[40, 70, 41], 256], 127254: [[40, 71, 41], 256], 127255: [[40, 72, 41], 256], 127256: [[40, 73, 41], 256], 127257: [[40, 74, 41], 256], 127258: [[40, 75, 41], 256], 127259: [[40, 76, 41], 256], 127260: [[40, 77, 41], 256], 127261: [[40, 78, 41], 256], 127262: [[40, 79, 41], 256], 127263: [[40, 80, 41], 256], 127264: [[40, 81, 41], 256], 127265: [[40, 82, 41], 256], 127266: [[40, 83, 41], 256], 127267: [[40, 84, 41], 256], 127268: [[40, 85, 41], 256], 127269: [[40, 86, 41], 256], 127270: [[40, 87, 41], 256], 127271: [[40, 88, 41], 256], 127272: [[40, 89, 41], 256], 127273: [[40, 90, 41], 256], 127274: [[12308, 83, 12309], 256], 127275: [[67], 256], 127276: [[82], 256], 127277: [[67, 68], 256], 127278: [[87, 90], 256], 127280: [[65], 256], 127281: [[66], 256], 127282: [[67], 256], 127283: [[68], 256], 127284: [[69], 256], 127285: [[70], 256], 127286: [[71], 256], 127287: [[72], 256], 127288: [[73], 256], 127289: [[74], 256], 127290: [[75], 256], 127291: [[76], 256], 127292: [[77], 256], 127293: [[78], 256], 127294: [[79], 256], 127295: [[80], 256], 127296: [[81], 256], 127297: [[82], 256], 127298: [[83], 256], 127299: [[84], 256], 127300: [[85], 256], 127301: [[86], 256], 127302: [[87], 256], 127303: [[88], 256], 127304: [[89], 256], 127305: [[90], 256], 127306: [[72, 86], 256], 127307: [[77, 86], 256], 127308: [[83, 68], 256], 127309: [[83, 83], 256], 127310: [[80, 80, 86], 256], 127311: [[87, 67], 256], 127338: [[77, 67], 256], 127339: [[77, 68], 256], 127376: [[68, 74], 256] },
+        61952: { 127488: [[12411, 12363], 256], 127489: [[12467, 12467], 256], 127490: [[12469], 256], 127504: [[25163], 256], 127505: [[23383], 256], 127506: [[21452], 256], 127507: [[12487], 256], 127508: [[20108], 256], 127509: [[22810], 256], 127510: [[35299], 256], 127511: [[22825], 256], 127512: [[20132], 256], 127513: [[26144], 256], 127514: [[28961], 256], 127515: [[26009], 256], 127516: [[21069], 256], 127517: [[24460], 256], 127518: [[20877], 256], 127519: [[26032], 256], 127520: [[21021], 256], 127521: [[32066], 256], 127522: [[29983], 256], 127523: [[36009], 256], 127524: [[22768], 256], 127525: [[21561], 256], 127526: [[28436], 256], 127527: [[25237], 256], 127528: [[25429], 256], 127529: [[19968], 256], 127530: [[19977], 256], 127531: [[36938], 256], 127532: [[24038], 256], 127533: [[20013], 256], 127534: [[21491], 256], 127535: [[25351], 256], 127536: [[36208], 256], 127537: [[25171], 256], 127538: [[31105], 256], 127539: [[31354], 256], 127540: [[21512], 256], 127541: [[28288], 256], 127542: [[26377], 256], 127543: [[26376], 256], 127544: [[30003], 256], 127545: [[21106], 256], 127546: [[21942], 256], 127552: [[12308, 26412, 12309], 256], 127553: [[12308, 19977, 12309], 256], 127554: [[12308, 20108, 12309], 256], 127555: [[12308, 23433, 12309], 256], 127556: [[12308, 28857, 12309], 256], 127557: [[12308, 25171, 12309], 256], 127558: [[12308, 30423, 12309], 256], 127559: [[12308, 21213, 12309], 256], 127560: [[12308, 25943, 12309], 256], 127568: [[24471], 256], 127569: [[21487], 256] },
+        63488: { 194560: [[20029]], 194561: [[20024]], 194562: [[20033]], 194563: [[131362]], 194564: [[20320]], 194565: [[20398]], 194566: [[20411]], 194567: [[20482]], 194568: [[20602]], 194569: [[20633]], 194570: [[20711]], 194571: [[20687]], 194572: [[13470]], 194573: [[132666]], 194574: [[20813]], 194575: [[20820]], 194576: [[20836]], 194577: [[20855]], 194578: [[132380]], 194579: [[13497]], 194580: [[20839]], 194581: [[20877]], 194582: [[132427]], 194583: [[20887]], 194584: [[20900]], 194585: [[20172]], 194586: [[20908]], 194587: [[20917]], 194588: [[168415]], 194589: [[20981]], 194590: [[20995]], 194591: [[13535]], 194592: [[21051]], 194593: [[21062]], 194594: [[21106]], 194595: [[21111]], 194596: [[13589]], 194597: [[21191]], 194598: [[21193]], 194599: [[21220]], 194600: [[21242]], 194601: [[21253]], 194602: [[21254]], 194603: [[21271]], 194604: [[21321]], 194605: [[21329]], 194606: [[21338]], 194607: [[21363]], 194608: [[21373]], 194609: [[21375]], 194610: [[21375]], 194611: [[21375]], 194612: [[133676]], 194613: [[28784]], 194614: [[21450]], 194615: [[21471]], 194616: [[133987]], 194617: [[21483]], 194618: [[21489]], 194619: [[21510]], 194620: [[21662]], 194621: [[21560]], 194622: [[21576]], 194623: [[21608]], 194624: [[21666]], 194625: [[21750]], 194626: [[21776]], 194627: [[21843]], 194628: [[21859]], 194629: [[21892]], 194630: [[21892]], 194631: [[21913]], 194632: [[21931]], 194633: [[21939]], 194634: [[21954]], 194635: [[22294]], 194636: [[22022]], 194637: [[22295]], 194638: [[22097]], 194639: [[22132]], 194640: [[20999]], 194641: [[22766]], 194642: [[22478]], 194643: [[22516]], 194644: [[22541]], 194645: [[22411]], 194646: [[22578]], 194647: [[22577]], 194648: [[22700]], 194649: [[136420]], 194650: [[22770]], 194651: [[22775]], 194652: [[22790]], 194653: [[22810]], 194654: [[22818]], 194655: [[22882]], 194656: [[136872]], 194657: [[136938]], 194658: [[23020]], 194659: [[23067]], 194660: [[23079]], 194661: [[23e3]], 194662: [[23142]], 194663: [[14062]], 194664: [[14076]], 194665: [[23304]], 194666: [[23358]], 194667: [[23358]], 194668: [[137672]], 194669: [[23491]], 194670: [[23512]], 194671: [[23527]], 194672: [[23539]], 194673: [[138008]], 194674: [[23551]], 194675: [[23558]], 194676: [[24403]], 194677: [[23586]], 194678: [[14209]], 194679: [[23648]], 194680: [[23662]], 194681: [[23744]], 194682: [[23693]], 194683: [[138724]], 194684: [[23875]], 194685: [[138726]], 194686: [[23918]], 194687: [[23915]], 194688: [[23932]], 194689: [[24033]], 194690: [[24034]], 194691: [[14383]], 194692: [[24061]], 194693: [[24104]], 194694: [[24125]], 194695: [[24169]], 194696: [[14434]], 194697: [[139651]], 194698: [[14460]], 194699: [[24240]], 194700: [[24243]], 194701: [[24246]], 194702: [[24266]], 194703: [[172946]], 194704: [[24318]], 194705: [[140081]], 194706: [[140081]], 194707: [[33281]], 194708: [[24354]], 194709: [[24354]], 194710: [[14535]], 194711: [[144056]], 194712: [[156122]], 194713: [[24418]], 194714: [[24427]], 194715: [[14563]], 194716: [[24474]], 194717: [[24525]], 194718: [[24535]], 194719: [[24569]], 194720: [[24705]], 194721: [[14650]], 194722: [[14620]], 194723: [[24724]], 194724: [[141012]], 194725: [[24775]], 194726: [[24904]], 194727: [[24908]], 194728: [[24910]], 194729: [[24908]], 194730: [[24954]], 194731: [[24974]], 194732: [[25010]], 194733: [[24996]], 194734: [[25007]], 194735: [[25054]], 194736: [[25074]], 194737: [[25078]], 194738: [[25104]], 194739: [[25115]], 194740: [[25181]], 194741: [[25265]], 194742: [[25300]], 194743: [[25424]], 194744: [[142092]], 194745: [[25405]], 194746: [[25340]], 194747: [[25448]], 194748: [[25475]], 194749: [[25572]], 194750: [[142321]], 194751: [[25634]], 194752: [[25541]], 194753: [[25513]], 194754: [[14894]], 194755: [[25705]], 194756: [[25726]], 194757: [[25757]], 194758: [[25719]], 194759: [[14956]], 194760: [[25935]], 194761: [[25964]], 194762: [[143370]], 194763: [[26083]], 194764: [[26360]], 194765: [[26185]], 194766: [[15129]], 194767: [[26257]], 194768: [[15112]], 194769: [[15076]], 194770: [[20882]], 194771: [[20885]], 194772: [[26368]], 194773: [[26268]], 194774: [[32941]], 194775: [[17369]], 194776: [[26391]], 194777: [[26395]], 194778: [[26401]], 194779: [[26462]], 194780: [[26451]], 194781: [[144323]], 194782: [[15177]], 194783: [[26618]], 194784: [[26501]], 194785: [[26706]], 194786: [[26757]], 194787: [[144493]], 194788: [[26766]], 194789: [[26655]], 194790: [[26900]], 194791: [[15261]], 194792: [[26946]], 194793: [[27043]], 194794: [[27114]], 194795: [[27304]], 194796: [[145059]], 194797: [[27355]], 194798: [[15384]], 194799: [[27425]], 194800: [[145575]], 194801: [[27476]], 194802: [[15438]], 194803: [[27506]], 194804: [[27551]], 194805: [[27578]], 194806: [[27579]], 194807: [[146061]], 194808: [[138507]], 194809: [[146170]], 194810: [[27726]], 194811: [[146620]], 194812: [[27839]], 194813: [[27853]], 194814: [[27751]], 194815: [[27926]] },
+        63744: { 63744: [[35912]], 63745: [[26356]], 63746: [[36554]], 63747: [[36040]], 63748: [[28369]], 63749: [[20018]], 63750: [[21477]], 63751: [[40860]], 63752: [[40860]], 63753: [[22865]], 63754: [[37329]], 63755: [[21895]], 63756: [[22856]], 63757: [[25078]], 63758: [[30313]], 63759: [[32645]], 63760: [[34367]], 63761: [[34746]], 63762: [[35064]], 63763: [[37007]], 63764: [[27138]], 63765: [[27931]], 63766: [[28889]], 63767: [[29662]], 63768: [[33853]], 63769: [[37226]], 63770: [[39409]], 63771: [[20098]], 63772: [[21365]], 63773: [[27396]], 63774: [[29211]], 63775: [[34349]], 63776: [[40478]], 63777: [[23888]], 63778: [[28651]], 63779: [[34253]], 63780: [[35172]], 63781: [[25289]], 63782: [[33240]], 63783: [[34847]], 63784: [[24266]], 63785: [[26391]], 63786: [[28010]], 63787: [[29436]], 63788: [[37070]], 63789: [[20358]], 63790: [[20919]], 63791: [[21214]], 63792: [[25796]], 63793: [[27347]], 63794: [[29200]], 63795: [[30439]], 63796: [[32769]], 63797: [[34310]], 63798: [[34396]], 63799: [[36335]], 63800: [[38706]], 63801: [[39791]], 63802: [[40442]], 63803: [[30860]], 63804: [[31103]], 63805: [[32160]], 63806: [[33737]], 63807: [[37636]], 63808: [[40575]], 63809: [[35542]], 63810: [[22751]], 63811: [[24324]], 63812: [[31840]], 63813: [[32894]], 63814: [[29282]], 63815: [[30922]], 63816: [[36034]], 63817: [[38647]], 63818: [[22744]], 63819: [[23650]], 63820: [[27155]], 63821: [[28122]], 63822: [[28431]], 63823: [[32047]], 63824: [[32311]], 63825: [[38475]], 63826: [[21202]], 63827: [[32907]], 63828: [[20956]], 63829: [[20940]], 63830: [[31260]], 63831: [[32190]], 63832: [[33777]], 63833: [[38517]], 63834: [[35712]], 63835: [[25295]], 63836: [[27138]], 63837: [[35582]], 63838: [[20025]], 63839: [[23527]], 63840: [[24594]], 63841: [[29575]], 63842: [[30064]], 63843: [[21271]], 63844: [[30971]], 63845: [[20415]], 63846: [[24489]], 63847: [[19981]], 63848: [[27852]], 63849: [[25976]], 63850: [[32034]], 63851: [[21443]], 63852: [[22622]], 63853: [[30465]], 63854: [[33865]], 63855: [[35498]], 63856: [[27578]], 63857: [[36784]], 63858: [[27784]], 63859: [[25342]], 63860: [[33509]], 63861: [[25504]], 63862: [[30053]], 63863: [[20142]], 63864: [[20841]], 63865: [[20937]], 63866: [[26753]], 63867: [[31975]], 63868: [[33391]], 63869: [[35538]], 63870: [[37327]], 63871: [[21237]], 63872: [[21570]], 63873: [[22899]], 63874: [[24300]], 63875: [[26053]], 63876: [[28670]], 63877: [[31018]], 63878: [[38317]], 63879: [[39530]], 63880: [[40599]], 63881: [[40654]], 63882: [[21147]], 63883: [[26310]], 63884: [[27511]], 63885: [[36706]], 63886: [[24180]], 63887: [[24976]], 63888: [[25088]], 63889: [[25754]], 63890: [[28451]], 63891: [[29001]], 63892: [[29833]], 63893: [[31178]], 63894: [[32244]], 63895: [[32879]], 63896: [[36646]], 63897: [[34030]], 63898: [[36899]], 63899: [[37706]], 63900: [[21015]], 63901: [[21155]], 63902: [[21693]], 63903: [[28872]], 63904: [[35010]], 63905: [[35498]], 63906: [[24265]], 63907: [[24565]], 63908: [[25467]], 63909: [[27566]], 63910: [[31806]], 63911: [[29557]], 63912: [[20196]], 63913: [[22265]], 63914: [[23527]], 63915: [[23994]], 63916: [[24604]], 63917: [[29618]], 63918: [[29801]], 63919: [[32666]], 63920: [[32838]], 63921: [[37428]], 63922: [[38646]], 63923: [[38728]], 63924: [[38936]], 63925: [[20363]], 63926: [[31150]], 63927: [[37300]], 63928: [[38584]], 63929: [[24801]], 63930: [[20102]], 63931: [[20698]], 63932: [[23534]], 63933: [[23615]], 63934: [[26009]], 63935: [[27138]], 63936: [[29134]], 63937: [[30274]], 63938: [[34044]], 63939: [[36988]], 63940: [[40845]], 63941: [[26248]], 63942: [[38446]], 63943: [[21129]], 63944: [[26491]], 63945: [[26611]], 63946: [[27969]], 63947: [[28316]], 63948: [[29705]], 63949: [[30041]], 63950: [[30827]], 63951: [[32016]], 63952: [[39006]], 63953: [[20845]], 63954: [[25134]], 63955: [[38520]], 63956: [[20523]], 63957: [[23833]], 63958: [[28138]], 63959: [[36650]], 63960: [[24459]], 63961: [[24900]], 63962: [[26647]], 63963: [[29575]], 63964: [[38534]], 63965: [[21033]], 63966: [[21519]], 63967: [[23653]], 63968: [[26131]], 63969: [[26446]], 63970: [[26792]], 63971: [[27877]], 63972: [[29702]], 63973: [[30178]], 63974: [[32633]], 63975: [[35023]], 63976: [[35041]], 63977: [[37324]], 63978: [[38626]], 63979: [[21311]], 63980: [[28346]], 63981: [[21533]], 63982: [[29136]], 63983: [[29848]], 63984: [[34298]], 63985: [[38563]], 63986: [[40023]], 63987: [[40607]], 63988: [[26519]], 63989: [[28107]], 63990: [[33256]], 63991: [[31435]], 63992: [[31520]], 63993: [[31890]], 63994: [[29376]], 63995: [[28825]], 63996: [[35672]], 63997: [[20160]], 63998: [[33590]], 63999: [[21050]], 194816: [[27966]], 194817: [[28023]], 194818: [[27969]], 194819: [[28009]], 194820: [[28024]], 194821: [[28037]], 194822: [[146718]], 194823: [[27956]], 194824: [[28207]], 194825: [[28270]], 194826: [[15667]], 194827: [[28363]], 194828: [[28359]], 194829: [[147153]], 194830: [[28153]], 194831: [[28526]], 194832: [[147294]], 194833: [[147342]], 194834: [[28614]], 194835: [[28729]], 194836: [[28702]], 194837: [[28699]], 194838: [[15766]], 194839: [[28746]], 194840: [[28797]], 194841: [[28791]], 194842: [[28845]], 194843: [[132389]], 194844: [[28997]], 194845: [[148067]], 194846: [[29084]], 194847: [[148395]], 194848: [[29224]], 194849: [[29237]], 194850: [[29264]], 194851: [[149e3]], 194852: [[29312]], 194853: [[29333]], 194854: [[149301]], 194855: [[149524]], 194856: [[29562]], 194857: [[29579]], 194858: [[16044]], 194859: [[29605]], 194860: [[16056]], 194861: [[16056]], 194862: [[29767]], 194863: [[29788]], 194864: [[29809]], 194865: [[29829]], 194866: [[29898]], 194867: [[16155]], 194868: [[29988]], 194869: [[150582]], 194870: [[30014]], 194871: [[150674]], 194872: [[30064]], 194873: [[139679]], 194874: [[30224]], 194875: [[151457]], 194876: [[151480]], 194877: [[151620]], 194878: [[16380]], 194879: [[16392]], 194880: [[30452]], 194881: [[151795]], 194882: [[151794]], 194883: [[151833]], 194884: [[151859]], 194885: [[30494]], 194886: [[30495]], 194887: [[30495]], 194888: [[30538]], 194889: [[16441]], 194890: [[30603]], 194891: [[16454]], 194892: [[16534]], 194893: [[152605]], 194894: [[30798]], 194895: [[30860]], 194896: [[30924]], 194897: [[16611]], 194898: [[153126]], 194899: [[31062]], 194900: [[153242]], 194901: [[153285]], 194902: [[31119]], 194903: [[31211]], 194904: [[16687]], 194905: [[31296]], 194906: [[31306]], 194907: [[31311]], 194908: [[153980]], 194909: [[154279]], 194910: [[154279]], 194911: [[31470]], 194912: [[16898]], 194913: [[154539]], 194914: [[31686]], 194915: [[31689]], 194916: [[16935]], 194917: [[154752]], 194918: [[31954]], 194919: [[17056]], 194920: [[31976]], 194921: [[31971]], 194922: [[32e3]], 194923: [[155526]], 194924: [[32099]], 194925: [[17153]], 194926: [[32199]], 194927: [[32258]], 194928: [[32325]], 194929: [[17204]], 194930: [[156200]], 194931: [[156231]], 194932: [[17241]], 194933: [[156377]], 194934: [[32634]], 194935: [[156478]], 194936: [[32661]], 194937: [[32762]], 194938: [[32773]], 194939: [[156890]], 194940: [[156963]], 194941: [[32864]], 194942: [[157096]], 194943: [[32880]], 194944: [[144223]], 194945: [[17365]], 194946: [[32946]], 194947: [[33027]], 194948: [[17419]], 194949: [[33086]], 194950: [[23221]], 194951: [[157607]], 194952: [[157621]], 194953: [[144275]], 194954: [[144284]], 194955: [[33281]], 194956: [[33284]], 194957: [[36766]], 194958: [[17515]], 194959: [[33425]], 194960: [[33419]], 194961: [[33437]], 194962: [[21171]], 194963: [[33457]], 194964: [[33459]], 194965: [[33469]], 194966: [[33510]], 194967: [[158524]], 194968: [[33509]], 194969: [[33565]], 194970: [[33635]], 194971: [[33709]], 194972: [[33571]], 194973: [[33725]], 194974: [[33767]], 194975: [[33879]], 194976: [[33619]], 194977: [[33738]], 194978: [[33740]], 194979: [[33756]], 194980: [[158774]], 194981: [[159083]], 194982: [[158933]], 194983: [[17707]], 194984: [[34033]], 194985: [[34035]], 194986: [[34070]], 194987: [[160714]], 194988: [[34148]], 194989: [[159532]], 194990: [[17757]], 194991: [[17761]], 194992: [[159665]], 194993: [[159954]], 194994: [[17771]], 194995: [[34384]], 194996: [[34396]], 194997: [[34407]], 194998: [[34409]], 194999: [[34473]], 195e3: [[34440]], 195001: [[34574]], 195002: [[34530]], 195003: [[34681]], 195004: [[34600]], 195005: [[34667]], 195006: [[34694]], 195007: [[17879]], 195008: [[34785]], 195009: [[34817]], 195010: [[17913]], 195011: [[34912]], 195012: [[34915]], 195013: [[161383]], 195014: [[35031]], 195015: [[35038]], 195016: [[17973]], 195017: [[35066]], 195018: [[13499]], 195019: [[161966]], 195020: [[162150]], 195021: [[18110]], 195022: [[18119]], 195023: [[35488]], 195024: [[35565]], 195025: [[35722]], 195026: [[35925]], 195027: [[162984]], 195028: [[36011]], 195029: [[36033]], 195030: [[36123]], 195031: [[36215]], 195032: [[163631]], 195033: [[133124]], 195034: [[36299]], 195035: [[36284]], 195036: [[36336]], 195037: [[133342]], 195038: [[36564]], 195039: [[36664]], 195040: [[165330]], 195041: [[165357]], 195042: [[37012]], 195043: [[37105]], 195044: [[37137]], 195045: [[165678]], 195046: [[37147]], 195047: [[37432]], 195048: [[37591]], 195049: [[37592]], 195050: [[37500]], 195051: [[37881]], 195052: [[37909]], 195053: [[166906]], 195054: [[38283]], 195055: [[18837]], 195056: [[38327]], 195057: [[167287]], 195058: [[18918]], 195059: [[38595]], 195060: [[23986]], 195061: [[38691]], 195062: [[168261]], 195063: [[168474]], 195064: [[19054]], 195065: [[19062]], 195066: [[38880]], 195067: [[168970]], 195068: [[19122]], 195069: [[169110]], 195070: [[38923]], 195071: [[38923]] },
+        64e3: { 64e3: [[20999]], 64001: [[24230]], 64002: [[25299]], 64003: [[31958]], 64004: [[23429]], 64005: [[27934]], 64006: [[26292]], 64007: [[36667]], 64008: [[34892]], 64009: [[38477]], 64010: [[35211]], 64011: [[24275]], 64012: [[20800]], 64013: [[21952]], 64016: [[22618]], 64018: [[26228]], 64021: [[20958]], 64022: [[29482]], 64023: [[30410]], 64024: [[31036]], 64025: [[31070]], 64026: [[31077]], 64027: [[31119]], 64028: [[38742]], 64029: [[31934]], 64030: [[32701]], 64032: [[34322]], 64034: [[35576]], 64037: [[36920]], 64038: [[37117]], 64042: [[39151]], 64043: [[39164]], 64044: [[39208]], 64045: [[40372]], 64046: [[37086]], 64047: [[38583]], 64048: [[20398]], 64049: [[20711]], 64050: [[20813]], 64051: [[21193]], 64052: [[21220]], 64053: [[21329]], 64054: [[21917]], 64055: [[22022]], 64056: [[22120]], 64057: [[22592]], 64058: [[22696]], 64059: [[23652]], 64060: [[23662]], 64061: [[24724]], 64062: [[24936]], 64063: [[24974]], 64064: [[25074]], 64065: [[25935]], 64066: [[26082]], 64067: [[26257]], 64068: [[26757]], 64069: [[28023]], 64070: [[28186]], 64071: [[28450]], 64072: [[29038]], 64073: [[29227]], 64074: [[29730]], 64075: [[30865]], 64076: [[31038]], 64077: [[31049]], 64078: [[31048]], 64079: [[31056]], 64080: [[31062]], 64081: [[31069]], 64082: [[31117]], 64083: [[31118]], 64084: [[31296]], 64085: [[31361]], 64086: [[31680]], 64087: [[32244]], 64088: [[32265]], 64089: [[32321]], 64090: [[32626]], 64091: [[32773]], 64092: [[33261]], 64093: [[33401]], 64094: [[33401]], 64095: [[33879]], 64096: [[35088]], 64097: [[35222]], 64098: [[35585]], 64099: [[35641]], 64100: [[36051]], 64101: [[36104]], 64102: [[36790]], 64103: [[36920]], 64104: [[38627]], 64105: [[38911]], 64106: [[38971]], 64107: [[24693]], 64108: [[148206]], 64109: [[33304]], 64112: [[20006]], 64113: [[20917]], 64114: [[20840]], 64115: [[20352]], 64116: [[20805]], 64117: [[20864]], 64118: [[21191]], 64119: [[21242]], 64120: [[21917]], 64121: [[21845]], 64122: [[21913]], 64123: [[21986]], 64124: [[22618]], 64125: [[22707]], 64126: [[22852]], 64127: [[22868]], 64128: [[23138]], 64129: [[23336]], 64130: [[24274]], 64131: [[24281]], 64132: [[24425]], 64133: [[24493]], 64134: [[24792]], 64135: [[24910]], 64136: [[24840]], 64137: [[24974]], 64138: [[24928]], 64139: [[25074]], 64140: [[25140]], 64141: [[25540]], 64142: [[25628]], 64143: [[25682]], 64144: [[25942]], 64145: [[26228]], 64146: [[26391]], 64147: [[26395]], 64148: [[26454]], 64149: [[27513]], 64150: [[27578]], 64151: [[27969]], 64152: [[28379]], 64153: [[28363]], 64154: [[28450]], 64155: [[28702]], 64156: [[29038]], 64157: [[30631]], 64158: [[29237]], 64159: [[29359]], 64160: [[29482]], 64161: [[29809]], 64162: [[29958]], 64163: [[30011]], 64164: [[30237]], 64165: [[30239]], 64166: [[30410]], 64167: [[30427]], 64168: [[30452]], 64169: [[30538]], 64170: [[30528]], 64171: [[30924]], 64172: [[31409]], 64173: [[31680]], 64174: [[31867]], 64175: [[32091]], 64176: [[32244]], 64177: [[32574]], 64178: [[32773]], 64179: [[33618]], 64180: [[33775]], 64181: [[34681]], 64182: [[35137]], 64183: [[35206]], 64184: [[35222]], 64185: [[35519]], 64186: [[35576]], 64187: [[35531]], 64188: [[35585]], 64189: [[35582]], 64190: [[35565]], 64191: [[35641]], 64192: [[35722]], 64193: [[36104]], 64194: [[36664]], 64195: [[36978]], 64196: [[37273]], 64197: [[37494]], 64198: [[38524]], 64199: [[38627]], 64200: [[38742]], 64201: [[38875]], 64202: [[38911]], 64203: [[38923]], 64204: [[38971]], 64205: [[39698]], 64206: [[40860]], 64207: [[141386]], 64208: [[141380]], 64209: [[144341]], 64210: [[15261]], 64211: [[16408]], 64212: [[16441]], 64213: [[152137]], 64214: [[154832]], 64215: [[163539]], 64216: [[40771]], 64217: [[40846]], 195072: [[38953]], 195073: [[169398]], 195074: [[39138]], 195075: [[19251]], 195076: [[39209]], 195077: [[39335]], 195078: [[39362]], 195079: [[39422]], 195080: [[19406]], 195081: [[170800]], 195082: [[39698]], 195083: [[4e4]], 195084: [[40189]], 195085: [[19662]], 195086: [[19693]], 195087: [[40295]], 195088: [[172238]], 195089: [[19704]], 195090: [[172293]], 195091: [[172558]], 195092: [[172689]], 195093: [[40635]], 195094: [[19798]], 195095: [[40697]], 195096: [[40702]], 195097: [[40709]], 195098: [[40719]], 195099: [[40726]], 195100: [[40763]], 195101: [[173568]] },
+        64256: { 64256: [[102, 102], 256], 64257: [[102, 105], 256], 64258: [[102, 108], 256], 64259: [[102, 102, 105], 256], 64260: [[102, 102, 108], 256], 64261: [[383, 116], 256], 64262: [[115, 116], 256], 64275: [[1396, 1398], 256], 64276: [[1396, 1381], 256], 64277: [[1396, 1387], 256], 64278: [[1406, 1398], 256], 64279: [[1396, 1389], 256], 64285: [[1497, 1460], 512], 64286: [, 26], 64287: [[1522, 1463], 512], 64288: [[1506], 256], 64289: [[1488], 256], 64290: [[1491], 256], 64291: [[1492], 256], 64292: [[1499], 256], 64293: [[1500], 256], 64294: [[1501], 256], 64295: [[1512], 256], 64296: [[1514], 256], 64297: [[43], 256], 64298: [[1513, 1473], 512], 64299: [[1513, 1474], 512], 64300: [[64329, 1473], 512], 64301: [[64329, 1474], 512], 64302: [[1488, 1463], 512], 64303: [[1488, 1464], 512], 64304: [[1488, 1468], 512], 64305: [[1489, 1468], 512], 64306: [[1490, 1468], 512], 64307: [[1491, 1468], 512], 64308: [[1492, 1468], 512], 64309: [[1493, 1468], 512], 64310: [[1494, 1468], 512], 64312: [[1496, 1468], 512], 64313: [[1497, 1468], 512], 64314: [[1498, 1468], 512], 64315: [[1499, 1468], 512], 64316: [[1500, 1468], 512], 64318: [[1502, 1468], 512], 64320: [[1504, 1468], 512], 64321: [[1505, 1468], 512], 64323: [[1507, 1468], 512], 64324: [[1508, 1468], 512], 64326: [[1510, 1468], 512], 64327: [[1511, 1468], 512], 64328: [[1512, 1468], 512], 64329: [[1513, 1468], 512], 64330: [[1514, 1468], 512], 64331: [[1493, 1465], 512], 64332: [[1489, 1471], 512], 64333: [[1499, 1471], 512], 64334: [[1508, 1471], 512], 64335: [[1488, 1500], 256], 64336: [[1649], 256], 64337: [[1649], 256], 64338: [[1659], 256], 64339: [[1659], 256], 64340: [[1659], 256], 64341: [[1659], 256], 64342: [[1662], 256], 64343: [[1662], 256], 64344: [[1662], 256], 64345: [[1662], 256], 64346: [[1664], 256], 64347: [[1664], 256], 64348: [[1664], 256], 64349: [[1664], 256], 64350: [[1658], 256], 64351: [[1658], 256], 64352: [[1658], 256], 64353: [[1658], 256], 64354: [[1663], 256], 64355: [[1663], 256], 64356: [[1663], 256], 64357: [[1663], 256], 64358: [[1657], 256], 64359: [[1657], 256], 64360: [[1657], 256], 64361: [[1657], 256], 64362: [[1700], 256], 64363: [[1700], 256], 64364: [[1700], 256], 64365: [[1700], 256], 64366: [[1702], 256], 64367: [[1702], 256], 64368: [[1702], 256], 64369: [[1702], 256], 64370: [[1668], 256], 64371: [[1668], 256], 64372: [[1668], 256], 64373: [[1668], 256], 64374: [[1667], 256], 64375: [[1667], 256], 64376: [[1667], 256], 64377: [[1667], 256], 64378: [[1670], 256], 64379: [[1670], 256], 64380: [[1670], 256], 64381: [[1670], 256], 64382: [[1671], 256], 64383: [[1671], 256], 64384: [[1671], 256], 64385: [[1671], 256], 64386: [[1677], 256], 64387: [[1677], 256], 64388: [[1676], 256], 64389: [[1676], 256], 64390: [[1678], 256], 64391: [[1678], 256], 64392: [[1672], 256], 64393: [[1672], 256], 64394: [[1688], 256], 64395: [[1688], 256], 64396: [[1681], 256], 64397: [[1681], 256], 64398: [[1705], 256], 64399: [[1705], 256], 64400: [[1705], 256], 64401: [[1705], 256], 64402: [[1711], 256], 64403: [[1711], 256], 64404: [[1711], 256], 64405: [[1711], 256], 64406: [[1715], 256], 64407: [[1715], 256], 64408: [[1715], 256], 64409: [[1715], 256], 64410: [[1713], 256], 64411: [[1713], 256], 64412: [[1713], 256], 64413: [[1713], 256], 64414: [[1722], 256], 64415: [[1722], 256], 64416: [[1723], 256], 64417: [[1723], 256], 64418: [[1723], 256], 64419: [[1723], 256], 64420: [[1728], 256], 64421: [[1728], 256], 64422: [[1729], 256], 64423: [[1729], 256], 64424: [[1729], 256], 64425: [[1729], 256], 64426: [[1726], 256], 64427: [[1726], 256], 64428: [[1726], 256], 64429: [[1726], 256], 64430: [[1746], 256], 64431: [[1746], 256], 64432: [[1747], 256], 64433: [[1747], 256], 64467: [[1709], 256], 64468: [[1709], 256], 64469: [[1709], 256], 64470: [[1709], 256], 64471: [[1735], 256], 64472: [[1735], 256], 64473: [[1734], 256], 64474: [[1734], 256], 64475: [[1736], 256], 64476: [[1736], 256], 64477: [[1655], 256], 64478: [[1739], 256], 64479: [[1739], 256], 64480: [[1733], 256], 64481: [[1733], 256], 64482: [[1737], 256], 64483: [[1737], 256], 64484: [[1744], 256], 64485: [[1744], 256], 64486: [[1744], 256], 64487: [[1744], 256], 64488: [[1609], 256], 64489: [[1609], 256], 64490: [[1574, 1575], 256], 64491: [[1574, 1575], 256], 64492: [[1574, 1749], 256], 64493: [[1574, 1749], 256], 64494: [[1574, 1608], 256], 64495: [[1574, 1608], 256], 64496: [[1574, 1735], 256], 64497: [[1574, 1735], 256], 64498: [[1574, 1734], 256], 64499: [[1574, 1734], 256], 64500: [[1574, 1736], 256], 64501: [[1574, 1736], 256], 64502: [[1574, 1744], 256], 64503: [[1574, 1744], 256], 64504: [[1574, 1744], 256], 64505: [[1574, 1609], 256], 64506: [[1574, 1609], 256], 64507: [[1574, 1609], 256], 64508: [[1740], 256], 64509: [[1740], 256], 64510: [[1740], 256], 64511: [[1740], 256] },
+        64512: { 64512: [[1574, 1580], 256], 64513: [[1574, 1581], 256], 64514: [[1574, 1605], 256], 64515: [[1574, 1609], 256], 64516: [[1574, 1610], 256], 64517: [[1576, 1580], 256], 64518: [[1576, 1581], 256], 64519: [[1576, 1582], 256], 64520: [[1576, 1605], 256], 64521: [[1576, 1609], 256], 64522: [[1576, 1610], 256], 64523: [[1578, 1580], 256], 64524: [[1578, 1581], 256], 64525: [[1578, 1582], 256], 64526: [[1578, 1605], 256], 64527: [[1578, 1609], 256], 64528: [[1578, 1610], 256], 64529: [[1579, 1580], 256], 64530: [[1579, 1605], 256], 64531: [[1579, 1609], 256], 64532: [[1579, 1610], 256], 64533: [[1580, 1581], 256], 64534: [[1580, 1605], 256], 64535: [[1581, 1580], 256], 64536: [[1581, 1605], 256], 64537: [[1582, 1580], 256], 64538: [[1582, 1581], 256], 64539: [[1582, 1605], 256], 64540: [[1587, 1580], 256], 64541: [[1587, 1581], 256], 64542: [[1587, 1582], 256], 64543: [[1587, 1605], 256], 64544: [[1589, 1581], 256], 64545: [[1589, 1605], 256], 64546: [[1590, 1580], 256], 64547: [[1590, 1581], 256], 64548: [[1590, 1582], 256], 64549: [[1590, 1605], 256], 64550: [[1591, 1581], 256], 64551: [[1591, 1605], 256], 64552: [[1592, 1605], 256], 64553: [[1593, 1580], 256], 64554: [[1593, 1605], 256], 64555: [[1594, 1580], 256], 64556: [[1594, 1605], 256], 64557: [[1601, 1580], 256], 64558: [[1601, 1581], 256], 64559: [[1601, 1582], 256], 64560: [[1601, 1605], 256], 64561: [[1601, 1609], 256], 64562: [[1601, 1610], 256], 64563: [[1602, 1581], 256], 64564: [[1602, 1605], 256], 64565: [[1602, 1609], 256], 64566: [[1602, 1610], 256], 64567: [[1603, 1575], 256], 64568: [[1603, 1580], 256], 64569: [[1603, 1581], 256], 64570: [[1603, 1582], 256], 64571: [[1603, 1604], 256], 64572: [[1603, 1605], 256], 64573: [[1603, 1609], 256], 64574: [[1603, 1610], 256], 64575: [[1604, 1580], 256], 64576: [[1604, 1581], 256], 64577: [[1604, 1582], 256], 64578: [[1604, 1605], 256], 64579: [[1604, 1609], 256], 64580: [[1604, 1610], 256], 64581: [[1605, 1580], 256], 64582: [[1605, 1581], 256], 64583: [[1605, 1582], 256], 64584: [[1605, 1605], 256], 64585: [[1605, 1609], 256], 64586: [[1605, 1610], 256], 64587: [[1606, 1580], 256], 64588: [[1606, 1581], 256], 64589: [[1606, 1582], 256], 64590: [[1606, 1605], 256], 64591: [[1606, 1609], 256], 64592: [[1606, 1610], 256], 64593: [[1607, 1580], 256], 64594: [[1607, 1605], 256], 64595: [[1607, 1609], 256], 64596: [[1607, 1610], 256], 64597: [[1610, 1580], 256], 64598: [[1610, 1581], 256], 64599: [[1610, 1582], 256], 64600: [[1610, 1605], 256], 64601: [[1610, 1609], 256], 64602: [[1610, 1610], 256], 64603: [[1584, 1648], 256], 64604: [[1585, 1648], 256], 64605: [[1609, 1648], 256], 64606: [[32, 1612, 1617], 256], 64607: [[32, 1613, 1617], 256], 64608: [[32, 1614, 1617], 256], 64609: [[32, 1615, 1617], 256], 64610: [[32, 1616, 1617], 256], 64611: [[32, 1617, 1648], 256], 64612: [[1574, 1585], 256], 64613: [[1574, 1586], 256], 64614: [[1574, 1605], 256], 64615: [[1574, 1606], 256], 64616: [[1574, 1609], 256], 64617: [[1574, 1610], 256], 64618: [[1576, 1585], 256], 64619: [[1576, 1586], 256], 64620: [[1576, 1605], 256], 64621: [[1576, 1606], 256], 64622: [[1576, 1609], 256], 64623: [[1576, 1610], 256], 64624: [[1578, 1585], 256], 64625: [[1578, 1586], 256], 64626: [[1578, 1605], 256], 64627: [[1578, 1606], 256], 64628: [[1578, 1609], 256], 64629: [[1578, 1610], 256], 64630: [[1579, 1585], 256], 64631: [[1579, 1586], 256], 64632: [[1579, 1605], 256], 64633: [[1579, 1606], 256], 64634: [[1579, 1609], 256], 64635: [[1579, 1610], 256], 64636: [[1601, 1609], 256], 64637: [[1601, 1610], 256], 64638: [[1602, 1609], 256], 64639: [[1602, 1610], 256], 64640: [[1603, 1575], 256], 64641: [[1603, 1604], 256], 64642: [[1603, 1605], 256], 64643: [[1603, 1609], 256], 64644: [[1603, 1610], 256], 64645: [[1604, 1605], 256], 64646: [[1604, 1609], 256], 64647: [[1604, 1610], 256], 64648: [[1605, 1575], 256], 64649: [[1605, 1605], 256], 64650: [[1606, 1585], 256], 64651: [[1606, 1586], 256], 64652: [[1606, 1605], 256], 64653: [[1606, 1606], 256], 64654: [[1606, 1609], 256], 64655: [[1606, 1610], 256], 64656: [[1609, 1648], 256], 64657: [[1610, 1585], 256], 64658: [[1610, 1586], 256], 64659: [[1610, 1605], 256], 64660: [[1610, 1606], 256], 64661: [[1610, 1609], 256], 64662: [[1610, 1610], 256], 64663: [[1574, 1580], 256], 64664: [[1574, 1581], 256], 64665: [[1574, 1582], 256], 64666: [[1574, 1605], 256], 64667: [[1574, 1607], 256], 64668: [[1576, 1580], 256], 64669: [[1576, 1581], 256], 64670: [[1576, 1582], 256], 64671: [[1576, 1605], 256], 64672: [[1576, 1607], 256], 64673: [[1578, 1580], 256], 64674: [[1578, 1581], 256], 64675: [[1578, 1582], 256], 64676: [[1578, 1605], 256], 64677: [[1578, 1607], 256], 64678: [[1579, 1605], 256], 64679: [[1580, 1581], 256], 64680: [[1580, 1605], 256], 64681: [[1581, 1580], 256], 64682: [[1581, 1605], 256], 64683: [[1582, 1580], 256], 64684: [[1582, 1605], 256], 64685: [[1587, 1580], 256], 64686: [[1587, 1581], 256], 64687: [[1587, 1582], 256], 64688: [[1587, 1605], 256], 64689: [[1589, 1581], 256], 64690: [[1589, 1582], 256], 64691: [[1589, 1605], 256], 64692: [[1590, 1580], 256], 64693: [[1590, 1581], 256], 64694: [[1590, 1582], 256], 64695: [[1590, 1605], 256], 64696: [[1591, 1581], 256], 64697: [[1592, 1605], 256], 64698: [[1593, 1580], 256], 64699: [[1593, 1605], 256], 64700: [[1594, 1580], 256], 64701: [[1594, 1605], 256], 64702: [[1601, 1580], 256], 64703: [[1601, 1581], 256], 64704: [[1601, 1582], 256], 64705: [[1601, 1605], 256], 64706: [[1602, 1581], 256], 64707: [[1602, 1605], 256], 64708: [[1603, 1580], 256], 64709: [[1603, 1581], 256], 64710: [[1603, 1582], 256], 64711: [[1603, 1604], 256], 64712: [[1603, 1605], 256], 64713: [[1604, 1580], 256], 64714: [[1604, 1581], 256], 64715: [[1604, 1582], 256], 64716: [[1604, 1605], 256], 64717: [[1604, 1607], 256], 64718: [[1605, 1580], 256], 64719: [[1605, 1581], 256], 64720: [[1605, 1582], 256], 64721: [[1605, 1605], 256], 64722: [[1606, 1580], 256], 64723: [[1606, 1581], 256], 64724: [[1606, 1582], 256], 64725: [[1606, 1605], 256], 64726: [[1606, 1607], 256], 64727: [[1607, 1580], 256], 64728: [[1607, 1605], 256], 64729: [[1607, 1648], 256], 64730: [[1610, 1580], 256], 64731: [[1610, 1581], 256], 64732: [[1610, 1582], 256], 64733: [[1610, 1605], 256], 64734: [[1610, 1607], 256], 64735: [[1574, 1605], 256], 64736: [[1574, 1607], 256], 64737: [[1576, 1605], 256], 64738: [[1576, 1607], 256], 64739: [[1578, 1605], 256], 64740: [[1578, 1607], 256], 64741: [[1579, 1605], 256], 64742: [[1579, 1607], 256], 64743: [[1587, 1605], 256], 64744: [[1587, 1607], 256], 64745: [[1588, 1605], 256], 64746: [[1588, 1607], 256], 64747: [[1603, 1604], 256], 64748: [[1603, 1605], 256], 64749: [[1604, 1605], 256], 64750: [[1606, 1605], 256], 64751: [[1606, 1607], 256], 64752: [[1610, 1605], 256], 64753: [[1610, 1607], 256], 64754: [[1600, 1614, 1617], 256], 64755: [[1600, 1615, 1617], 256], 64756: [[1600, 1616, 1617], 256], 64757: [[1591, 1609], 256], 64758: [[1591, 1610], 256], 64759: [[1593, 1609], 256], 64760: [[1593, 1610], 256], 64761: [[1594, 1609], 256], 64762: [[1594, 1610], 256], 64763: [[1587, 1609], 256], 64764: [[1587, 1610], 256], 64765: [[1588, 1609], 256], 64766: [[1588, 1610], 256], 64767: [[1581, 1609], 256] },
+        64768: { 64768: [[1581, 1610], 256], 64769: [[1580, 1609], 256], 64770: [[1580, 1610], 256], 64771: [[1582, 1609], 256], 64772: [[1582, 1610], 256], 64773: [[1589, 1609], 256], 64774: [[1589, 1610], 256], 64775: [[1590, 1609], 256], 64776: [[1590, 1610], 256], 64777: [[1588, 1580], 256], 64778: [[1588, 1581], 256], 64779: [[1588, 1582], 256], 64780: [[1588, 1605], 256], 64781: [[1588, 1585], 256], 64782: [[1587, 1585], 256], 64783: [[1589, 1585], 256], 64784: [[1590, 1585], 256], 64785: [[1591, 1609], 256], 64786: [[1591, 1610], 256], 64787: [[1593, 1609], 256], 64788: [[1593, 1610], 256], 64789: [[1594, 1609], 256], 64790: [[1594, 1610], 256], 64791: [[1587, 1609], 256], 64792: [[1587, 1610], 256], 64793: [[1588, 1609], 256], 64794: [[1588, 1610], 256], 64795: [[1581, 1609], 256], 64796: [[1581, 1610], 256], 64797: [[1580, 1609], 256], 64798: [[1580, 1610], 256], 64799: [[1582, 1609], 256], 64800: [[1582, 1610], 256], 64801: [[1589, 1609], 256], 64802: [[1589, 1610], 256], 64803: [[1590, 1609], 256], 64804: [[1590, 1610], 256], 64805: [[1588, 1580], 256], 64806: [[1588, 1581], 256], 64807: [[1588, 1582], 256], 64808: [[1588, 1605], 256], 64809: [[1588, 1585], 256], 64810: [[1587, 1585], 256], 64811: [[1589, 1585], 256], 64812: [[1590, 1585], 256], 64813: [[1588, 1580], 256], 64814: [[1588, 1581], 256], 64815: [[1588, 1582], 256], 64816: [[1588, 1605], 256], 64817: [[1587, 1607], 256], 64818: [[1588, 1607], 256], 64819: [[1591, 1605], 256], 64820: [[1587, 1580], 256], 64821: [[1587, 1581], 256], 64822: [[1587, 1582], 256], 64823: [[1588, 1580], 256], 64824: [[1588, 1581], 256], 64825: [[1588, 1582], 256], 64826: [[1591, 1605], 256], 64827: [[1592, 1605], 256], 64828: [[1575, 1611], 256], 64829: [[1575, 1611], 256], 64848: [[1578, 1580, 1605], 256], 64849: [[1578, 1581, 1580], 256], 64850: [[1578, 1581, 1580], 256], 64851: [[1578, 1581, 1605], 256], 64852: [[1578, 1582, 1605], 256], 64853: [[1578, 1605, 1580], 256], 64854: [[1578, 1605, 1581], 256], 64855: [[1578, 1605, 1582], 256], 64856: [[1580, 1605, 1581], 256], 64857: [[1580, 1605, 1581], 256], 64858: [[1581, 1605, 1610], 256], 64859: [[1581, 1605, 1609], 256], 64860: [[1587, 1581, 1580], 256], 64861: [[1587, 1580, 1581], 256], 64862: [[1587, 1580, 1609], 256], 64863: [[1587, 1605, 1581], 256], 64864: [[1587, 1605, 1581], 256], 64865: [[1587, 1605, 1580], 256], 64866: [[1587, 1605, 1605], 256], 64867: [[1587, 1605, 1605], 256], 64868: [[1589, 1581, 1581], 256], 64869: [[1589, 1581, 1581], 256], 64870: [[1589, 1605, 1605], 256], 64871: [[1588, 1581, 1605], 256], 64872: [[1588, 1581, 1605], 256], 64873: [[1588, 1580, 1610], 256], 64874: [[1588, 1605, 1582], 256], 64875: [[1588, 1605, 1582], 256], 64876: [[1588, 1605, 1605], 256], 64877: [[1588, 1605, 1605], 256], 64878: [[1590, 1581, 1609], 256], 64879: [[1590, 1582, 1605], 256], 64880: [[1590, 1582, 1605], 256], 64881: [[1591, 1605, 1581], 256], 64882: [[1591, 1605, 1581], 256], 64883: [[1591, 1605, 1605], 256], 64884: [[1591, 1605, 1610], 256], 64885: [[1593, 1580, 1605], 256], 64886: [[1593, 1605, 1605], 256], 64887: [[1593, 1605, 1605], 256], 64888: [[1593, 1605, 1609], 256], 64889: [[1594, 1605, 1605], 256], 64890: [[1594, 1605, 1610], 256], 64891: [[1594, 1605, 1609], 256], 64892: [[1601, 1582, 1605], 256], 64893: [[1601, 1582, 1605], 256], 64894: [[1602, 1605, 1581], 256], 64895: [[1602, 1605, 1605], 256], 64896: [[1604, 1581, 1605], 256], 64897: [[1604, 1581, 1610], 256], 64898: [[1604, 1581, 1609], 256], 64899: [[1604, 1580, 1580], 256], 64900: [[1604, 1580, 1580], 256], 64901: [[1604, 1582, 1605], 256], 64902: [[1604, 1582, 1605], 256], 64903: [[1604, 1605, 1581], 256], 64904: [[1604, 1605, 1581], 256], 64905: [[1605, 1581, 1580], 256], 64906: [[1605, 1581, 1605], 256], 64907: [[1605, 1581, 1610], 256], 64908: [[1605, 1580, 1581], 256], 64909: [[1605, 1580, 1605], 256], 64910: [[1605, 1582, 1580], 256], 64911: [[1605, 1582, 1605], 256], 64914: [[1605, 1580, 1582], 256], 64915: [[1607, 1605, 1580], 256], 64916: [[1607, 1605, 1605], 256], 64917: [[1606, 1581, 1605], 256], 64918: [[1606, 1581, 1609], 256], 64919: [[1606, 1580, 1605], 256], 64920: [[1606, 1580, 1605], 256], 64921: [[1606, 1580, 1609], 256], 64922: [[1606, 1605, 1610], 256], 64923: [[1606, 1605, 1609], 256], 64924: [[1610, 1605, 1605], 256], 64925: [[1610, 1605, 1605], 256], 64926: [[1576, 1582, 1610], 256], 64927: [[1578, 1580, 1610], 256], 64928: [[1578, 1580, 1609], 256], 64929: [[1578, 1582, 1610], 256], 64930: [[1578, 1582, 1609], 256], 64931: [[1578, 1605, 1610], 256], 64932: [[1578, 1605, 1609], 256], 64933: [[1580, 1605, 1610], 256], 64934: [[1580, 1581, 1609], 256], 64935: [[1580, 1605, 1609], 256], 64936: [[1587, 1582, 1609], 256], 64937: [[1589, 1581, 1610], 256], 64938: [[1588, 1581, 1610], 256], 64939: [[1590, 1581, 1610], 256], 64940: [[1604, 1580, 1610], 256], 64941: [[1604, 1605, 1610], 256], 64942: [[1610, 1581, 1610], 256], 64943: [[1610, 1580, 1610], 256], 64944: [[1610, 1605, 1610], 256], 64945: [[1605, 1605, 1610], 256], 64946: [[1602, 1605, 1610], 256], 64947: [[1606, 1581, 1610], 256], 64948: [[1602, 1605, 1581], 256], 64949: [[1604, 1581, 1605], 256], 64950: [[1593, 1605, 1610], 256], 64951: [[1603, 1605, 1610], 256], 64952: [[1606, 1580, 1581], 256], 64953: [[1605, 1582, 1610], 256], 64954: [[1604, 1580, 1605], 256], 64955: [[1603, 1605, 1605], 256], 64956: [[1604, 1580, 1605], 256], 64957: [[1606, 1580, 1581], 256], 64958: [[1580, 1581, 1610], 256], 64959: [[1581, 1580, 1610], 256], 64960: [[1605, 1580, 1610], 256], 64961: [[1601, 1605, 1610], 256], 64962: [[1576, 1581, 1610], 256], 64963: [[1603, 1605, 1605], 256], 64964: [[1593, 1580, 1605], 256], 64965: [[1589, 1605, 1605], 256], 64966: [[1587, 1582, 1610], 256], 64967: [[1606, 1580, 1610], 256], 65008: [[1589, 1604, 1746], 256], 65009: [[1602, 1604, 1746], 256], 65010: [[1575, 1604, 1604, 1607], 256], 65011: [[1575, 1603, 1576, 1585], 256], 65012: [[1605, 1581, 1605, 1583], 256], 65013: [[1589, 1604, 1593, 1605], 256], 65014: [[1585, 1587, 1608, 1604], 256], 65015: [[1593, 1604, 1610, 1607], 256], 65016: [[1608, 1587, 1604, 1605], 256], 65017: [[1589, 1604, 1609], 256], 65018: [[1589, 1604, 1609, 32, 1575, 1604, 1604, 1607, 32, 1593, 1604, 1610, 1607, 32, 1608, 1587, 1604, 1605], 256], 65019: [[1580, 1604, 32, 1580, 1604, 1575, 1604, 1607], 256], 65020: [[1585, 1740, 1575, 1604], 256] },
+        65024: { 65040: [[44], 256], 65041: [[12289], 256], 65042: [[12290], 256], 65043: [[58], 256], 65044: [[59], 256], 65045: [[33], 256], 65046: [[63], 256], 65047: [[12310], 256], 65048: [[12311], 256], 65049: [[8230], 256], 65056: [, 230], 65057: [, 230], 65058: [, 230], 65059: [, 230], 65060: [, 230], 65061: [, 230], 65062: [, 230], 65063: [, 220], 65064: [, 220], 65065: [, 220], 65066: [, 220], 65067: [, 220], 65068: [, 220], 65069: [, 220], 65072: [[8229], 256], 65073: [[8212], 256], 65074: [[8211], 256], 65075: [[95], 256], 65076: [[95], 256], 65077: [[40], 256], 65078: [[41], 256], 65079: [[123], 256], 65080: [[125], 256], 65081: [[12308], 256], 65082: [[12309], 256], 65083: [[12304], 256], 65084: [[12305], 256], 65085: [[12298], 256], 65086: [[12299], 256], 65087: [[12296], 256], 65088: [[12297], 256], 65089: [[12300], 256], 65090: [[12301], 256], 65091: [[12302], 256], 65092: [[12303], 256], 65095: [[91], 256], 65096: [[93], 256], 65097: [[8254], 256], 65098: [[8254], 256], 65099: [[8254], 256], 65100: [[8254], 256], 65101: [[95], 256], 65102: [[95], 256], 65103: [[95], 256], 65104: [[44], 256], 65105: [[12289], 256], 65106: [[46], 256], 65108: [[59], 256], 65109: [[58], 256], 65110: [[63], 256], 65111: [[33], 256], 65112: [[8212], 256], 65113: [[40], 256], 65114: [[41], 256], 65115: [[123], 256], 65116: [[125], 256], 65117: [[12308], 256], 65118: [[12309], 256], 65119: [[35], 256], 65120: [[38], 256], 65121: [[42], 256], 65122: [[43], 256], 65123: [[45], 256], 65124: [[60], 256], 65125: [[62], 256], 65126: [[61], 256], 65128: [[92], 256], 65129: [[36], 256], 65130: [[37], 256], 65131: [[64], 256], 65136: [[32, 1611], 256], 65137: [[1600, 1611], 256], 65138: [[32, 1612], 256], 65140: [[32, 1613], 256], 65142: [[32, 1614], 256], 65143: [[1600, 1614], 256], 65144: [[32, 1615], 256], 65145: [[1600, 1615], 256], 65146: [[32, 1616], 256], 65147: [[1600, 1616], 256], 65148: [[32, 1617], 256], 65149: [[1600, 1617], 256], 65150: [[32, 1618], 256], 65151: [[1600, 1618], 256], 65152: [[1569], 256], 65153: [[1570], 256], 65154: [[1570], 256], 65155: [[1571], 256], 65156: [[1571], 256], 65157: [[1572], 256], 65158: [[1572], 256], 65159: [[1573], 256], 65160: [[1573], 256], 65161: [[1574], 256], 65162: [[1574], 256], 65163: [[1574], 256], 65164: [[1574], 256], 65165: [[1575], 256], 65166: [[1575], 256], 65167: [[1576], 256], 65168: [[1576], 256], 65169: [[1576], 256], 65170: [[1576], 256], 65171: [[1577], 256], 65172: [[1577], 256], 65173: [[1578], 256], 65174: [[1578], 256], 65175: [[1578], 256], 65176: [[1578], 256], 65177: [[1579], 256], 65178: [[1579], 256], 65179: [[1579], 256], 65180: [[1579], 256], 65181: [[1580], 256], 65182: [[1580], 256], 65183: [[1580], 256], 65184: [[1580], 256], 65185: [[1581], 256], 65186: [[1581], 256], 65187: [[1581], 256], 65188: [[1581], 256], 65189: [[1582], 256], 65190: [[1582], 256], 65191: [[1582], 256], 65192: [[1582], 256], 65193: [[1583], 256], 65194: [[1583], 256], 65195: [[1584], 256], 65196: [[1584], 256], 65197: [[1585], 256], 65198: [[1585], 256], 65199: [[1586], 256], 65200: [[1586], 256], 65201: [[1587], 256], 65202: [[1587], 256], 65203: [[1587], 256], 65204: [[1587], 256], 65205: [[1588], 256], 65206: [[1588], 256], 65207: [[1588], 256], 65208: [[1588], 256], 65209: [[1589], 256], 65210: [[1589], 256], 65211: [[1589], 256], 65212: [[1589], 256], 65213: [[1590], 256], 65214: [[1590], 256], 65215: [[1590], 256], 65216: [[1590], 256], 65217: [[1591], 256], 65218: [[1591], 256], 65219: [[1591], 256], 65220: [[1591], 256], 65221: [[1592], 256], 65222: [[1592], 256], 65223: [[1592], 256], 65224: [[1592], 256], 65225: [[1593], 256], 65226: [[1593], 256], 65227: [[1593], 256], 65228: [[1593], 256], 65229: [[1594], 256], 65230: [[1594], 256], 65231: [[1594], 256], 65232: [[1594], 256], 65233: [[1601], 256], 65234: [[1601], 256], 65235: [[1601], 256], 65236: [[1601], 256], 65237: [[1602], 256], 65238: [[1602], 256], 65239: [[1602], 256], 65240: [[1602], 256], 65241: [[1603], 256], 65242: [[1603], 256], 65243: [[1603], 256], 65244: [[1603], 256], 65245: [[1604], 256], 65246: [[1604], 256], 65247: [[1604], 256], 65248: [[1604], 256], 65249: [[1605], 256], 65250: [[1605], 256], 65251: [[1605], 256], 65252: [[1605], 256], 65253: [[1606], 256], 65254: [[1606], 256], 65255: [[1606], 256], 65256: [[1606], 256], 65257: [[1607], 256], 65258: [[1607], 256], 65259: [[1607], 256], 65260: [[1607], 256], 65261: [[1608], 256], 65262: [[1608], 256], 65263: [[1609], 256], 65264: [[1609], 256], 65265: [[1610], 256], 65266: [[1610], 256], 65267: [[1610], 256], 65268: [[1610], 256], 65269: [[1604, 1570], 256], 65270: [[1604, 1570], 256], 65271: [[1604, 1571], 256], 65272: [[1604, 1571], 256], 65273: [[1604, 1573], 256], 65274: [[1604, 1573], 256], 65275: [[1604, 1575], 256], 65276: [[1604, 1575], 256] },
+        65280: { 65281: [[33], 256], 65282: [[34], 256], 65283: [[35], 256], 65284: [[36], 256], 65285: [[37], 256], 65286: [[38], 256], 65287: [[39], 256], 65288: [[40], 256], 65289: [[41], 256], 65290: [[42], 256], 65291: [[43], 256], 65292: [[44], 256], 65293: [[45], 256], 65294: [[46], 256], 65295: [[47], 256], 65296: [[48], 256], 65297: [[49], 256], 65298: [[50], 256], 65299: [[51], 256], 65300: [[52], 256], 65301: [[53], 256], 65302: [[54], 256], 65303: [[55], 256], 65304: [[56], 256], 65305: [[57], 256], 65306: [[58], 256], 65307: [[59], 256], 65308: [[60], 256], 65309: [[61], 256], 65310: [[62], 256], 65311: [[63], 256], 65312: [[64], 256], 65313: [[65], 256], 65314: [[66], 256], 65315: [[67], 256], 65316: [[68], 256], 65317: [[69], 256], 65318: [[70], 256], 65319: [[71], 256], 65320: [[72], 256], 65321: [[73], 256], 65322: [[74], 256], 65323: [[75], 256], 65324: [[76], 256], 65325: [[77], 256], 65326: [[78], 256], 65327: [[79], 256], 65328: [[80], 256], 65329: [[81], 256], 65330: [[82], 256], 65331: [[83], 256], 65332: [[84], 256], 65333: [[85], 256], 65334: [[86], 256], 65335: [[87], 256], 65336: [[88], 256], 65337: [[89], 256], 65338: [[90], 256], 65339: [[91], 256], 65340: [[92], 256], 65341: [[93], 256], 65342: [[94], 256], 65343: [[95], 256], 65344: [[96], 256], 65345: [[97], 256], 65346: [[98], 256], 65347: [[99], 256], 65348: [[100], 256], 65349: [[101], 256], 65350: [[102], 256], 65351: [[103], 256], 65352: [[104], 256], 65353: [[105], 256], 65354: [[106], 256], 65355: [[107], 256], 65356: [[108], 256], 65357: [[109], 256], 65358: [[110], 256], 65359: [[111], 256], 65360: [[112], 256], 65361: [[113], 256], 65362: [[114], 256], 65363: [[115], 256], 65364: [[116], 256], 65365: [[117], 256], 65366: [[118], 256], 65367: [[119], 256], 65368: [[120], 256], 65369: [[121], 256], 65370: [[122], 256], 65371: [[123], 256], 65372: [[124], 256], 65373: [[125], 256], 65374: [[126], 256], 65375: [[10629], 256], 65376: [[10630], 256], 65377: [[12290], 256], 65378: [[12300], 256], 65379: [[12301], 256], 65380: [[12289], 256], 65381: [[12539], 256], 65382: [[12530], 256], 65383: [[12449], 256], 65384: [[12451], 256], 65385: [[12453], 256], 65386: [[12455], 256], 65387: [[12457], 256], 65388: [[12515], 256], 65389: [[12517], 256], 65390: [[12519], 256], 65391: [[12483], 256], 65392: [[12540], 256], 65393: [[12450], 256], 65394: [[12452], 256], 65395: [[12454], 256], 65396: [[12456], 256], 65397: [[12458], 256], 65398: [[12459], 256], 65399: [[12461], 256], 65400: [[12463], 256], 65401: [[12465], 256], 65402: [[12467], 256], 65403: [[12469], 256], 65404: [[12471], 256], 65405: [[12473], 256], 65406: [[12475], 256], 65407: [[12477], 256], 65408: [[12479], 256], 65409: [[12481], 256], 65410: [[12484], 256], 65411: [[12486], 256], 65412: [[12488], 256], 65413: [[12490], 256], 65414: [[12491], 256], 65415: [[12492], 256], 65416: [[12493], 256], 65417: [[12494], 256], 65418: [[12495], 256], 65419: [[12498], 256], 65420: [[12501], 256], 65421: [[12504], 256], 65422: [[12507], 256], 65423: [[12510], 256], 65424: [[12511], 256], 65425: [[12512], 256], 65426: [[12513], 256], 65427: [[12514], 256], 65428: [[12516], 256], 65429: [[12518], 256], 65430: [[12520], 256], 65431: [[12521], 256], 65432: [[12522], 256], 65433: [[12523], 256], 65434: [[12524], 256], 65435: [[12525], 256], 65436: [[12527], 256], 65437: [[12531], 256], 65438: [[12441], 256], 65439: [[12442], 256], 65440: [[12644], 256], 65441: [[12593], 256], 65442: [[12594], 256], 65443: [[12595], 256], 65444: [[12596], 256], 65445: [[12597], 256], 65446: [[12598], 256], 65447: [[12599], 256], 65448: [[12600], 256], 65449: [[12601], 256], 65450: [[12602], 256], 65451: [[12603], 256], 65452: [[12604], 256], 65453: [[12605], 256], 65454: [[12606], 256], 65455: [[12607], 256], 65456: [[12608], 256], 65457: [[12609], 256], 65458: [[12610], 256], 65459: [[12611], 256], 65460: [[12612], 256], 65461: [[12613], 256], 65462: [[12614], 256], 65463: [[12615], 256], 65464: [[12616], 256], 65465: [[12617], 256], 65466: [[12618], 256], 65467: [[12619], 256], 65468: [[12620], 256], 65469: [[12621], 256], 65470: [[12622], 256], 65474: [[12623], 256], 65475: [[12624], 256], 65476: [[12625], 256], 65477: [[12626], 256], 65478: [[12627], 256], 65479: [[12628], 256], 65482: [[12629], 256], 65483: [[12630], 256], 65484: [[12631], 256], 65485: [[12632], 256], 65486: [[12633], 256], 65487: [[12634], 256], 65490: [[12635], 256], 65491: [[12636], 256], 65492: [[12637], 256], 65493: [[12638], 256], 65494: [[12639], 256], 65495: [[12640], 256], 65498: [[12641], 256], 65499: [[12642], 256], 65500: [[12643], 256], 65504: [[162], 256], 65505: [[163], 256], 65506: [[172], 256], 65507: [[175], 256], 65508: [[166], 256], 65509: [[165], 256], 65510: [[8361], 256], 65512: [[9474], 256], 65513: [[8592], 256], 65514: [[8593], 256], 65515: [[8594], 256], 65516: [[8595], 256], 65517: [[9632], 256], 65518: [[9675], 256] }
+      };
+      var unorm = {
+        nfc,
+        nfd,
+        nfkc,
+        nfkd
+      };
+      if (typeof module2 === "object") {
+        module2.exports = unorm;
+      } else if (typeof define === "function" && define.amd) {
+        define("unorm", function() {
+          return unorm;
+        });
+      } else {
+        root.unorm = unorm;
+      }
+      unorm.shimApplied = false;
+      if (!String.prototype.normalize) {
+        Object.defineProperty(String.prototype, "normalize", {
+          enumerable: false,
+          configurable: true,
+          writable: true,
+          value: function normalize2() {
+            var str = "" + this;
+            var form = arguments[0] === void 0 ? "NFC" : arguments[0];
+            if (this === null || this === void 0) {
+              throw new TypeError("Cannot call method on " + Object.prototype.toString.call(this));
+            }
+            if (form === "NFC") {
+              return unorm.nfc(str);
+            } else if (form === "NFD") {
+              return unorm.nfd(str);
+            } else if (form === "NFKC") {
+              return unorm.nfkc(str);
+            } else if (form === "NFKD") {
+              return unorm.nfkd(str);
+            } else {
+              throw new RangeError("Invalid normalization form: " + form);
+            }
+          }
+        });
+        unorm.shimApplied = true;
+      }
+    })(exports);
+  }
+});
+
+// node_modules/pdfjs/lib/font/base.js
+var require_base = __commonJS({
+  "node_modules/pdfjs/lib/font/base.js"(exports, module2) {
+    "use strict";
+    var Font = class {
+      static isFont(font) {
+        return font && (font instanceof Font || typeof font === "object" && typeof font.encode === "function" && typeof font.stringWidth === "function" && typeof font.lineHeight === "function" && typeof font.ascent === "function" && typeof font.descent === "function" && typeof font.underlinePosition === "function" && typeof font.underlineThickness === "function" && typeof font.write === "function");
+      }
+    };
+    var StringWidth = class {
+      constructor(width, kerning) {
+        this.width = width;
+        this.kerning = kerning;
+      }
+      valueOf() {
+        return this.width;
+      }
+    };
+    Font.StringWidth = StringWidth;
+    module2.exports = Font;
+  }
+});
+
+// node_modules/pdfjs/lib/text.js
+var require_text = __commonJS({
+  "node_modules/pdfjs/lib/text.js"(exports, module2) {
+    "use strict";
+    var Fragment = require_fragment();
+    var LineBreaker = require_linebreaker();
+    var unorm = require_unorm();
+    var ops = require_ops();
+    var util = require_util();
+    var Font = require_base();
+    var PDF = require_object2();
+    var UNDERLINE_FLAG = 1;
+    var STRIKETHROUGH_FLAG = 2;
+    var Text = module2.exports = class Text extends Fragment {
+      constructor(doc, parent, opts) {
+        super(doc, parent);
+        this._line = [];
+        this._spaceLeft = 0;
+        this._parts = 0;
+        this._isFirstLine = true;
+        this._isNewLine = true;
+        this._previousFont = null;
+        this._previousFontSize = null;
+        this._previousColor = null;
+        this._previousHeight = 0;
+        this._previousDescent = 0;
+        this.opts = opts;
+        this.defaultFont = opts.font || this._doc.defaultFont;
+        this.defaultFontSize = opts.fontSize || this._doc.defaultFontSize;
+        this.defaultColor = opts.color && util.colorToRgb(opts.color) || this._doc.defaultColor;
+        this.defaultLineHeight = opts.lineHeight || this._doc.defaultLineHeight;
+        this.defaultDecoration = (opts.underline ? UNDERLINE_FLAG : 0) | (opts.strikethrough ? STRIKETHROUGH_FLAG : 0);
+        this.alignment = opts.alignment || opts.textAlign || "left";
+        this.link = opts.link;
+        this.destination = opts.destination;
+        this.goTo = opts.goTo;
+      }
+      /// private API
+      async _start() {
+        if (!this._doc._currentContent) {
+          await this._doc._startPage();
+        }
+        this._spaceLeft = this._cursor.width;
+      }
+      async _end() {
+        await this._doc._write(ops.ET());
+      }
+      async _render(text, opts) {
+        this._parts--;
+        if (!Font.isFont(opts.font || this.defaultFont)) {
+          throw new TypeError("invalid font: " + font);
+        }
+        const font = this._doc._fontInstance(opts.font || this.defaultFont);
+        const fontSize = opts.fontSize || this.defaultFontSize;
+        const color = opts.color && util.colorToRgb(opts.color) || this.defaultColor;
+        const lineHeight = opts.lineHeight || this.defaultLineHeight;
+        const link = opts.link || this.link;
+        const destination = opts.destination || this.destination;
+        const goTo = opts.goTo || this.goTo;
+        const decoration = this.defaultDecoration | (opts.underline ? UNDERLINE_FLAG : 0) | (opts.strikethrough ? STRIKETHROUGH_FLAG : 0);
+        text = String(text);
+        text = text.replace(/\r\n/g, "\n").replace(/\u2028|\u2029/g, "");
+        const breaker = new LineBreaker(text);
+        let last = 0, bk;
+        const isLastTextChunk = this._parts === 0 && this._ended;
+        let postponeLinebreak = false;
+        let nextWord = null;
+        while (nextWord !== null || postponeLinebreak || (bk = breaker.nextBreak()) || isLastTextChunk && this._line.length > 0) {
+          let word = null;
+          if (nextWord) {
+            word = nextWord;
+            nextWord = null;
+          } else if (bk) {
+            let until = bk.position;
+            const lastIsSpace = text[bk.position - 1].match(/\s/);
+            if (lastIsSpace) {
+              until--;
+            }
+            word = text.slice(last, until);
+            if (bk.position === text.length || lastIsSpace) {
+              last = bk.position;
+            } else {
+              continue;
+            }
+            word = unorm.nfc(word);
+          }
+          let wordWidth = 0;
+          let offsetWidth = 0;
+          let spaceWidth = 0;
+          if (word) {
+            wordWidth = font.stringWidth(word, fontSize);
+            offsetWidth = wordWidth.width;
+            spaceWidth = font.stringWidth(" ", fontSize).width;
+            if (this._line.length > (this._isNewLine ? 0 : 1)) {
+              offsetWidth += spaceWidth;
+            }
+          }
+          const isLastWord = (!bk || bk.position === text.length) && isLastTextChunk;
+          const notEnoughSpace = this._spaceLeft < offsetWidth;
+          if (postponeLinebreak || bk && bk.required || isLastWord || notEnoughSpace) {
+            if (this._line.length === 0 && notEnoughSpace) {
+              for (let i = word.length - 1; i >= 0; --i) {
+                const w = font.stringWidth(word.slice(i), fontSize);
+                if (this._spaceLeft >= offsetWidth - w.width) {
+                  const subword = word.slice(0, i);
+                  this._line.push(
+                    new TextChunk({
+                      wordWidth: font.stringWidth(subword, fontSize),
+                      spaceWidth,
+                      word: subword,
+                      font,
+                      fontSize,
+                      color,
+                      decoration,
+                      link,
+                      destination,
+                      goTo
+                    })
+                  );
+                  offsetWidth -= w.width;
+                  this._spaceLeft -= offsetWidth;
+                  nextWord = word.slice(i);
+                  word = null;
+                  break;
+                }
+              }
+            }
+            if (!postponeLinebreak && word && this._spaceLeft - offsetWidth >= 0) {
+              this._line.push(
+                new TextChunk({
+                  wordWidth,
+                  spaceWidth,
+                  word,
+                  font,
+                  fontSize,
+                  color,
+                  decoration,
+                  link,
+                  destination,
+                  goTo
+                })
+              );
+              this._spaceLeft -= offsetWidth;
+              word = null;
+            }
+            let left = this._cursor.x;
+            let height = 0;
+            let descent = 0;
+            for (const w of this._line) {
+              const h = w.font.lineHeight(w.fontSize, true);
+              if (h > height) {
+                height = h;
+              }
+              const d = -w.font.descent(w.fontSize);
+              if (d > descent) {
+                descent = d;
+              }
+            }
+            height *= lineHeight;
+            descent *= lineHeight;
+            if (height === 0) {
+              height = this._previousHeight;
+              descent = this._previousDescent;
+            }
+            if (!this._cursor.doesFit(height)) {
+              if (!this._isFirstLine) {
+                await this._doc._write(ops.ET());
+              }
+              let remainingText = bk ? (word ? word + " " : "") + text.substring(bk.position) : "";
+              if (bk && bk.required) {
+                remainingText += "\n";
+              }
+              this._pending.unshift(() => {
+                this._parts++;
+                return this._render(remainingText, opts);
+              });
+              await this._parent._pageBreak(1);
+              this._isFirstLine = true;
+              this._isNewLine = true;
+              this._previousFont = null;
+              this._previousFontSize = null;
+              this._previousColor = null;
+              break;
+            }
+            this._cursor.y -= height;
+            const freeSpace = this._spaceLeft;
+            let spacing = 0;
+            switch (this.alignment) {
+              case "right":
+                left += freeSpace;
+                break;
+              case "center":
+                left += this._cursor.width / 2 - (this._cursor.width - freeSpace) / 2;
+                break;
+              case "justify":
+                const isLastLine = isLastWord || bk && bk.required;
+                if (isLastLine && freeSpace / this._cursor.width > 0.2) {
+                  break;
+                }
+                if (this._line.length > 1) {
+                  spacing = freeSpace / (this._line.length - 1);
+                }
+                break;
+            }
+            let chunk = "";
+            if (this._isFirstLine) {
+              this._previousHeight = height;
+              chunk += ops.BT() + ops.Tm(1, 0, 0, 1, left, this._cursor.y) + ops.TL(this._previousHeight);
+            } else {
+              const lh = height + this._previousDescent;
+              if (height > 0 && lh !== this._previousHeight) {
+                this._previousHeight = lh;
+                chunk += ops.TL(lh);
+              }
+              if (left > this._cursor.x) {
+                chunk += ops.Tm(1, 0, 0, 1, left, this._cursor.y);
+              } else {
+                chunk += ops.Tstar();
+              }
+            }
+            if (height > 0) {
+              this._previousDescent = descent;
+            }
+            const out = [];
+            const rangeStyleArgs = [this._doc, left, this._cursor.y, height, spacing];
+            const underlineStyle = new UnderlineRangeStyle(...rangeStyleArgs);
+            const strikethroughStyle = new StrikethroughRangeStyle(...rangeStyleArgs);
+            const linkStyle = new LinkRangeStyle(...rangeStyleArgs);
+            const destinationStyle = new DestinationRangeStyle(...rangeStyleArgs);
+            const goToStyle = new GoToRangeStyle(...rangeStyleArgs);
+            const lastIx = this._line.length - 1;
+            for (let i = 0; i < this._line.length; ++i) {
+              const w = this._line[i];
+              const fontStyleChanged = w.font !== this._previousFont || w.fontSize !== this._previousFontSize;
+              const colorChanged = !util.rgbEqual(w.color, this._previousColor);
+              chunk += underlineStyle.applyStyle(w, i === lastIx, fontStyleChanged || colorChanged);
+              chunk += strikethroughStyle.applyStyle(w, i === lastIx, fontStyleChanged || colorChanged);
+              chunk += linkStyle.applyStyle(w, i === lastIx, fontStyleChanged || colorChanged);
+              chunk += destinationStyle.applyStyle(w, i === lastIx, fontStyleChanged || colorChanged);
+              chunk += goToStyle.applyStyle(w, i === lastIx, fontStyleChanged || colorChanged);
+              if (fontStyleChanged || colorChanged) {
+                if (out.length > 0) {
+                  chunk += ops.TJ(out);
+                }
+                if (fontStyleChanged) {
+                  this._previousFont = w.font;
+                  this._previousFontSize = w.fontSize;
+                  const alias = this._doc._fontAlias(w.font);
+                  chunk += ops.Tf(alias, w.fontSize);
+                }
+                if (colorChanged) {
+                  this._previousColor = w.color;
+                  chunk += ops.sc(...w.color);
+                }
+                out.length = 0;
+              }
+              const kerning = w.wordWidth.kerning;
+              if (kerning.length > 0) {
+                let pos = 0;
+                for (let i2 = 0; i2 < kerning.length; ++i2) {
+                  let subword = w.word.substring(pos, kerning[i2].pos);
+                  out.push(w.font.encode(subword), kerning[i2].offset);
+                  pos = kerning[i2].pos;
+                }
+                out.push(w.font.encode(w.word.substring(pos)));
+              } else {
+                out.push(w.font.encode(w.word));
+              }
+              if (i < this._line.length - 1 && w.spaceWidth > 0) {
+                out.push(calcSpaceWidth(spacing, w.font, w.fontSize));
+              }
+            }
+            if (out.length > 0) {
+              chunk += ops.TJ(out);
+            }
+            await this._doc._write(chunk);
+            this._cursor.y -= descent;
+            this._spaceLeft = this._cursor.width;
+            this._line.length = 0;
+            this._isFirstLine = false;
+            this._isNewLine = bk && bk.required;
+            postponeLinebreak = bk && bk.required && word !== null && word.length > 0;
+          }
+          if (word) {
+            this._line.push(
+              new TextChunk({
+                wordWidth,
+                spaceWidth,
+                word,
+                font,
+                fontSize,
+                color,
+                decoration,
+                link,
+                destination,
+                goTo
+              })
+            );
+            this._spaceLeft -= offsetWidth;
+          }
+          bk = null;
+        }
+      }
+      /// public API
+      add(text, opts) {
+        this._begin(null);
+        this._parts++;
+        this._pending.push(() => this._render(text, opts || {}));
+        return this;
+      }
+      append(text, opts) {
+        this._begin(null);
+        this._parts++;
+        this._pending.push(() => {
+          if (this._line.length > 0) {
+            const w = this._line[this._line.length - 1];
+            this._spaceLeft += w.spaceWidth;
+            w.spaceWidth = 0;
+          }
+          return this._render(text, opts || {});
+        });
+        return this;
+      }
+      br() {
+        this._begin(null);
+        this._parts++;
+        this._pending.push(() => this._render("\n\n", {}));
+        return this;
+      }
+    };
+    function calcSpaceWidth(spacing, font, fontSize) {
+      const scaleFactor = 1e3 / fontSize;
+      return -(spacing + font.stringWidth(" ", fontSize)) * scaleFactor;
+    }
+    var TextChunk = class {
+      constructor(values) {
+        this.wordWidth = values.wordWidth;
+        this.spaceWidth = values.spaceWidth;
+        this.word = values.word;
+        this.font = values.font;
+        this.fontSize = values.fontSize;
+        this.color = values.color;
+        this.decoration = values.decoration;
+        this.link = values.link;
+        this.destination = values.destination;
+        this.goTo = values.goTo;
+      }
+    };
+    var RangeStyle = class {
+      constructor(doc, x, y, height, spacing) {
+        this.doc = doc;
+        this.from = x;
+        this.width = 0;
+        this.y = y;
+        this.height = height;
+        this.spacing = spacing;
+        this.isActive = false;
+        this.lastSpaceWidth = 0;
+      }
+      applyStyle(textChunk, isLast, fontStyleChanged) {
+        const shouldApply = this._active(textChunk);
+        let chunk = "";
+        if (shouldApply && !fontStyleChanged && this.isActive) {
+          this.width += this.lastSpaceWidth;
+        }
+        if (this.isActive && (!shouldApply || fontStyleChanged)) {
+          chunk += this._applyStyle(textChunk);
+          this.from += this.width + this.lastSpaceWidth;
+          this.width = 0;
+        }
+        if (!this.isActive || shouldApply || this.isActive && fontStyleChanged) {
+          this._start(textChunk);
+        }
+        this.isActive = shouldApply;
+        this.lastSpaceWidth = this.spacing || textChunk.spaceWidth;
+        if (this.isActive) {
+          this.width += textChunk.wordWidth;
+        } else {
+          this.from += textChunk.wordWidth + this.lastSpaceWidth;
+        }
+        if (this.isActive && isLast) {
+          chunk += this._applyStyle(textChunk);
+        }
+        return chunk;
+      }
+      _active(textChunk) {
+      }
+      _start(textChunk) {
+      }
+      _applyStyle(textChunk) {
+      }
+    };
+    var UnderlineRangeStyle = class extends RangeStyle {
+      constructor(doc, x, y, height, spacing) {
+        super(doc, x, y, height, spacing);
+        this.underlinePosition = 0;
+        this.underlineThickness = 0;
+        this.color = null;
+      }
+      _active(textChunk) {
+        return textChunk.decoration & UNDERLINE_FLAG;
+      }
+      _start(textChunk) {
+        this.underlinePosition = textChunk.font.underlinePosition(textChunk.fontSize);
+        this.underlineThickness = textChunk.font.underlineThickness(textChunk.fontSize);
+        this.color = textChunk.color;
+      }
+      _applyStyle(textChunk) {
+        const y = this.y + this.underlinePosition;
+        return ops.w(this.underlineThickness) + ops.SC(...this.color) + ops.S(this.from, y, "m", this.from + this.width, y, "l");
+      }
+    };
+    var StrikethroughRangeStyle = class extends RangeStyle {
+      constructor(doc, x, y, height, spacing) {
+        super(doc, x, y, height, spacing);
+        this.ascent = 0;
+        this.lineThickness = 0;
+        this.color = null;
+      }
+      _active(textChunk) {
+        return textChunk.decoration & STRIKETHROUGH_FLAG;
+      }
+      _start(textChunk) {
+        this.ascent = textChunk.font.ascent(textChunk.fontSize);
+        this.lineThickness = textChunk.font.underlineThickness(textChunk.fontSize);
+        this.color = textChunk.color;
+      }
+      _applyStyle(textChunk) {
+        const y = this.y + this.ascent * 0.35;
+        return ops.w(this.lineThickness) + ops.SC(...this.color) + ops.S(this.from, y, "m", this.from + this.width, y, "l");
+      }
+    };
+    var LinkRangeStyle = class extends RangeStyle {
+      constructor(doc, x, y, height, spacing) {
+        super(doc, x, y, height, spacing);
+        this.link = null;
+      }
+      applyStyle(textChunk, isLast, fontStyleChanged) {
+        if (this.link && textChunk.link !== this.link) {
+          fontStyleChanged = true;
+        }
+        return RangeStyle.prototype.applyStyle.call(this, textChunk, isLast, fontStyleChanged);
+      }
+      _active(textChunk) {
+        return textChunk.link !== void 0;
+      }
+      _start(textChunk) {
+        this.link = textChunk.link;
+      }
+      _applyStyle(textChunk) {
+        this.doc._annotations.push(new PDF.Dictionary({
+          Type: "Annot",
+          Subtype: "Link",
+          Rect: new PDF.Array([this.from, this.y, this.from + this.width, this.y + this.height]),
+          Border: new PDF.Array([0, 0, 0]),
+          A: new PDF.Dictionary({
+            Type: "Action",
+            S: "URI",
+            URI: new PDF.String(this.link)
+          })
+        }));
+        return "";
+      }
+    };
+    var DestinationRangeStyle = class extends RangeStyle {
+      constructor(doc, x, y, height, spacing) {
+        super(doc, x, y, height, spacing);
+        this.destination = null;
+      }
+      applyStyle(textChunk, isLast, fontStyleChanged) {
+        if (this.destination && textChunk.destination !== this.destination) {
+          fontStyleChanged = true;
+        }
+        return RangeStyle.prototype.applyStyle.call(this, textChunk, isLast, fontStyleChanged);
+      }
+      _active(textChunk) {
+        return textChunk.destination !== void 0;
+      }
+      _start(textChunk) {
+        this.destination = textChunk.destination;
+      }
+      _applyStyle(textChunk) {
+        this.doc._destinations.set(this.destination, new PDF.Array([
+          this.doc._currentPage.toReference(),
+          new PDF.Name("XYZ"),
+          this.from,
+          this.y,
+          null
+        ]));
+        return "";
+      }
+    };
+    var GoToRangeStyle = class extends RangeStyle {
+      constructor(doc, x, y, height, spacing) {
+        super(doc, x, y, height, spacing);
+        this.goTo = null;
+      }
+      applyStyle(textChunk, isLast, fontStyleChanged) {
+        if (this.goTo && textChunk.goTo !== this.goTo) {
+          fontStyleChanged = true;
+        }
+        return RangeStyle.prototype.applyStyle.call(this, textChunk, isLast, fontStyleChanged);
+      }
+      _active(textChunk) {
+        return textChunk.goTo !== void 0;
+      }
+      _start(textChunk) {
+        this.goTo = textChunk.goTo;
+      }
+      _applyStyle(textChunk) {
+        this.doc._annotations.push(new PDF.Dictionary({
+          Type: "Annot",
+          Subtype: "Link",
+          Rect: new PDF.Array([this.from, this.y, this.from + this.width, this.y + this.height]),
+          Border: new PDF.Array([0, 0, 0]),
+          A: new PDF.Dictionary({
+            S: "GoTo",
+            D: new PDF.String(this.goTo)
+          })
+        }));
+        return "";
+      }
+    };
+    Text.DestinationRangeStyle = DestinationRangeStyle;
+  }
+});
+
+// node_modules/pdfjs/lib/cell.js
+var require_cell = __commonJS({
+  "node_modules/pdfjs/lib/cell.js"(exports, module2) {
+    "use strict";
+    var Fragment = require_fragment();
+    var util = require_util();
+    var ops = require_ops();
+    module2.exports = class Cell extends Fragment {
+      constructor(doc, parent, opts) {
+        super(doc, parent);
+        this._pending = [];
+        this._firstPage = true;
+        this._firstRendered = false;
+        this._drawBorders = true;
+        this._cursor = this._cursor.clone();
+        applyOpts.call(this, opts);
+        this._previousStartX = this._cursor.startX;
+        if (this.x) {
+          this._cursor.startX = this.x;
+        }
+        this._cursor.startX += this.paddingLeft;
+        this._cursor.width -= this.paddingLeft + this.paddingRight;
+        this._cursor.bottomOffset = this.paddingBottom - this.borderBottomWidth;
+        this._startRendering = null;
+      }
+      /// private API
+      async _pageBreak(level, insideBreak) {
+        const renderHeight = this._startY - this._cursor.bottom;
+        const actualHeight = this._startY - this._cursor.y;
+        let contents, offset;
+        if (!insideBreak && this._firstPage && renderHeight / this._doc.height <= 0.15) {
+          const idx = this._doc._contents.indexOf(this._bgLayerRef);
+          const take = this._endLayerRef ? this._doc._contents.indexOf(this._endLayerRef) - idx + 1 : this._doc._contents.length - idx;
+          contents = this._doc._contents.splice(idx, take);
+          offset = actualHeight - this.paddingTop + this.borderTopWidth;
+        } else {
+          this._cursor.y = this._cursor.bottom - this.paddingBottom;
+          await this._createBackground(!this._firstRendered, false);
+          this._firstRendered = true;
+        }
+        this._firstPage = false;
+        if (this._parent) {
+          await this._parent._pageBreak(level + 1, contents === void 0);
+        }
+        this._pending.unshift(async () => {
+          this._cursor.x = this._cursor.startX;
+          this._cursor.cursorOffset = 0;
+          if (contents) {
+            await this._doc._startContentObject();
+            await this._doc._write(ops.q() + ops.cm(1, 0, 0, 1, 0, this._cursor.y - this._startY));
+            this._doc._contents.push.apply(this._doc._contents, contents);
+            await this._doc._startContentObject();
+            await this._doc._write(ops.Q());
+            this._bgLayerRef = null;
+          }
+          this._startY = this._cursor.y;
+          if (offset > 0) {
+            this._cursor.y -= offset;
+          }
+          if (level === 1) {
+            this._cursor.y -= this.paddingTop - this.borderTopWidth;
+            this._cursor.bottomOffset = this.paddingBottom - this.borderBottomWidth;
+          }
+          if (this._pending.length === 0) {
+            this._cursor.y = this._startY;
+          }
+        });
+      }
+      async _createBackground(hasTopBorder, hasBottomBorder) {
+        const hasBorder = this._drawBorders && (this.borderTopWidth > 0 || this.borderRightWidth > 0 || this.borderBottomWidth > 0 || this.borderLeftWidth > 0);
+        if (!this.backgroundColor && !hasBorder) {
+          return;
+        }
+        await this._doc._startContentObject(null, true);
+        const layer = this._doc._contents.pop();
+        const bgLayerIndex = this._bgLayerRef ? this._doc._contents.indexOf(this._bgLayerRef) : 0;
+        this._doc._contents.splice(bgLayerIndex, 0, layer);
+        let height = this._startY - this._cursor.y;
+        const bottom = this._cursor.bottom - this.paddingBottom + this.borderBottomWidth;
+        if (this._startY - height < bottom) {
+          height = this._startY - bottom;
+        }
+        let chunk = ops.q();
+        if (this.backgroundColor) {
+          chunk += ops.sc(this.backgroundColor[0], this.backgroundColor[1], this.backgroundColor[2]) + ops.re(this._cursor.startX - this.paddingLeft, this._startY - height, this.outerWidth, height) + ops.f();
+        }
+        if (this._drawBorders) {
+          let borderColor = null;
+          let borderWidth = null;
+          if (this.borderLeftWidth > 0) {
+            if (!borderColor || !util.rgbEqual(borderColor, this.borderLeftColor)) {
+              chunk += ops.SC(this.borderLeftColor[0], this.borderLeftColor[1], this.borderLeftColor[2]);
+              borderColor = this.borderLeftColor;
+            }
+            if (borderWidth !== this.borderLeftWidth) {
+              chunk += ops.w(this.borderLeftWidth);
+              borderWidth = this.borderLeftWidth;
+            }
+            const x = this._cursor.startX - this.paddingLeft + this.borderLeftWidth / 2;
+            const y1 = this._startY;
+            const y2 = this._startY - height;
+            chunk += ops.S(x, y1, "m", x, y2, "l");
+          }
+          if (this.borderRightWidth > 0) {
+            if (!borderColor || !util.rgbEqual(borderColor, this.borderRightColor)) {
+              chunk += ops.SC(this.borderRightColor[0], this.borderRightColor[1], this.borderRightColor[2]);
+              borderColor = this.borderRightColor;
+            }
+            if (borderWidth !== this.borderRightWidth) {
+              chunk += ops.w(this.borderRightWidth);
+              borderWidth = this.borderRightWidth;
+            }
+            const x = this._cursor.startX - this.paddingLeft + this.outerWidth - this.borderRightWidth / 2;
+            const y1 = this._startY;
+            const y2 = this._startY - height;
+            chunk += ops.S(x, y1, "m", x, y2, "l");
+          }
+          if (hasTopBorder && this.borderTopWidth > 0) {
+            if (!borderColor || !util.rgbEqual(borderColor, this.borderTopColor)) {
+              chunk += ops.SC(this.borderTopColor[0], this.borderTopColor[1], this.borderTopColor[2]);
+              borderColor = this.borderTopColor;
+            }
+            if (borderWidth !== this.borderTopWidth) {
+              chunk += ops.w(this.borderTopWidth);
+              borderWidth = this.borderTopWidth;
+            }
+            const x1 = this._cursor.startX - this.paddingLeft;
+            const x2 = x1 + this.outerWidth;
+            const y = this._startY - this.borderTopWidth / 2;
+            chunk += ops.S(x1, y, "m", x2, y, "l");
+          }
+          if (hasBottomBorder && this.borderBottomWidth > 0) {
+            if (!borderColor || !util.rgbEqual(borderColor, this.borderBottomColor)) {
+              chunk += ops.SC(this.borderBottomColor[0], this.borderBottomColor[1], this.borderBottomColor[2]);
+              borderColor = this.borderBottomColor;
+            }
+            if (borderWidth !== this.borderBottomWidth) {
+              chunk += ops.w(this.borderBottomWidth);
+              borderWidth = this.borderBottomWidth;
+            }
+            const x1 = this._cursor.startX - this.paddingLeft;
+            const x2 = x1 + this.outerWidth;
+            const y = this._startY - height + this.borderBottomWidth / 2;
+            chunk += ops.S(x1, y, "m", x2, y, "l");
+          }
+        }
+        if (chunk.length > 0) {
+          chunk += ops.Q();
+          await this._doc._write(chunk);
+        }
+        this._bgLayerRef = null;
+        this._startY = this._cursor.startY;
+      }
+      async _start() {
+        if (!this._doc._currentContent) {
+          await this._doc._startPage();
+        }
+        if (this.minHeight > 0 && !this._parent._cursor.doesFit(this.minHeight)) {
+          await this._parent._pageBreak(1);
+        }
+        if (this.y !== void 0) {
+          this._cursor.y = this.y;
+        }
+        this._startY = this._cursor.y;
+        this._cursor.x = this._cursor.startX;
+        this._cursor.y -= this.paddingTop;
+        this.outerWidth = this._cursor.width + this.paddingLeft + this.paddingRight;
+        this._bgLayerRef = await this._doc._startContentObject(null, true);
+        if (!this._ended) {
+          await new Promise((resolve) => {
+            this._startRendering = resolve;
+          });
+        }
+      }
+      async _end() {
+        this._cursor.y -= this.paddingBottom;
+        const height = this._startY - this._cursor.y;
+        if (height < this.opts.minHeight) {
+          this._cursor.y -= this.opts.minHeight - height;
+        }
+        await this._createBackground(!this._firstRendered, true);
+        this._cursor.x = this._previousStartX;
+      }
+      end() {
+        if (this._startRendering) {
+          this._startRendering();
+        }
+        return Fragment.prototype.end.call(this);
+      }
+    };
+    function applyOpts(opts) {
+      this.opts = opts;
+      if ("width" in opts) {
+        this._cursor.width = opts.width;
+      }
+      if ("x" in opts) {
+        this.x = opts.x;
+      }
+      if ("y" in opts) {
+        this.y = opts.y;
+      }
+      this.paddingTop = opts.paddingTop || opts.padding || 0;
+      this.paddingRight = opts.paddingRight || opts.padding || 0;
+      this.paddingBottom = opts.paddingBottom || opts.padding || 0;
+      this.paddingLeft = opts.paddingLeft || opts.padding || 0;
+      this.backgroundColor = util.colorToRgb(opts.backgroundColor);
+      this.borderTopWidth = opts.borderTopWidth || opts.borderWidth || 0;
+      this.borderTopColor = util.colorToRgb(opts.borderTopColor || opts.borderColor || 0);
+      this.borderRightWidth = opts.borderRightWidth || opts.borderWidth || 0;
+      this.borderRightColor = util.colorToRgb(opts.borderRightColor || opts.borderColor || 0);
+      this.borderBottomWidth = opts.borderBottomWidth || opts.borderWidth || 0;
+      this.borderBottomColor = util.colorToRgb(opts.borderBottomColor || opts.borderColor || 0);
+      this.borderLeftWidth = opts.borderLeftWidth || opts.borderWidth || 0;
+      this.borderLeftColor = util.colorToRgb(opts.borderLeftColor || opts.borderColor || 0);
+      this.paddingTop += this.borderTopWidth;
+      this.paddingRight += this.borderRightWidth;
+      this.paddingBottom += this.borderBottomWidth;
+      this.paddingLeft += this.borderLeftWidth;
+      this.minHeight = opts.minHeight || 0;
+    }
+  }
+});
+
+// node_modules/pdfjs/lib/row.js
+var require_row = __commonJS({
+  "node_modules/pdfjs/lib/row.js"(exports, module2) {
+    "use strict";
+    var Fragment = require_fragment();
+    var util = require_util();
+    var ops = require_ops();
+    var Cell = require_cell();
+    module2.exports = class Row {
+      constructor(doc, parent, opts) {
+        Fragment.prototype._init.call(this, doc, parent);
+        this.opts = opts;
+        this._pending = [];
+        this._endedCells = [];
+        this._columns = 0;
+        this._rotated = 0;
+        this._y = 0;
+        this._endY = null;
+        this._widths = [];
+        this._topBorderWidth = 0;
+        this._topBorderColor = 0;
+        this._bottomBorderWidth = 0;
+        this._bottomBorderColor = 0;
+        this._borderVerticalWidths = [];
+        this._borderVerticalColors = [];
+        this._minHeight = opts.minHeight || 0;
+        this._hasTopBorder = false;
+        this._insideBreak = false;
+        this._startRendering = null;
+      }
+      /// private API
+      async _pageBreak(level, insideBreak) {
+        this._insideBreak = insideBreak;
+        this._pending.splice(this._pending.length - 2, 0, this._pending.shift());
+        if (this._rotated < this._columns - 1) {
+          this._rotated++;
+          this._nextColumn();
+        } else {
+          for (const cell of this._endedCells) {
+            this._cursor.y = cell._cursor.bottom;
+            await cell._pageBreak(level - 1, insideBreak);
+            while (cell._pending.length) {
+              this._pending.unshift(cell._pending.shift());
+            }
+          }
+          await this._drawBorders(true, insideBreak);
+          this._rotated = 0;
+          await this._parent._pageBreak(level + 1, insideBreak);
+          this._y = this._cursor.y;
+          this._endY = null;
+        }
+      }
+      _nextColumn() {
+        this._cursor.y = this._y;
+      }
+      async _start() {
+        if (this._minHeight > 0 && !this._parent._cursor.doesFit(this._minHeight)) {
+          await this._parent._pageBreak(1);
+        }
+        this._y = this._cursor.y;
+        if (!this._ended) {
+          await new Promise((resolve) => {
+            this._startRendering = resolve;
+          });
+        }
+      }
+      async _end() {
+        for (const cell of this._endedCells) {
+          this._cursor.y = this._endY + cell.paddingBottom;
+          await Cell.prototype._end.call(cell);
+        }
+        await this._drawBorders(false);
+        this._cursor.x = this._cursor.startX;
+        this._cursor.y = this._endY;
+      }
+      _begin(ctx) {
+        Fragment.prototype._begin.call(this, ctx);
+      }
+      async _drawBorders(isPageBreak, isInsideBreak) {
+        if (isPageBreak && !isInsideBreak) {
+          this._hasTopBorder = true;
+          return;
+        }
+        let hasBorder = false;
+        let chunk = ops.q();
+        const y1 = this._y;
+        const y2 = isPageBreak ? this._cursor.bottom : this._endY;
+        let left = this._cursor.startX;
+        let borderWidth = 0;
+        let borderColor = null;
+        if (this._borderVerticalWidths) {
+          for (let i = 0, len = this._borderVerticalWidths.length; i < len; ++i) {
+            const bw = this._borderVerticalWidths[i];
+            if (bw > 0) {
+              if (borderWidth !== bw) {
+                chunk += ops.w(bw);
+                borderWidth = bw;
+              }
+              const bc = this._borderVerticalColors[i];
+              if (!borderColor || !util.rgbEqual(borderColor, bc)) {
+                chunk += ops.SC(bc[0], bc[1], bc[2]);
+                borderColor = bc;
+              }
+              let x = left;
+              if (i === 0) {
+                x += bw / 2;
+              } else if (i === len - 1) {
+                x -= bw / 2;
+              }
+              chunk += ops.S(x, y1, "m", x, y2, "l");
+            }
+            left += this._widths[i];
+          }
+          hasBorder = true;
+        }
+        const totalWidth = this._widths.reduce((lhs, rhs) => lhs + rhs, 0);
+        const x1 = this._cursor.startX;
+        const x2 = x1 + totalWidth;
+        if (this._hasTopBorder && this._topBorderWidth > 0) {
+          this._hasTopBorder = false;
+          if (borderWidth !== this._topBorderWidth) {
+            chunk += ops.w(this._topBorderWidth);
+            borderWidth = this._topBorderWidth;
+          }
+          if (!borderColor || !util.rgbEqual(borderColor, this._topBorderColor)) {
+            chunk += ops.SC(this._topBorderColor[0], this._topBorderColor[1], this._topBorderColor[2]);
+            borderColor = this._topBorderColor;
+          }
+          const y = y1 - this._topBorderWidth / 2;
+          chunk += ops.S(x1, y, "m", x2, y, "l");
+          hasBorder = true;
+        }
+        if (!isPageBreak && this._bottomBorderWidth > 0) {
+          if (borderWidth !== this._bottomBorderWidth) {
+            chunk += ops.w(this._bottomBorderWidth);
+            borderWidth = this._bottomBorderWidth;
+          }
+          if (!borderColor || !util.rgbEqual(borderColor, this._bottomBorderColor)) {
+            chunk += ops.SC(this._bottomBorderColor[0], this._bottomBorderColor[1], this._bottomBorderColor[2]);
+            borderColor = this._bottomBorderColor;
+          }
+          const y = y2 + this._bottomBorderWidth / 2;
+          chunk += ops.S(x1, y, "m", x2, y, "l");
+          hasBorder = true;
+        }
+        if (hasBorder) {
+          chunk += ops.Q();
+          await this._doc._startContentObject(null, true);
+          await this._doc._write(chunk);
+        }
+      }
+      /// public API
+      end() {
+        if (this._columns !== this._widths.length) {
+          if (this._columns > this._widths.length) {
+            throw new Error(`Row has ${this.columns} cells but only ${this._widths.length} columns`);
+          }
+          for (let i = this.columns; i < this._widths.length; ++i) {
+            this.cell();
+          }
+        }
+        if (this._startRendering) {
+          this._startRendering();
+        }
+        return Fragment.prototype.end.call(this);
+      }
+      cell(text, opts) {
+        if (text !== null && typeof text === "object") {
+          opts = text;
+          text = void 0;
+        }
+        if (!opts || typeof opts !== "object") {
+          opts = {};
+        }
+        opts = Object.assign({}, this.opts, opts);
+        const column = this._columns++;
+        if (!(column in this._widths)) {
+          throw new Error("row columns already exceeded, cannot create another cell");
+        }
+        if (opts.colspan > 1) {
+          for (let i = column + 1, len = column + opts.colspan; i < len; ++i) {
+            if (!(i in this._widths)) {
+              throw new Error("row columns already exceeded, colspan to big");
+            }
+            this._widths[column] += this._widths[i];
+          }
+          this._widths.splice(column + 1, opts.colspan - 1);
+          if (this._borderVerticalWidths) {
+            this._borderVerticalWidths.splice(column + 1, opts.colspan - 1);
+          }
+        }
+        if (opts.minHeight > this._minHeight) {
+          this._minHeight = opts.minHeight;
+        }
+        if (this._borderVerticalWidths) {
+          const borderWidthLeft = this._borderVerticalWidths[column];
+          const borderWidthRight = this._borderVerticalWidths[column + 1];
+          if (borderWidthLeft > 0) {
+            if (column === 0) {
+              opts.borderLeftWidth = borderWidthLeft;
+            } else {
+              opts.borderLeftWidth = borderWidthLeft / 2;
+            }
+          }
+          if (borderWidthRight > 0) {
+            if (column === this._widths.length - 1) {
+              opts.borderRightWidth = borderWidthRight;
+            } else {
+              opts.borderRightWidth = borderWidthRight / 2;
+            }
+          }
+        }
+        if (this._hasTopBorder && this._topBorderWidth > 0) {
+          opts.borderTopWidth = this._topBorderWidth;
+        }
+        if (this._bottomBorderWidth > 0) {
+          opts.borderBottomWidth = this._bottomBorderWidth;
+        }
+        const ctx = new Cell(this._doc, this, Object.assign({}, opts, {
+          width: this._widths[column]
+        }));
+        ctx._drawBorders = false;
+        this._begin(ctx);
+        for (let i = 0; i < column; ++i) {
+          ctx._cursor.startX += this._widths[i] || 0;
+        }
+        ctx._pending.push(() => ctx._start());
+        ctx._end = endCell.bind(ctx, this);
+        this._pending.push(ctx._pending);
+        if (typeof text === "string" && text.length > 0) {
+          ctx.text(text, opts);
+        }
+        return ctx;
+      }
+    };
+    async function endCell(row) {
+      this._cursor.y -= this.paddingBottom;
+      const height = this._startY - this._cursor.y;
+      if (height < this.opts.minHeight) {
+        this._cursor.y -= this.opts.minHeight - height;
+      }
+      row._columns--;
+      this._parent = null;
+      row._endedCells.push(this);
+      if (row._columns > 0 && row._rotated === row._columns) {
+        await row._pageBreak(2, row._insideBreak);
+      }
+      if (row._endY === null || this._cursor.y < row._endY) {
+        row._endY = this._cursor.y;
+      }
+      this._endLayerRef = this._doc._currentContent;
+      row._nextColumn();
+    }
+  }
+});
+
+// node_modules/pdfjs/lib/header.js
+var require_header = __commonJS({
+  "node_modules/pdfjs/lib/header.js"(exports, module2) {
+    "use strict";
+    var Fragment = require_fragment();
+    var util = require_util();
+    var ops = require_ops();
+    var PDF = require_object2();
+    module2.exports = class Header extends Fragment {
+      constructor(doc, parent) {
+        super(doc, parent);
+        this._objects = [];
+        this._pageNumbers = [];
+        this._cursor = this._cursor.clone();
+      }
+      /// private API
+      // prevent page breaks inside a header
+      async _pageBreak(level) {
+        throw new Error("Header is to long (tried to execute a page break inside the header)");
+      }
+      async _start() {
+        await this._doc._endPage();
+        await this._setup();
+      }
+      async _setup() {
+        this._cursor.reset();
+        this._resources = new PDF.Object();
+        this._doc._registerObject(this._resources);
+        this._bbox = new PDF.Object();
+        this._doc._registerObject(this._bbox);
+        this.fonts = new PDF.Dictionary({});
+        this.xobjects = new PDF.Dictionary({});
+        this._doc._contentObjCreator = this._createObject.bind(this);
+        await this._doc._startContentObject();
+      }
+      _createObject() {
+        const xobj = new PDF.Object("XObject");
+        xobj.prop("Subtype", "Form");
+        xobj.prop("FormType", 1);
+        xobj.prop("BBox", this._bbox.toReference());
+        xobj.prop("Resources", this._resources.toReference());
+        return xobj;
+      }
+      // while most parts of the header is static (i.e. rendered only once and then reused), there are
+      // some dynamic parts (e.g. page numbers) which are rendered on each page
+      // these parts are rendered here
+      async _render() {
+        if (this._pageNumbers.length === 0) {
+          return;
+        }
+        const Text = require_text();
+        for (const instance of this._pageNumbers) {
+          let withPageCount = false;
+          if (instance.fn) {
+            const lhs = instance.fn(1, 1);
+            const rhs = instance.fn(1, 10);
+            withPageCount = lhs.length !== rhs.length;
+          }
+          if (withPageCount) {
+            const fonts = new PDF.Dictionary({});
+            const font = this._doc._fontInstance(instance.opts.font || this._doc.defaultFont);
+            const fontAlias = this._doc._fontAlias(font);
+            fonts.set(fontAlias, this._doc._fonts[fontAlias].o.toReference());
+            const xobj = new PDF.Object("XObject");
+            xobj.prop("Subtype", "Form");
+            xobj.prop("FormType", 1);
+            xobj.prop("BBox", new PDF.Array([instance.x, instance.y, instance.x + instance.width, instance.y - instance.height]));
+            xobj.prop("Resources", new PDF.Dictionary({
+              ColorSpace: new PDF.Dictionary({
+                CS1: new PDF.Array([new PDF.Name("ICCBased"), this._doc._colorSpace.toReference()])
+              }),
+              ProcSet: new PDF.Array([new PDF.Name("Text")]),
+              Font: fonts
+            }));
+            this._doc._registerObject(xobj);
+            const currentPage = this._doc._pages.length;
+            this._doc._finalize.push(async () => {
+              await this._doc._startContentObject(xobj);
+              this._cursor.y = instance.y;
+              this._cursor.x = instance.x;
+              this._cursor.width = instance.width;
+              this._cursor.bottomOffset = -this._doc._cursor.bottomOffset;
+              const pageCount = this._doc._pages.length;
+              const str = instance.fn ? instance.fn(currentPage, pageCount) : currentPage;
+              const txt = new Text(this._doc, this, instance.opts);
+              txt._parts++;
+              txt._ended = true;
+              await txt._start();
+              await txt._render(str, instance.opts);
+              await txt._end();
+              await this._doc._endContentObject();
+            });
+            const alias = new PDF.Name(this._doc._aliases.next("X"));
+            this._doc._currentContent._xobjects[alias] = xobj.toReference();
+            await this._doc._write(ops.Do(alias));
+          } else {
+            this._cursor.y = instance.y;
+            this._cursor.x = instance.x;
+            this._cursor.width = instance.width;
+            this._cursor.bottomOffset = -this._doc._cursor.bottomOffset;
+            const txt = new Text(this._doc, this, instance.opts);
+            txt._parts++;
+            txt._ended = true;
+            await txt._start();
+            await txt._render(String(this._doc._pages.length), instance.opts);
+            await txt._end();
+          }
+        }
+      }
+      async _end() {
+        this.height = this._doc._cursor.startY - this._doc._cursor.y;
+        await this._doc._endContentObject();
+        for (const content of this._doc._contents) {
+          for (const alias in content._fonts) {
+            this.fonts.add(alias, content._fonts[alias]);
+          }
+          for (const alias in content._xobjects) {
+            this.xobjects.add(alias, content._xobjects[alias]);
+          }
+        }
+        this._resources.content = new PDF.Dictionary({
+          ColorSpace: new PDF.Dictionary({
+            CS1: new PDF.Array([new PDF.Name("ICCBased"), this._doc._colorSpace.toReference()])
+          }),
+          ProcSet: new PDF.Array([
+            new PDF.Name("PDF"),
+            new PDF.Name("Text"),
+            new PDF.Name("ImageB"),
+            new PDF.Name("ImageC"),
+            new PDF.Name("ImageI")
+          ]),
+          Font: this.fonts,
+          XObject: this.xobjects
+        });
+        await this._doc._writeObject(this._resources);
+        this._bbox.content = new PDF.Array([
+          this._cursor.startX,
+          this._cursor.startY,
+          this._cursor.startX + this._doc._cursor.width,
+          this._doc._cursor.y
+        ]);
+        await this._doc._writeObject(this._bbox);
+        this._objects = this._doc._contents.map((c) => c._object);
+        this._doc._cursor.reset();
+        this._doc._currentContent = null;
+        this._doc._contents.length = 0;
+        this._doc._contentObjCreator = null;
+        this._cursor.y -= this.height;
+      }
+      /// public API
+      pageNumber(fn, opts) {
+        if (typeof fn === "object") {
+          opts = fn;
+          fn = void 0;
+        }
+        if (!opts || typeof opts !== "object") {
+          opts = {};
+        }
+        const font = this._doc._fontInstance(opts.font || this._doc.defaultFont);
+        const fontSize = opts.fontSize || this._doc.defaultFontSize;
+        const lineHeight = opts.lineHeight || this._doc.defaultLineHeight;
+        const height = font.lineHeight(fontSize, true) * lineHeight;
+        const descent = -font.descent(fontSize) * lineHeight;
+        this._begin(null);
+        this._pending.push(() => {
+          this._pageNumbers.push({
+            y: this._cursor.y,
+            x: this._cursor.x,
+            width: this._cursor.width,
+            height: height + descent,
+            opts,
+            fn
+          });
+          this._cursor.y -= height + descent;
+          return Promise.resolve();
+        });
+      }
+    };
+  }
+});
+
+// node_modules/pdfjs/lib/tableheader.js
+var require_tableheader = __commonJS({
+  "node_modules/pdfjs/lib/tableheader.js"(exports, module2) {
+    "use strict";
+    var PDF = require_object2();
+    var Row = require_row();
+    var Header = require_header();
+    module2.exports = class TableHeader extends Row {
+      constructor(doc, parent, opts) {
+        super(doc, parent, opts);
+        this._previousContents = null;
+        this._hadPreviousContent = false;
+        this._objects = [];
+        this._startY = null;
+      }
+      // The y coordinate the header was rendered for. Can be used to calculate the offset when re-
+      // using the header.
+      get startedAtY() {
+        return this._cursor.startY;
+      }
+      /// private API
+      // prevent page breaks inside a header
+      async _pageBreak() {
+        throw new Error("Table Header is to long (tried to execute a page break inside the header)");
+      }
+      async _start() {
+        this._startY = this._cursor.y;
+        this._cursor.y = this._cursor.startY;
+        await super._start();
+        this._hadPreviousContent = !!this._doc._currentContent;
+        await this._doc._endContentObject();
+        this._previousContents = this._doc._contents;
+        this._doc._contents = [];
+        await Header.prototype._setup.call(this);
+        this._cursor.y = this._y;
+      }
+      _createObject() {
+        return Header.prototype._createObject.call(this);
+      }
+      async _end() {
+        await super._end();
+        const height = this._cursor.startY - this._cursor.y;
+        await Header.prototype._end.call(this);
+        this.height = height;
+        this._doc._contents = this._previousContents;
+        this._previousContents = null;
+        if (this._hadPreviousContent) {
+          await this._doc._startContentObject();
+        }
+        this._cursor.y = this._startY;
+      }
+    };
+  }
+});
+
+// node_modules/pdfjs/lib/table.js
+var require_table = __commonJS({
+  "node_modules/pdfjs/lib/table.js"(exports, module2) {
+    "use strict";
+    var Fragment = require_fragment();
+    var util = require_util();
+    var ops = require_ops();
+    var PDF = require_object2();
+    module2.exports = class Table {
+      constructor(doc, parent, opts) {
+        Fragment.prototype._init.call(this, doc, parent);
+        this._cursor = this._cursor.clone();
+        if ("width" in opts) {
+          this._cursor.width = opts.width;
+        }
+        this._rowCount = 0;
+        this.widths = [];
+        applyOpts.call(this, opts);
+        if (this.borderVerticalWidths) {
+          this._cursor.width -= this.borderVerticalWidths[0] / 2;
+          this._cursor.startX += this.borderVerticalWidths[0] / 2;
+          this._cursor.width -= this.borderVerticalWidths[this.borderVerticalWidths.length - 1] / 2;
+        }
+        let remainingWidth = this._cursor.width;
+        const distribute = [];
+        for (const i in this.widths) {
+          const w = this.widths[i];
+          if (!w || w === "*") {
+            distribute.push(i);
+          } else {
+            remainingWidth -= w;
+          }
+        }
+        if (distribute.length > 0) {
+          const w = remainingWidth / distribute.length;
+          for (const i of distribute) {
+            this.widths[i] = w;
+          }
+        }
+        this._header = null;
+      }
+      /// private API
+      async _pageBreak(level, insideBreak) {
+        await Fragment.prototype._pageBreak.call(this, level);
+        if (!insideBreak) {
+          await this._renderHeader(true);
+        }
+      }
+      async _end() {
+        await Fragment.prototype._end.call(this);
+      }
+      _begin(ctx) {
+        Fragment.prototype._begin.call(this, ctx);
+      }
+      async _renderHeader(isPageBreak) {
+        if (!this._header) {
+          return;
+        }
+        if (!this._doc._currentContent) {
+          await this._doc._startPage();
+        }
+        if (!isPageBreak && !this._cursor.doesFit(this._header.height)) {
+          await this._pageBreak(1, false);
+          return;
+        }
+        let chunk = "";
+        const offset = this._cursor.y - this._header.startedAtY;
+        if (offset !== 0) {
+          chunk += ops.q() + ops.cm(1, 0, 0, 1, 0, offset);
+        }
+        for (const obj of this._header._objects) {
+          const alias = new PDF.Name("TH" + obj.id);
+          this._doc._currentContent._xobjects[alias] = obj.toReference();
+          chunk += ops.Do(alias);
+        }
+        this._cursor.y -= this._header.height;
+        if (offset !== 0) {
+          chunk += ops.Q();
+        }
+        await this._doc._write(chunk);
+      }
+      _row(opts, isHeader) {
+        if (!opts || typeof opts !== "object") {
+          opts = {};
+        }
+        opts = Object.assign({
+          font: this._doc.defaultFont,
+          fontSize: this._doc.defaultFontSize,
+          color: this._doc.defaultColor,
+          lineHeight: this._doc.defaultLineHeight
+        }, this.opts, opts);
+        opts = {
+          padding: opts.padding,
+          paddingLeft: opts.paddingLeft,
+          paddingRight: opts.paddingRight,
+          paddingTop: opts.paddingTop,
+          paddingBottom: opts.paddingBottom,
+          backgroundColor: opts.backgroundColor,
+          font: opts.font,
+          fontSize: opts.fontSize,
+          color: opts.color,
+          lineHeight: opts.lineHeight,
+          minHeight: opts.minHeight
+        };
+        const Row = isHeader ? require_tableheader() : require_row();
+        const ctx = new Row(this._doc, this, opts);
+        this._begin(ctx);
+        ctx._widths = this.widths.slice();
+        ctx._borderVerticalWidths = this.borderVerticalWidths && this.borderVerticalWidths.slice();
+        ctx._borderVerticalColors = this.borderVerticalColors && this.borderVerticalColors.slice();
+        if (this.borderHorizontalWidths) {
+          ctx._topBorderWidth = this.borderHorizontalWidths(this._rowCount);
+          ctx._topBorderColor = util.colorToRgb(this.borderHorizontalColors(this._rowCount));
+          if (!isHeader) {
+            ctx._bottomBorderWidth = this.borderHorizontalWidths(this._rowCount + 1);
+            ctx._bottomBorderColor = util.colorToRgb(this.borderHorizontalColors(this._rowCount + 1));
+          }
+          ctx._hasTopBorder = this._rowCount === (this._header ? 1 : 0);
+        }
+        ctx._pending.push(() => ctx._start());
+        this._pending.push(ctx._pending);
+        this._rowCount++;
+        return ctx;
+      }
+      /// public API
+      end() {
+        return Fragment.prototype.end.call(this);
+      }
+      row(opts) {
+        return this._row(opts, false);
+      }
+      header(opts) {
+        if (this._header) {
+          throw new Error("The table already has a header, add additional rows to the existing table header instead");
+        }
+        const ctx = this._row(opts, true);
+        this._header = ctx;
+        this._pending.push(() => this._renderHeader());
+        return ctx;
+      }
+    };
+    function applyOpts(opts) {
+      this.opts = opts;
+      if ("widths" in opts && Array.isArray(opts.widths)) {
+        this.widths = opts.widths;
+      } else {
+        throw new TypeError("widths (array) option is required for tables");
+      }
+      this.borderVerticalWidths = null;
+      if (opts.borderVerticalWidths) {
+        if (!Array.isArray(opts.borderVerticalWidths)) {
+          throw new TypeError("borderVerticalWidths must be an array");
+        }
+        if (opts.borderVerticalWidths.length !== this.widths.length + 1) {
+          throw new TypeError(`wrong borderVerticalWidths length (expected ${this.widths.length + 1}; got ${opts.borderVerticalWidths.length})`);
+        }
+        this.borderVerticalWidths = opts.borderVerticalWidths;
+      } else if (typeof opts.borderVerticalWidth === "number") {
+        this.borderVerticalWidths = [];
+        for (let i = 0; i <= this.widths.length; ++i) {
+          this.borderVerticalWidths.push(opts.borderVerticalWidth);
+        }
+      }
+      this.borderVerticalColors = null;
+      if (opts.borderVerticalColors) {
+        if (!Array.isArray(opts.borderVerticalColors)) {
+          throw new TypeError("borderVerticalColors must be an array");
+        }
+        if (opts.borderVerticalColors.length !== this.widths.length + 1) {
+          throw new TypeError(`wrong borderVerticalColors length (expected ${this.widths.length + 1}; got ${opts.borderVerticalColors.length})`);
+        }
+        this.borderVerticalColors = opts.borderVerticalColors.map((c) => util.colorToRgb(c));
+      } else if (typeof opts.borderVerticalColor === "number") {
+        this.borderVerticalColors = [];
+        const color = util.colorToRgb(opts.borderVerticalColor);
+        for (let i = 0; i <= this.widths.length; ++i) {
+          this.borderVerticalColors.push(color);
+        }
+      }
+      this.borderHorizontalWidths = null;
+      if (opts.borderHorizontalWidths) {
+        if (typeof opts.borderHorizontalWidths !== "function") {
+          throw new TypeError("borderHorizontalWidths must be a function");
+        }
+        this.borderHorizontalWidths = opts.borderHorizontalWidths;
+      } else if (typeof opts.borderHorizontalWidth === "number") {
+        this.borderHorizontalWidths = () => opts.borderHorizontalWidth;
+      }
+      this.borderHorizontalColors = null;
+      if (opts.borderHorizontalColors) {
+        if (typeof opts.borderHorizontalColors !== "function") {
+          throw new TypeError("borderHorizontalColors must be a function");
+        }
+        this.borderHorizontalColors = opts.borderHorizontalColors;
+      } else if (typeof opts.borderHorizontalColor === "number") {
+        this.borderHorizontalColors = () => opts.borderHorizontalColor;
+      }
+      const borderWidth = opts.borderWidth || 0;
+      if (borderWidth > 0) {
+        if (!this.borderVerticalWidths) {
+          this.borderVerticalWidths = [];
+          for (let i = 0; i <= this.widths.length; ++i) {
+            this.borderVerticalWidths.push(borderWidth);
+          }
+        }
+        if (!this.borderHorizontalWidths) {
+          this.borderHorizontalWidths = () => borderWidth;
+        }
+      }
+      const borderColor = opts.borderColor || 0;
+      if (!this.borderVerticalColors) {
+        this.borderVerticalColors = [];
+        for (let i = 0; i <= this.widths.length; ++i) {
+          this.borderVerticalColors.push(util.colorToRgb(borderColor));
+        }
+      }
+      if (!this.borderHorizontalColors) {
+        this.borderHorizontalColors = () => borderColor;
+      }
+    }
+  }
+});
+
+// node_modules/pdfjs/lib/fragment.js
+var require_fragment = __commonJS({
+  "node_modules/pdfjs/lib/fragment.js"(exports, module2) {
+    "use strict";
+    var Cursor = require_cursor();
+    var ops = require_ops();
+    var util = require_util();
+    var renderImage = require_render();
+    var PDFImage = require_pdf();
+    var JPEGImage = require_jpeg();
+    var ALREADY_ENDED_ERROR = new Error("already ended");
+    module2.exports = class Fragment {
+      constructor(doc, parent) {
+        this._init(doc, parent);
+      }
+      /// private API
+      _init(doc, parent) {
+        this._doc = doc;
+        this._parent = parent;
+        this._cursor = parent._cursor;
+        this._ended = false;
+        this._current = null;
+        this._pending = parent._pending;
+      }
+      async _pageBreak(level) {
+        if (this._parent) {
+          await this._parent._pageBreak(level + 1);
+        }
+      }
+      async _end() {
+      }
+      _begin(ctx) {
+        if (this._ended) {
+          throw ALREADY_ENDED_ERROR;
+        }
+        if (this._current) {
+          this._current.end();
+        }
+        this._current = ctx;
+      }
+      _opts(opts) {
+        if (this.opts) {
+          return Object.assign({
+            font: this.opts.font,
+            fontSize: this.opts.fontSize,
+            color: this.opts.color,
+            lineHeight: this.opts.lineHeight
+          }, opts);
+        } else {
+          return opts;
+        }
+      }
+      /// public API
+      end() {
+        if (this._ended) {
+          throw ALREADY_ENDED_ERROR;
+        }
+        if (this._current) {
+          this._current.end();
+          this._current = null;
+        }
+        this._ended = true;
+        this._pending.push(() => this._end());
+      }
+      text(text, opts) {
+        if (text !== null && typeof text === "object") {
+          opts = text;
+          text = void 0;
+        }
+        if (!opts || typeof opts !== "object") {
+          opts = {};
+        }
+        const Text = require_text();
+        const ctx = new Text(this._doc, this, this._opts(opts));
+        this._begin(ctx);
+        ctx._pending.push(() => ctx._start());
+        if (typeof text === "string" && text.length > 0) {
+          ctx.add(text);
+        }
+        return ctx;
+      }
+      cell(text, opts) {
+        if (text !== null && typeof text === "object") {
+          opts = text;
+          text = void 0;
+        }
+        if (!opts || typeof opts !== "object") {
+          opts = {};
+        }
+        const Cell = require_cell();
+        const ctx = new Cell(this._doc, this, this._opts(opts));
+        this._begin(ctx);
+        ctx._pending.push(() => ctx._start());
+        this._pending.push(ctx._pending);
+        if (typeof text === "string" && text.length > 0) {
+          ctx.text(text, opts);
+        }
+        return ctx;
+      }
+      table(opts) {
+        if (!opts || typeof opts !== "object") {
+          opts = {};
+        }
+        const Table = require_table();
+        const ctx = new Table(this._doc, this, this._opts(opts));
+        this._begin(ctx);
+        return ctx;
+      }
+      image(img, opts) {
+        if (!(img instanceof JPEGImage) && !(img instanceof PDFImage)) {
+          throw new TypeError("Expected an image object");
+        }
+        if (!opts || typeof opts !== "object") {
+          opts = {};
+        }
+        this._begin(null);
+        this._pending.push(() => renderImage(img, this._doc, this, opts));
+      }
+      pageBreak() {
+        this._begin(null);
+        this._pending.push(() => this._parent._pageBreak(1));
+      }
+      op(fn) {
+        this._begin(null);
+        this._pending.push(async () => {
+          if (!this._doc._currentContent) {
+            await this._doc._startPage();
+          }
+          let args = arguments;
+          if (typeof fn === "function") {
+            args = fn(this._cursor.x, this._cursor.y);
+            if (!Array.isArray(args)) {
+              throw new TypeError("Return of .op(() => {}) must be an array");
+            }
+          }
+          return this._doc._write(ops.write.apply(ops, args));
+        });
+      }
+      destination(name) {
+        this._begin(null);
+        this._pending.push(async () => {
+          const DestinationRangeStyle = require_text().DestinationRangeStyle;
+          const self2 = {
+            destination: name,
+            doc: this._doc,
+            from: this._cursor.x,
+            y: this._cursor.y
+          };
+          DestinationRangeStyle.prototype._applyStyle.call(self2);
+        });
+      }
+    };
+  }
+});
+
+// node_modules/readable-stream/lib/internal/streams/stream-browser.js
+var require_stream_browser = __commonJS({
+  "node_modules/readable-stream/lib/internal/streams/stream-browser.js"(exports, module2) {
+    module2.exports = require("events").EventEmitter;
+  }
+});
+
+// node_modules/readable-stream/lib/internal/streams/buffer_list.js
+var require_buffer_list = __commonJS({
+  "node_modules/readable-stream/lib/internal/streams/buffer_list.js"(exports, module2) {
+    "use strict";
+    function ownKeys(object, enumerableOnly) {
+      var keys = Object.keys(object);
+      if (Object.getOwnPropertySymbols) {
+        var symbols = Object.getOwnPropertySymbols(object);
+        enumerableOnly && (symbols = symbols.filter(function(sym) {
+          return Object.getOwnPropertyDescriptor(object, sym).enumerable;
+        })), keys.push.apply(keys, symbols);
+      }
+      return keys;
+    }
+    function _objectSpread(target) {
+      for (var i = 1; i < arguments.length; i++) {
+        var source = null != arguments[i] ? arguments[i] : {};
+        i % 2 ? ownKeys(Object(source), true).forEach(function(key) {
+          _defineProperty(target, key, source[key]);
+        }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys(Object(source)).forEach(function(key) {
+          Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+        });
+      }
+      return target;
+    }
+    function _defineProperty(obj, key, value) {
+      key = _toPropertyKey(key);
+      if (key in obj) {
+        Object.defineProperty(obj, key, { value, enumerable: true, configurable: true, writable: true });
+      } else {
+        obj[key] = value;
+      }
+      return obj;
+    }
+    function _toPropertyKey(arg) {
+      var key = _toPrimitive(arg, "string");
+      return typeof key === "symbol" ? key : String(key);
+    }
+    function _toPrimitive(input, hint) {
+      if (typeof input !== "object" || input === null)
+        return input;
+      var prim = input[Symbol.toPrimitive];
+      if (prim !== void 0) {
+        var res = prim.call(input, hint || "default");
+        if (typeof res !== "object")
+          return res;
+        throw new TypeError("@@toPrimitive must return a primitive value.");
+      }
+      return (hint === "string" ? String : Number)(input);
+    }
+    var _require = require("buffer");
+    var Buffer2 = _require.Buffer;
+    var _require2 = require("util");
+    var inspect = _require2.inspect;
+    var custom = inspect && inspect.custom || "inspect";
+    function copyBuffer(src, target, offset) {
+      Buffer2.prototype.copy.call(src, target, offset);
+    }
+    module2.exports = class BufferList {
+      constructor() {
+        this.head = null;
+        this.tail = null;
+        this.length = 0;
+      }
+      push(v) {
+        const entry = {
+          data: v,
+          next: null
+        };
+        if (this.length > 0)
+          this.tail.next = entry;
+        else
+          this.head = entry;
+        this.tail = entry;
+        ++this.length;
+      }
+      unshift(v) {
+        const entry = {
+          data: v,
+          next: this.head
+        };
+        if (this.length === 0)
+          this.tail = entry;
+        this.head = entry;
+        ++this.length;
+      }
+      shift() {
+        if (this.length === 0)
+          return;
+        const ret = this.head.data;
+        if (this.length === 1)
+          this.head = this.tail = null;
+        else
+          this.head = this.head.next;
+        --this.length;
+        return ret;
+      }
+      clear() {
+        this.head = this.tail = null;
+        this.length = 0;
+      }
+      join(s) {
+        if (this.length === 0)
+          return "";
+        var p = this.head;
+        var ret = "" + p.data;
+        while (p = p.next)
+          ret += s + p.data;
+        return ret;
+      }
+      concat(n) {
+        if (this.length === 0)
+          return Buffer2.alloc(0);
+        const ret = Buffer2.allocUnsafe(n >>> 0);
+        var p = this.head;
+        var i = 0;
+        while (p) {
+          copyBuffer(p.data, ret, i);
+          i += p.data.length;
+          p = p.next;
+        }
+        return ret;
+      }
+      // Consumes a specified amount of bytes or characters from the buffered data.
+      consume(n, hasStrings) {
+        var ret;
+        if (n < this.head.data.length) {
+          ret = this.head.data.slice(0, n);
+          this.head.data = this.head.data.slice(n);
+        } else if (n === this.head.data.length) {
+          ret = this.shift();
+        } else {
+          ret = hasStrings ? this._getString(n) : this._getBuffer(n);
+        }
+        return ret;
+      }
+      first() {
+        return this.head.data;
+      }
+      // Consumes a specified amount of characters from the buffered data.
+      _getString(n) {
+        var p = this.head;
+        var c = 1;
+        var ret = p.data;
+        n -= ret.length;
+        while (p = p.next) {
+          const str = p.data;
+          const nb = n > str.length ? str.length : n;
+          if (nb === str.length)
+            ret += str;
+          else
+            ret += str.slice(0, n);
+          n -= nb;
+          if (n === 0) {
+            if (nb === str.length) {
+              ++c;
+              if (p.next)
+                this.head = p.next;
+              else
+                this.head = this.tail = null;
+            } else {
+              this.head = p;
+              p.data = str.slice(nb);
+            }
+            break;
+          }
+          ++c;
+        }
+        this.length -= c;
+        return ret;
+      }
+      // Consumes a specified amount of bytes from the buffered data.
+      _getBuffer(n) {
+        const ret = Buffer2.allocUnsafe(n);
+        var p = this.head;
+        var c = 1;
+        p.data.copy(ret);
+        n -= p.data.length;
+        while (p = p.next) {
+          const buf = p.data;
+          const nb = n > buf.length ? buf.length : n;
+          buf.copy(ret, ret.length - n, 0, nb);
+          n -= nb;
+          if (n === 0) {
+            if (nb === buf.length) {
+              ++c;
+              if (p.next)
+                this.head = p.next;
+              else
+                this.head = this.tail = null;
+            } else {
+              this.head = p;
+              p.data = buf.slice(nb);
+            }
+            break;
+          }
+          ++c;
+        }
+        this.length -= c;
+        return ret;
+      }
+      // Make sure the linked list only shows the minimal necessary information.
+      [custom](_, options) {
+        return inspect(this, _objectSpread(_objectSpread({}, options), {}, {
+          // Only inspect one level.
+          depth: 0,
+          // It should not recurse.
+          customInspect: false
+        }));
+      }
+    };
+  }
+});
+
+// node_modules/readable-stream/lib/internal/streams/destroy.js
+var require_destroy = __commonJS({
+  "node_modules/readable-stream/lib/internal/streams/destroy.js"(exports, module2) {
+    "use strict";
+    function destroy(err, cb) {
+      const readableDestroyed = this._readableState && this._readableState.destroyed;
+      const writableDestroyed = this._writableState && this._writableState.destroyed;
+      if (readableDestroyed || writableDestroyed) {
+        if (cb) {
+          cb(err);
+        } else if (err) {
+          if (!this._writableState) {
+            process.nextTick(emitErrorNT, this, err);
+          } else if (!this._writableState.errorEmitted) {
+            this._writableState.errorEmitted = true;
+            process.nextTick(emitErrorNT, this, err);
+          }
+        }
+        return this;
+      }
+      if (this._readableState) {
+        this._readableState.destroyed = true;
+      }
+      if (this._writableState) {
+        this._writableState.destroyed = true;
+      }
+      this._destroy(err || null, (err2) => {
+        if (!cb && err2) {
+          if (!this._writableState) {
+            process.nextTick(emitErrorAndCloseNT, this, err2);
+          } else if (!this._writableState.errorEmitted) {
+            this._writableState.errorEmitted = true;
+            process.nextTick(emitErrorAndCloseNT, this, err2);
+          } else {
+            process.nextTick(emitCloseNT, this);
+          }
+        } else if (cb) {
+          process.nextTick(emitCloseNT, this);
+          cb(err2);
+        } else {
+          process.nextTick(emitCloseNT, this);
+        }
+      });
+      return this;
+    }
+    function emitErrorAndCloseNT(self2, err) {
+      emitErrorNT(self2, err);
+      emitCloseNT(self2);
+    }
+    function emitCloseNT(self2) {
+      if (self2._writableState && !self2._writableState.emitClose)
+        return;
+      if (self2._readableState && !self2._readableState.emitClose)
+        return;
+      self2.emit("close");
+    }
+    function undestroy() {
+      if (this._readableState) {
+        this._readableState.destroyed = false;
+        this._readableState.reading = false;
+        this._readableState.ended = false;
+        this._readableState.endEmitted = false;
+      }
+      if (this._writableState) {
+        this._writableState.destroyed = false;
+        this._writableState.ended = false;
+        this._writableState.ending = false;
+        this._writableState.finalCalled = false;
+        this._writableState.prefinished = false;
+        this._writableState.finished = false;
+        this._writableState.errorEmitted = false;
+      }
+    }
+    function emitErrorNT(self2, err) {
+      self2.emit("error", err);
+    }
+    function errorOrDestroy(stream, err) {
+      const rState = stream._readableState;
+      const wState = stream._writableState;
+      if (rState && rState.autoDestroy || wState && wState.autoDestroy)
+        stream.destroy(err);
+      else
+        stream.emit("error", err);
+    }
+    module2.exports = {
+      destroy,
+      undestroy,
+      errorOrDestroy
+    };
+  }
+});
+
+// node_modules/readable-stream/errors-browser.js
+var require_errors_browser = __commonJS({
+  "node_modules/readable-stream/errors-browser.js"(exports, module2) {
+    "use strict";
+    function _inheritsLoose(subClass, superClass) {
+      subClass.prototype = Object.create(superClass.prototype);
+      subClass.prototype.constructor = subClass;
+      subClass.__proto__ = superClass;
+    }
+    var codes = {};
+    function createErrorType(code, message, Base) {
+      if (!Base) {
+        Base = Error;
+      }
+      function getMessage(arg1, arg2, arg3) {
+        if (typeof message === "string") {
+          return message;
+        } else {
+          return message(arg1, arg2, arg3);
+        }
+      }
+      var NodeError = /* @__PURE__ */ function(_Base) {
+        _inheritsLoose(NodeError2, _Base);
+        function NodeError2(arg1, arg2, arg3) {
+          return _Base.call(this, getMessage(arg1, arg2, arg3)) || this;
+        }
+        return NodeError2;
+      }(Base);
+      NodeError.prototype.name = Base.name;
+      NodeError.prototype.code = code;
+      codes[code] = NodeError;
+    }
+    function oneOf(expected, thing) {
+      if (Array.isArray(expected)) {
+        var len = expected.length;
+        expected = expected.map(function(i) {
+          return String(i);
+        });
+        if (len > 2) {
+          return "one of ".concat(thing, " ").concat(expected.slice(0, len - 1).join(", "), ", or ") + expected[len - 1];
+        } else if (len === 2) {
+          return "one of ".concat(thing, " ").concat(expected[0], " or ").concat(expected[1]);
+        } else {
+          return "of ".concat(thing, " ").concat(expected[0]);
+        }
+      } else {
+        return "of ".concat(thing, " ").concat(String(expected));
+      }
+    }
+    function startsWith(str, search, pos) {
+      return str.substr(!pos || pos < 0 ? 0 : +pos, search.length) === search;
+    }
+    function endsWith(str, search, this_len) {
+      if (this_len === void 0 || this_len > str.length) {
+        this_len = str.length;
+      }
+      return str.substring(this_len - search.length, this_len) === search;
+    }
+    function includes(str, search, start) {
+      if (typeof start !== "number") {
+        start = 0;
+      }
+      if (start + search.length > str.length) {
+        return false;
+      } else {
+        return str.indexOf(search, start) !== -1;
+      }
+    }
+    createErrorType("ERR_INVALID_OPT_VALUE", function(name, value) {
+      return 'The value "' + value + '" is invalid for option "' + name + '"';
+    }, TypeError);
+    createErrorType("ERR_INVALID_ARG_TYPE", function(name, expected, actual) {
+      var determiner;
+      if (typeof expected === "string" && startsWith(expected, "not ")) {
+        determiner = "must not be";
+        expected = expected.replace(/^not /, "");
+      } else {
+        determiner = "must be";
+      }
+      var msg;
+      if (endsWith(name, " argument")) {
+        msg = "The ".concat(name, " ").concat(determiner, " ").concat(oneOf(expected, "type"));
+      } else {
+        var type = includes(name, ".") ? "property" : "argument";
+        msg = 'The "'.concat(name, '" ').concat(type, " ").concat(determiner, " ").concat(oneOf(expected, "type"));
+      }
+      msg += ". Received type ".concat(typeof actual);
+      return msg;
+    }, TypeError);
+    createErrorType("ERR_STREAM_PUSH_AFTER_EOF", "stream.push() after EOF");
+    createErrorType("ERR_METHOD_NOT_IMPLEMENTED", function(name) {
+      return "The " + name + " method is not implemented";
+    });
+    createErrorType("ERR_STREAM_PREMATURE_CLOSE", "Premature close");
+    createErrorType("ERR_STREAM_DESTROYED", function(name) {
+      return "Cannot call " + name + " after a stream was destroyed";
+    });
+    createErrorType("ERR_MULTIPLE_CALLBACK", "Callback called multiple times");
+    createErrorType("ERR_STREAM_CANNOT_PIPE", "Cannot pipe, not readable");
+    createErrorType("ERR_STREAM_WRITE_AFTER_END", "write after end");
+    createErrorType("ERR_STREAM_NULL_VALUES", "May not write null values to stream", TypeError);
+    createErrorType("ERR_UNKNOWN_ENCODING", function(arg) {
+      return "Unknown encoding: " + arg;
+    }, TypeError);
+    createErrorType("ERR_STREAM_UNSHIFT_AFTER_END_EVENT", "stream.unshift() after end event");
+    module2.exports.codes = codes;
+  }
+});
+
+// node_modules/readable-stream/lib/internal/streams/state.js
+var require_state = __commonJS({
+  "node_modules/readable-stream/lib/internal/streams/state.js"(exports, module2) {
+    "use strict";
+    var ERR_INVALID_OPT_VALUE = require_errors_browser().codes.ERR_INVALID_OPT_VALUE;
+    function highWaterMarkFrom(options, isDuplex, duplexKey) {
+      return options.highWaterMark != null ? options.highWaterMark : isDuplex ? options[duplexKey] : null;
+    }
+    function getHighWaterMark(state, options, duplexKey, isDuplex) {
+      const hwm = highWaterMarkFrom(options, isDuplex, duplexKey);
+      if (hwm != null) {
+        if (!(isFinite(hwm) && Math.floor(hwm) === hwm) || hwm < 0) {
+          const name = isDuplex ? duplexKey : "highWaterMark";
+          throw new ERR_INVALID_OPT_VALUE(name, hwm);
+        }
+        return Math.floor(hwm);
+      }
+      return state.objectMode ? 16 : 16 * 1024;
+    }
+    module2.exports = {
+      getHighWaterMark
+    };
+  }
+});
+
+// node_modules/inherits/inherits_browser.js
+var require_inherits_browser = __commonJS({
+  "node_modules/inherits/inherits_browser.js"(exports, module2) {
+    if (typeof Object.create === "function") {
+      module2.exports = function inherits(ctor, superCtor) {
+        if (superCtor) {
+          ctor.super_ = superCtor;
+          ctor.prototype = Object.create(superCtor.prototype, {
+            constructor: {
+              value: ctor,
+              enumerable: false,
+              writable: true,
+              configurable: true
+            }
+          });
+        }
+      };
+    } else {
+      module2.exports = function inherits(ctor, superCtor) {
+        if (superCtor) {
+          ctor.super_ = superCtor;
+          var TempCtor = function() {
+          };
+          TempCtor.prototype = superCtor.prototype;
+          ctor.prototype = new TempCtor();
+          ctor.prototype.constructor = ctor;
+        }
+      };
+    }
+  }
+});
+
+// node_modules/util-deprecate/browser.js
+var require_browser = __commonJS({
+  "node_modules/util-deprecate/browser.js"(exports, module2) {
+    module2.exports = deprecate;
+    function deprecate(fn, msg) {
+      if (config("noDeprecation")) {
+        return fn;
+      }
+      var warned = false;
+      function deprecated() {
+        if (!warned) {
+          if (config("throwDeprecation")) {
+            throw new Error(msg);
+          } else if (config("traceDeprecation")) {
+            console.trace(msg);
+          } else {
+            console.warn(msg);
+          }
+          warned = true;
+        }
+        return fn.apply(this, arguments);
+      }
+      return deprecated;
+    }
+    function config(name) {
+      try {
+        if (!global.localStorage)
+          return false;
+      } catch (_) {
+        return false;
+      }
+      var val = global.localStorage[name];
+      if (null == val)
+        return false;
+      return String(val).toLowerCase() === "true";
+    }
+  }
+});
+
+// node_modules/readable-stream/lib/_stream_writable.js
+var require_stream_writable = __commonJS({
+  "node_modules/readable-stream/lib/_stream_writable.js"(exports, module2) {
+    "use strict";
+    module2.exports = Writable;
+    function CorkedRequest(state) {
+      this.next = null;
+      this.entry = null;
+      this.finish = () => {
+        onCorkedFinish(this, state);
+      };
+    }
+    var Duplex;
+    Writable.WritableState = WritableState;
+    var internalUtil = {
+      deprecate: require_browser()
+    };
+    var Stream = require_stream_browser();
+    var Buffer2 = require("buffer").Buffer;
+    var OurUint8Array = (typeof global !== "undefined" ? global : typeof window !== "undefined" ? window : typeof self !== "undefined" ? self : {}).Uint8Array || function() {
+    };
+    function _uint8ArrayToBuffer(chunk) {
+      return Buffer2.from(chunk);
+    }
+    function _isUint8Array(obj) {
+      return Buffer2.isBuffer(obj) || obj instanceof OurUint8Array;
+    }
+    var destroyImpl = require_destroy();
+    var _require = require_state();
+    var getHighWaterMark = _require.getHighWaterMark;
+    var _require$codes = require_errors_browser().codes;
+    var ERR_INVALID_ARG_TYPE = _require$codes.ERR_INVALID_ARG_TYPE;
+    var ERR_METHOD_NOT_IMPLEMENTED = _require$codes.ERR_METHOD_NOT_IMPLEMENTED;
+    var ERR_MULTIPLE_CALLBACK = _require$codes.ERR_MULTIPLE_CALLBACK;
+    var ERR_STREAM_CANNOT_PIPE = _require$codes.ERR_STREAM_CANNOT_PIPE;
+    var ERR_STREAM_DESTROYED = _require$codes.ERR_STREAM_DESTROYED;
+    var ERR_STREAM_NULL_VALUES = _require$codes.ERR_STREAM_NULL_VALUES;
+    var ERR_STREAM_WRITE_AFTER_END = _require$codes.ERR_STREAM_WRITE_AFTER_END;
+    var ERR_UNKNOWN_ENCODING = _require$codes.ERR_UNKNOWN_ENCODING;
+    var errorOrDestroy = destroyImpl.errorOrDestroy;
+    require_inherits_browser()(Writable, Stream);
+    function nop() {
+    }
+    function WritableState(options, stream, isDuplex) {
+      Duplex = Duplex || require_stream_duplex();
+      options = options || {};
+      if (typeof isDuplex !== "boolean")
+        isDuplex = stream instanceof Duplex;
+      this.objectMode = !!options.objectMode;
+      if (isDuplex)
+        this.objectMode = this.objectMode || !!options.writableObjectMode;
+      this.highWaterMark = getHighWaterMark(this, options, "writableHighWaterMark", isDuplex);
+      this.finalCalled = false;
+      this.needDrain = false;
+      this.ending = false;
+      this.ended = false;
+      this.finished = false;
+      this.destroyed = false;
+      var noDecode = options.decodeStrings === false;
+      this.decodeStrings = !noDecode;
+      this.defaultEncoding = options.defaultEncoding || "utf8";
+      this.length = 0;
+      this.writing = false;
+      this.corked = 0;
+      this.sync = true;
+      this.bufferProcessing = false;
+      this.onwrite = function(er) {
+        onwrite(stream, er);
+      };
+      this.writecb = null;
+      this.writelen = 0;
+      this.bufferedRequest = null;
+      this.lastBufferedRequest = null;
+      this.pendingcb = 0;
+      this.prefinished = false;
+      this.errorEmitted = false;
+      this.emitClose = options.emitClose !== false;
+      this.autoDestroy = !!options.autoDestroy;
+      this.bufferedRequestCount = 0;
+      this.corkedRequestsFree = new CorkedRequest(this);
+    }
+    WritableState.prototype.getBuffer = function getBuffer() {
+      var current = this.bufferedRequest;
+      var out = [];
+      while (current) {
+        out.push(current);
+        current = current.next;
+      }
+      return out;
+    };
+    (function() {
+      try {
+        Object.defineProperty(WritableState.prototype, "buffer", {
+          get: internalUtil.deprecate(function writableStateBufferGetter() {
+            return this.getBuffer();
+          }, "_writableState.buffer is deprecated. Use _writableState.getBuffer instead.", "DEP0003")
+        });
+      } catch (_) {
+      }
+    })();
+    var realHasInstance;
+    if (typeof Symbol === "function" && Symbol.hasInstance && typeof Function.prototype[Symbol.hasInstance] === "function") {
+      realHasInstance = Function.prototype[Symbol.hasInstance];
+      Object.defineProperty(Writable, Symbol.hasInstance, {
+        value: function value(object) {
+          if (realHasInstance.call(this, object))
+            return true;
+          if (this !== Writable)
+            return false;
+          return object && object._writableState instanceof WritableState;
+        }
+      });
+    } else {
+      realHasInstance = function realHasInstance2(object) {
+        return object instanceof this;
+      };
+    }
+    function Writable(options) {
+      Duplex = Duplex || require_stream_duplex();
+      const isDuplex = this instanceof Duplex;
+      if (!isDuplex && !realHasInstance.call(Writable, this))
+        return new Writable(options);
+      this._writableState = new WritableState(options, this, isDuplex);
+      this.writable = true;
+      if (options) {
+        if (typeof options.write === "function")
+          this._write = options.write;
+        if (typeof options.writev === "function")
+          this._writev = options.writev;
+        if (typeof options.destroy === "function")
+          this._destroy = options.destroy;
+        if (typeof options.final === "function")
+          this._final = options.final;
+      }
+      Stream.call(this);
+    }
+    Writable.prototype.pipe = function() {
+      errorOrDestroy(this, new ERR_STREAM_CANNOT_PIPE());
+    };
+    function writeAfterEnd(stream, cb) {
+      var er = new ERR_STREAM_WRITE_AFTER_END();
+      errorOrDestroy(stream, er);
+      process.nextTick(cb, er);
+    }
+    function validChunk(stream, state, chunk, cb) {
+      var er;
+      if (chunk === null) {
+        er = new ERR_STREAM_NULL_VALUES();
+      } else if (typeof chunk !== "string" && !state.objectMode) {
+        er = new ERR_INVALID_ARG_TYPE("chunk", ["string", "Buffer"], chunk);
+      }
+      if (er) {
+        errorOrDestroy(stream, er);
+        process.nextTick(cb, er);
+        return false;
+      }
+      return true;
+    }
+    Writable.prototype.write = function(chunk, encoding, cb) {
+      var state = this._writableState;
+      var ret = false;
+      var isBuf = !state.objectMode && _isUint8Array(chunk);
+      if (isBuf && !Buffer2.isBuffer(chunk)) {
+        chunk = _uint8ArrayToBuffer(chunk);
+      }
+      if (typeof encoding === "function") {
+        cb = encoding;
+        encoding = null;
+      }
+      if (isBuf)
+        encoding = "buffer";
+      else if (!encoding)
+        encoding = state.defaultEncoding;
+      if (typeof cb !== "function")
+        cb = nop;
+      if (state.ending)
+        writeAfterEnd(this, cb);
+      else if (isBuf || validChunk(this, state, chunk, cb)) {
+        state.pendingcb++;
+        ret = writeOrBuffer(this, state, isBuf, chunk, encoding, cb);
+      }
+      return ret;
+    };
+    Writable.prototype.cork = function() {
+      this._writableState.corked++;
+    };
+    Writable.prototype.uncork = function() {
+      var state = this._writableState;
+      if (state.corked) {
+        state.corked--;
+        if (!state.writing && !state.corked && !state.bufferProcessing && state.bufferedRequest)
+          clearBuffer(this, state);
+      }
+    };
+    Writable.prototype.setDefaultEncoding = function setDefaultEncoding(encoding) {
+      if (typeof encoding === "string")
+        encoding = encoding.toLowerCase();
+      if (!(["hex", "utf8", "utf-8", "ascii", "binary", "base64", "ucs2", "ucs-2", "utf16le", "utf-16le", "raw"].indexOf((encoding + "").toLowerCase()) > -1))
+        throw new ERR_UNKNOWN_ENCODING(encoding);
+      this._writableState.defaultEncoding = encoding;
+      return this;
+    };
+    Object.defineProperty(Writable.prototype, "writableBuffer", {
+      // making it explicit this property is not enumerable
+      // because otherwise some prototype manipulation in
+      // userland will fail
+      enumerable: false,
+      get: function get() {
+        return this._writableState && this._writableState.getBuffer();
+      }
+    });
+    function decodeChunk(state, chunk, encoding) {
+      if (!state.objectMode && state.decodeStrings !== false && typeof chunk === "string") {
+        chunk = Buffer2.from(chunk, encoding);
+      }
+      return chunk;
+    }
+    Object.defineProperty(Writable.prototype, "writableHighWaterMark", {
+      // making it explicit this property is not enumerable
+      // because otherwise some prototype manipulation in
+      // userland will fail
+      enumerable: false,
+      get: function get() {
+        return this._writableState.highWaterMark;
+      }
+    });
+    function writeOrBuffer(stream, state, isBuf, chunk, encoding, cb) {
+      if (!isBuf) {
+        var newChunk = decodeChunk(state, chunk, encoding);
+        if (chunk !== newChunk) {
+          isBuf = true;
+          encoding = "buffer";
+          chunk = newChunk;
+        }
+      }
+      var len = state.objectMode ? 1 : chunk.length;
+      state.length += len;
+      var ret = state.length < state.highWaterMark;
+      if (!ret)
+        state.needDrain = true;
+      if (state.writing || state.corked) {
+        var last = state.lastBufferedRequest;
+        state.lastBufferedRequest = {
+          chunk,
+          encoding,
+          isBuf,
+          callback: cb,
+          next: null
+        };
+        if (last) {
+          last.next = state.lastBufferedRequest;
+        } else {
+          state.bufferedRequest = state.lastBufferedRequest;
+        }
+        state.bufferedRequestCount += 1;
+      } else {
+        doWrite(stream, state, false, len, chunk, encoding, cb);
+      }
+      return ret;
+    }
+    function doWrite(stream, state, writev, len, chunk, encoding, cb) {
+      state.writelen = len;
+      state.writecb = cb;
+      state.writing = true;
+      state.sync = true;
+      if (state.destroyed)
+        state.onwrite(new ERR_STREAM_DESTROYED("write"));
+      else if (writev)
+        stream._writev(chunk, state.onwrite);
+      else
+        stream._write(chunk, encoding, state.onwrite);
+      state.sync = false;
+    }
+    function onwriteError(stream, state, sync, er, cb) {
+      --state.pendingcb;
+      if (sync) {
+        process.nextTick(cb, er);
+        process.nextTick(finishMaybe, stream, state);
+        stream._writableState.errorEmitted = true;
+        errorOrDestroy(stream, er);
+      } else {
+        cb(er);
+        stream._writableState.errorEmitted = true;
+        errorOrDestroy(stream, er);
+        finishMaybe(stream, state);
+      }
+    }
+    function onwriteStateUpdate(state) {
+      state.writing = false;
+      state.writecb = null;
+      state.length -= state.writelen;
+      state.writelen = 0;
+    }
+    function onwrite(stream, er) {
+      var state = stream._writableState;
+      var sync = state.sync;
+      var cb = state.writecb;
+      if (typeof cb !== "function")
+        throw new ERR_MULTIPLE_CALLBACK();
+      onwriteStateUpdate(state);
+      if (er)
+        onwriteError(stream, state, sync, er, cb);
+      else {
+        var finished = needFinish(state) || stream.destroyed;
+        if (!finished && !state.corked && !state.bufferProcessing && state.bufferedRequest) {
+          clearBuffer(stream, state);
+        }
+        if (sync) {
+          process.nextTick(afterWrite, stream, state, finished, cb);
+        } else {
+          afterWrite(stream, state, finished, cb);
+        }
+      }
+    }
+    function afterWrite(stream, state, finished, cb) {
+      if (!finished)
+        onwriteDrain(stream, state);
+      state.pendingcb--;
+      cb();
+      finishMaybe(stream, state);
+    }
+    function onwriteDrain(stream, state) {
+      if (state.length === 0 && state.needDrain) {
+        state.needDrain = false;
+        stream.emit("drain");
+      }
+    }
+    function clearBuffer(stream, state) {
+      state.bufferProcessing = true;
+      var entry = state.bufferedRequest;
+      if (stream._writev && entry && entry.next) {
+        var l = state.bufferedRequestCount;
+        var buffer = new Array(l);
+        var holder = state.corkedRequestsFree;
+        holder.entry = entry;
+        var count = 0;
+        var allBuffers = true;
+        while (entry) {
+          buffer[count] = entry;
+          if (!entry.isBuf)
+            allBuffers = false;
+          entry = entry.next;
+          count += 1;
+        }
+        buffer.allBuffers = allBuffers;
+        doWrite(stream, state, true, state.length, buffer, "", holder.finish);
+        state.pendingcb++;
+        state.lastBufferedRequest = null;
+        if (holder.next) {
+          state.corkedRequestsFree = holder.next;
+          holder.next = null;
+        } else {
+          state.corkedRequestsFree = new CorkedRequest(state);
+        }
+        state.bufferedRequestCount = 0;
+      } else {
+        while (entry) {
+          var chunk = entry.chunk;
+          var encoding = entry.encoding;
+          var cb = entry.callback;
+          var len = state.objectMode ? 1 : chunk.length;
+          doWrite(stream, state, false, len, chunk, encoding, cb);
+          entry = entry.next;
+          state.bufferedRequestCount--;
+          if (state.writing) {
+            break;
+          }
+        }
+        if (entry === null)
+          state.lastBufferedRequest = null;
+      }
+      state.bufferedRequest = entry;
+      state.bufferProcessing = false;
+    }
+    Writable.prototype._write = function(chunk, encoding, cb) {
+      cb(new ERR_METHOD_NOT_IMPLEMENTED("_write()"));
+    };
+    Writable.prototype._writev = null;
+    Writable.prototype.end = function(chunk, encoding, cb) {
+      var state = this._writableState;
+      if (typeof chunk === "function") {
+        cb = chunk;
+        chunk = null;
+        encoding = null;
+      } else if (typeof encoding === "function") {
+        cb = encoding;
+        encoding = null;
+      }
+      if (chunk !== null && chunk !== void 0)
+        this.write(chunk, encoding);
+      if (state.corked) {
+        state.corked = 1;
+        this.uncork();
+      }
+      if (!state.ending)
+        endWritable(this, state, cb);
+      return this;
+    };
+    Object.defineProperty(Writable.prototype, "writableLength", {
+      // making it explicit this property is not enumerable
+      // because otherwise some prototype manipulation in
+      // userland will fail
+      enumerable: false,
+      get() {
+        return this._writableState.length;
+      }
+    });
+    function needFinish(state) {
+      return state.ending && state.length === 0 && state.bufferedRequest === null && !state.finished && !state.writing;
+    }
+    function callFinal(stream, state) {
+      stream._final((err) => {
+        state.pendingcb--;
+        if (err) {
+          errorOrDestroy(stream, err);
+        }
+        state.prefinished = true;
+        stream.emit("prefinish");
+        finishMaybe(stream, state);
+      });
+    }
+    function prefinish(stream, state) {
+      if (!state.prefinished && !state.finalCalled) {
+        if (typeof stream._final === "function" && !state.destroyed) {
+          state.pendingcb++;
+          state.finalCalled = true;
+          process.nextTick(callFinal, stream, state);
+        } else {
+          state.prefinished = true;
+          stream.emit("prefinish");
+        }
+      }
+    }
+    function finishMaybe(stream, state) {
+      var need = needFinish(state);
+      if (need) {
+        prefinish(stream, state);
+        if (state.pendingcb === 0) {
+          state.finished = true;
+          stream.emit("finish");
+          if (state.autoDestroy) {
+            const rState = stream._readableState;
+            if (!rState || rState.autoDestroy && rState.endEmitted) {
+              stream.destroy();
+            }
+          }
+        }
+      }
+      return need;
+    }
+    function endWritable(stream, state, cb) {
+      state.ending = true;
+      finishMaybe(stream, state);
+      if (cb) {
+        if (state.finished)
+          process.nextTick(cb);
+        else
+          stream.once("finish", cb);
+      }
+      state.ended = true;
+      stream.writable = false;
+    }
+    function onCorkedFinish(corkReq, state, err) {
+      var entry = corkReq.entry;
+      corkReq.entry = null;
+      while (entry) {
+        var cb = entry.callback;
+        state.pendingcb--;
+        cb(err);
+        entry = entry.next;
+      }
+      state.corkedRequestsFree.next = corkReq;
+    }
+    Object.defineProperty(Writable.prototype, "destroyed", {
+      // making it explicit this property is not enumerable
+      // because otherwise some prototype manipulation in
+      // userland will fail
+      enumerable: false,
+      get() {
+        if (this._writableState === void 0) {
+          return false;
+        }
+        return this._writableState.destroyed;
+      },
+      set(value) {
+        if (!this._writableState) {
+          return;
+        }
+        this._writableState.destroyed = value;
+      }
+    });
+    Writable.prototype.destroy = destroyImpl.destroy;
+    Writable.prototype._undestroy = destroyImpl.undestroy;
+    Writable.prototype._destroy = function(err, cb) {
+      cb(err);
+    };
+  }
+});
+
+// node_modules/readable-stream/lib/_stream_duplex.js
+var require_stream_duplex = __commonJS({
+  "node_modules/readable-stream/lib/_stream_duplex.js"(exports, module2) {
+    "use strict";
+    var objectKeys = Object.keys || function(obj) {
+      var keys = [];
+      for (var key in obj)
+        keys.push(key);
+      return keys;
+    };
+    module2.exports = Duplex;
+    var Readable = require_stream_readable();
+    var Writable = require_stream_writable();
+    require_inherits_browser()(Duplex, Readable);
+    {
+      const keys = objectKeys(Writable.prototype);
+      for (v = 0; v < keys.length; v++) {
+        const method = keys[v];
+        if (!Duplex.prototype[method])
+          Duplex.prototype[method] = Writable.prototype[method];
+      }
+    }
+    var v;
+    function Duplex(options) {
+      if (!(this instanceof Duplex))
+        return new Duplex(options);
+      Readable.call(this, options);
+      Writable.call(this, options);
+      this.allowHalfOpen = true;
+      if (options) {
+        if (options.readable === false)
+          this.readable = false;
+        if (options.writable === false)
+          this.writable = false;
+        if (options.allowHalfOpen === false) {
+          this.allowHalfOpen = false;
+          this.once("end", onend);
+        }
+      }
+    }
+    Object.defineProperty(Duplex.prototype, "writableHighWaterMark", {
+      // making it explicit this property is not enumerable
+      // because otherwise some prototype manipulation in
+      // userland will fail
+      enumerable: false,
+      get() {
+        return this._writableState.highWaterMark;
+      }
+    });
+    Object.defineProperty(Duplex.prototype, "writableBuffer", {
+      // making it explicit this property is not enumerable
+      // because otherwise some prototype manipulation in
+      // userland will fail
+      enumerable: false,
+      get: function get() {
+        return this._writableState && this._writableState.getBuffer();
+      }
+    });
+    Object.defineProperty(Duplex.prototype, "writableLength", {
+      // making it explicit this property is not enumerable
+      // because otherwise some prototype manipulation in
+      // userland will fail
+      enumerable: false,
+      get() {
+        return this._writableState.length;
+      }
+    });
+    function onend() {
+      if (this._writableState.ended)
+        return;
+      process.nextTick(onEndNT, this);
+    }
+    function onEndNT(self2) {
+      self2.end();
+    }
+    Object.defineProperty(Duplex.prototype, "destroyed", {
+      // making it explicit this property is not enumerable
+      // because otherwise some prototype manipulation in
+      // userland will fail
+      enumerable: false,
+      get() {
+        if (this._readableState === void 0 || this._writableState === void 0) {
+          return false;
+        }
+        return this._readableState.destroyed && this._writableState.destroyed;
+      },
+      set(value) {
+        if (this._readableState === void 0 || this._writableState === void 0) {
+          return;
+        }
+        this._readableState.destroyed = value;
+        this._writableState.destroyed = value;
+      }
+    });
+  }
+});
+
+// node_modules/readable-stream/lib/internal/streams/end-of-stream.js
+var require_end_of_stream = __commonJS({
+  "node_modules/readable-stream/lib/internal/streams/end-of-stream.js"(exports, module2) {
+    "use strict";
+    var ERR_STREAM_PREMATURE_CLOSE = require_errors_browser().codes.ERR_STREAM_PREMATURE_CLOSE;
+    function once(callback) {
+      let called = false;
+      return function() {
+        if (called)
+          return;
+        called = true;
+        for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+          args[_key] = arguments[_key];
+        }
+        callback.apply(this, args);
+      };
+    }
+    function noop() {
+    }
+    function isRequest(stream) {
+      return stream.setHeader && typeof stream.abort === "function";
+    }
+    function eos(stream, opts, callback) {
+      if (typeof opts === "function")
+        return eos(stream, null, opts);
+      if (!opts)
+        opts = {};
+      callback = once(callback || noop);
+      let readable = opts.readable || opts.readable !== false && stream.readable;
+      let writable = opts.writable || opts.writable !== false && stream.writable;
+      const onlegacyfinish = () => {
+        if (!stream.writable)
+          onfinish();
+      };
+      var writableEnded = stream._writableState && stream._writableState.finished;
+      const onfinish = () => {
+        writable = false;
+        writableEnded = true;
+        if (!readable)
+          callback.call(stream);
+      };
+      var readableEnded = stream._readableState && stream._readableState.endEmitted;
+      const onend = () => {
+        readable = false;
+        readableEnded = true;
+        if (!writable)
+          callback.call(stream);
+      };
+      const onerror = (err) => {
+        callback.call(stream, err);
+      };
+      const onclose = () => {
+        let err;
+        if (readable && !readableEnded) {
+          if (!stream._readableState || !stream._readableState.ended)
+            err = new ERR_STREAM_PREMATURE_CLOSE();
+          return callback.call(stream, err);
+        }
+        if (writable && !writableEnded) {
+          if (!stream._writableState || !stream._writableState.ended)
+            err = new ERR_STREAM_PREMATURE_CLOSE();
+          return callback.call(stream, err);
+        }
+      };
+      const onrequest = () => {
+        stream.req.on("finish", onfinish);
+      };
+      if (isRequest(stream)) {
+        stream.on("complete", onfinish);
+        stream.on("abort", onclose);
+        if (stream.req)
+          onrequest();
+        else
+          stream.on("request", onrequest);
+      } else if (writable && !stream._writableState) {
+        stream.on("end", onlegacyfinish);
+        stream.on("close", onlegacyfinish);
+      }
+      stream.on("end", onend);
+      stream.on("finish", onfinish);
+      if (opts.error !== false)
+        stream.on("error", onerror);
+      stream.on("close", onclose);
+      return function() {
+        stream.removeListener("complete", onfinish);
+        stream.removeListener("abort", onclose);
+        stream.removeListener("request", onrequest);
+        if (stream.req)
+          stream.req.removeListener("finish", onfinish);
+        stream.removeListener("end", onlegacyfinish);
+        stream.removeListener("close", onlegacyfinish);
+        stream.removeListener("finish", onfinish);
+        stream.removeListener("end", onend);
+        stream.removeListener("error", onerror);
+        stream.removeListener("close", onclose);
+      };
+    }
+    module2.exports = eos;
+  }
+});
+
+// node_modules/readable-stream/lib/internal/streams/async_iterator.js
+var require_async_iterator = __commonJS({
+  "node_modules/readable-stream/lib/internal/streams/async_iterator.js"(exports, module2) {
+    "use strict";
+    var finished = require_end_of_stream();
+    var kLastResolve = Symbol("lastResolve");
+    var kLastReject = Symbol("lastReject");
+    var kError = Symbol("error");
+    var kEnded = Symbol("ended");
+    var kLastPromise = Symbol("lastPromise");
+    var kHandlePromise = Symbol("handlePromise");
+    var kStream = Symbol("stream");
+    function createIterResult(value, done) {
+      return {
+        value,
+        done
+      };
+    }
+    function readAndResolve(iter) {
+      const resolve = iter[kLastResolve];
+      if (resolve !== null) {
+        const data = iter[kStream].read();
+        if (data !== null) {
+          iter[kLastPromise] = null;
+          iter[kLastResolve] = null;
+          iter[kLastReject] = null;
+          resolve(createIterResult(data, false));
+        }
+      }
+    }
+    function onReadable(iter) {
+      process.nextTick(readAndResolve, iter);
+    }
+    function wrapForNext(lastPromise, iter) {
+      return (resolve, reject) => {
+        lastPromise.then(() => {
+          if (iter[kEnded]) {
+            resolve(createIterResult(void 0, true));
+            return;
+          }
+          iter[kHandlePromise](resolve, reject);
+        }, reject);
+      };
+    }
+    var AsyncIteratorPrototype = Object.getPrototypeOf(function() {
+    });
+    var ReadableStreamAsyncIteratorPrototype = Object.setPrototypeOf({
+      get stream() {
+        return this[kStream];
+      },
+      next() {
+        const error = this[kError];
+        if (error !== null) {
+          return Promise.reject(error);
+        }
+        if (this[kEnded]) {
+          return Promise.resolve(createIterResult(void 0, true));
+        }
+        if (this[kStream].destroyed) {
+          return new Promise((resolve, reject) => {
+            process.nextTick(() => {
+              if (this[kError]) {
+                reject(this[kError]);
+              } else {
+                resolve(createIterResult(void 0, true));
+              }
+            });
+          });
+        }
+        const lastPromise = this[kLastPromise];
+        let promise;
+        if (lastPromise) {
+          promise = new Promise(wrapForNext(lastPromise, this));
+        } else {
+          const data = this[kStream].read();
+          if (data !== null) {
+            return Promise.resolve(createIterResult(data, false));
+          }
+          promise = new Promise(this[kHandlePromise]);
+        }
+        this[kLastPromise] = promise;
+        return promise;
+      },
+      [Symbol.asyncIterator]() {
+        return this;
+      },
+      return() {
+        return new Promise((resolve, reject) => {
+          this[kStream].destroy(null, (err) => {
+            if (err) {
+              reject(err);
+              return;
+            }
+            resolve(createIterResult(void 0, true));
+          });
+        });
+      }
+    }, AsyncIteratorPrototype);
+    var createReadableStreamAsyncIterator = (stream) => {
+      const iterator = Object.create(ReadableStreamAsyncIteratorPrototype, {
+        [kStream]: {
+          value: stream,
+          writable: true
+        },
+        [kLastResolve]: {
+          value: null,
+          writable: true
+        },
+        [kLastReject]: {
+          value: null,
+          writable: true
+        },
+        [kError]: {
+          value: null,
+          writable: true
+        },
+        [kEnded]: {
+          value: stream._readableState.endEmitted,
+          writable: true
+        },
+        // the function passed to new Promise
+        // is cached so we avoid allocating a new
+        // closure at every run
+        [kHandlePromise]: {
+          value: (resolve, reject) => {
+            const data = iterator[kStream].read();
+            if (data) {
+              iterator[kLastPromise] = null;
+              iterator[kLastResolve] = null;
+              iterator[kLastReject] = null;
+              resolve(createIterResult(data, false));
+            } else {
+              iterator[kLastResolve] = resolve;
+              iterator[kLastReject] = reject;
+            }
+          },
+          writable: true
+        }
+      });
+      iterator[kLastPromise] = null;
+      finished(stream, (err) => {
+        if (err && err.code !== "ERR_STREAM_PREMATURE_CLOSE") {
+          const reject = iterator[kLastReject];
+          if (reject !== null) {
+            iterator[kLastPromise] = null;
+            iterator[kLastResolve] = null;
+            iterator[kLastReject] = null;
+            reject(err);
+          }
+          iterator[kError] = err;
+          return;
+        }
+        const resolve = iterator[kLastResolve];
+        if (resolve !== null) {
+          iterator[kLastPromise] = null;
+          iterator[kLastResolve] = null;
+          iterator[kLastReject] = null;
+          resolve(createIterResult(void 0, true));
+        }
+        iterator[kEnded] = true;
+      });
+      stream.on("readable", onReadable.bind(null, iterator));
+      return iterator;
+    };
+    module2.exports = createReadableStreamAsyncIterator;
+  }
+});
+
+// node_modules/readable-stream/lib/internal/streams/from-browser.js
+var require_from_browser = __commonJS({
+  "node_modules/readable-stream/lib/internal/streams/from-browser.js"(exports, module2) {
+    module2.exports = function() {
+      throw new Error("Readable.from is not available in the browser");
+    };
+  }
+});
+
+// node_modules/readable-stream/lib/_stream_readable.js
+var require_stream_readable = __commonJS({
+  "node_modules/readable-stream/lib/_stream_readable.js"(exports, module2) {
+    "use strict";
+    module2.exports = Readable;
+    var Duplex;
+    Readable.ReadableState = ReadableState;
+    var EE = require("events").EventEmitter;
+    var EElistenerCount = function EElistenerCount2(emitter, type) {
+      return emitter.listeners(type).length;
+    };
+    var Stream = require_stream_browser();
+    var Buffer2 = require("buffer").Buffer;
+    var OurUint8Array = (typeof global !== "undefined" ? global : typeof window !== "undefined" ? window : typeof self !== "undefined" ? self : {}).Uint8Array || function() {
+    };
+    function _uint8ArrayToBuffer(chunk) {
+      return Buffer2.from(chunk);
+    }
+    function _isUint8Array(obj) {
+      return Buffer2.isBuffer(obj) || obj instanceof OurUint8Array;
+    }
+    var debugUtil = require("util");
+    var debug;
+    if (debugUtil && debugUtil.debuglog) {
+      debug = debugUtil.debuglog("stream");
+    } else {
+      debug = function debug2() {
+      };
+    }
+    var BufferList = require_buffer_list();
+    var destroyImpl = require_destroy();
+    var _require = require_state();
+    var getHighWaterMark = _require.getHighWaterMark;
+    var _require$codes = require_errors_browser().codes;
+    var ERR_INVALID_ARG_TYPE = _require$codes.ERR_INVALID_ARG_TYPE;
+    var ERR_STREAM_PUSH_AFTER_EOF = _require$codes.ERR_STREAM_PUSH_AFTER_EOF;
+    var ERR_METHOD_NOT_IMPLEMENTED = _require$codes.ERR_METHOD_NOT_IMPLEMENTED;
+    var ERR_STREAM_UNSHIFT_AFTER_END_EVENT = _require$codes.ERR_STREAM_UNSHIFT_AFTER_END_EVENT;
+    var StringDecoder;
+    var createReadableStreamAsyncIterator;
+    var from;
+    require_inherits_browser()(Readable, Stream);
+    var errorOrDestroy = destroyImpl.errorOrDestroy;
+    var kProxyEvents = ["error", "close", "destroy", "pause", "resume"];
+    function prependListener(emitter, event, fn) {
+      if (typeof emitter.prependListener === "function")
+        return emitter.prependListener(event, fn);
+      if (!emitter._events || !emitter._events[event])
+        emitter.on(event, fn);
+      else if (Array.isArray(emitter._events[event]))
+        emitter._events[event].unshift(fn);
+      else
+        emitter._events[event] = [fn, emitter._events[event]];
+    }
+    function ReadableState(options, stream, isDuplex) {
+      Duplex = Duplex || require_stream_duplex();
+      options = options || {};
+      if (typeof isDuplex !== "boolean")
+        isDuplex = stream instanceof Duplex;
+      this.objectMode = !!options.objectMode;
+      if (isDuplex)
+        this.objectMode = this.objectMode || !!options.readableObjectMode;
+      this.highWaterMark = getHighWaterMark(this, options, "readableHighWaterMark", isDuplex);
+      this.buffer = new BufferList();
+      this.length = 0;
+      this.pipes = null;
+      this.pipesCount = 0;
+      this.flowing = null;
+      this.ended = false;
+      this.endEmitted = false;
+      this.reading = false;
+      this.sync = true;
+      this.needReadable = false;
+      this.emittedReadable = false;
+      this.readableListening = false;
+      this.resumeScheduled = false;
+      this.paused = true;
+      this.emitClose = options.emitClose !== false;
+      this.autoDestroy = !!options.autoDestroy;
+      this.destroyed = false;
+      this.defaultEncoding = options.defaultEncoding || "utf8";
+      this.awaitDrain = 0;
+      this.readingMore = false;
+      this.decoder = null;
+      this.encoding = null;
+      if (options.encoding) {
+        if (!StringDecoder)
+          StringDecoder = require("string_decoder/").StringDecoder;
+        this.decoder = new StringDecoder(options.encoding);
+        this.encoding = options.encoding;
+      }
+    }
+    function Readable(options) {
+      Duplex = Duplex || require_stream_duplex();
+      if (!(this instanceof Readable))
+        return new Readable(options);
+      const isDuplex = this instanceof Duplex;
+      this._readableState = new ReadableState(options, this, isDuplex);
+      this.readable = true;
+      if (options) {
+        if (typeof options.read === "function")
+          this._read = options.read;
+        if (typeof options.destroy === "function")
+          this._destroy = options.destroy;
+      }
+      Stream.call(this);
+    }
+    Object.defineProperty(Readable.prototype, "destroyed", {
+      // making it explicit this property is not enumerable
+      // because otherwise some prototype manipulation in
+      // userland will fail
+      enumerable: false,
+      get() {
+        if (this._readableState === void 0) {
+          return false;
+        }
+        return this._readableState.destroyed;
+      },
+      set(value) {
+        if (!this._readableState) {
+          return;
+        }
+        this._readableState.destroyed = value;
+      }
+    });
+    Readable.prototype.destroy = destroyImpl.destroy;
+    Readable.prototype._undestroy = destroyImpl.undestroy;
+    Readable.prototype._destroy = function(err, cb) {
+      cb(err);
+    };
+    Readable.prototype.push = function(chunk, encoding) {
+      var state = this._readableState;
+      var skipChunkCheck;
+      if (!state.objectMode) {
+        if (typeof chunk === "string") {
+          encoding = encoding || state.defaultEncoding;
+          if (encoding !== state.encoding) {
+            chunk = Buffer2.from(chunk, encoding);
+            encoding = "";
+          }
+          skipChunkCheck = true;
+        }
+      } else {
+        skipChunkCheck = true;
+      }
+      return readableAddChunk(this, chunk, encoding, false, skipChunkCheck);
+    };
+    Readable.prototype.unshift = function(chunk) {
+      return readableAddChunk(this, chunk, null, true, false);
+    };
+    function readableAddChunk(stream, chunk, encoding, addToFront, skipChunkCheck) {
+      debug("readableAddChunk", chunk);
+      var state = stream._readableState;
+      if (chunk === null) {
+        state.reading = false;
+        onEofChunk(stream, state);
+      } else {
+        var er;
+        if (!skipChunkCheck)
+          er = chunkInvalid(state, chunk);
+        if (er) {
+          errorOrDestroy(stream, er);
+        } else if (state.objectMode || chunk && chunk.length > 0) {
+          if (typeof chunk !== "string" && !state.objectMode && Object.getPrototypeOf(chunk) !== Buffer2.prototype) {
+            chunk = _uint8ArrayToBuffer(chunk);
+          }
+          if (addToFront) {
+            if (state.endEmitted)
+              errorOrDestroy(stream, new ERR_STREAM_UNSHIFT_AFTER_END_EVENT());
+            else
+              addChunk(stream, state, chunk, true);
+          } else if (state.ended) {
+            errorOrDestroy(stream, new ERR_STREAM_PUSH_AFTER_EOF());
+          } else if (state.destroyed) {
+            return false;
+          } else {
+            state.reading = false;
+            if (state.decoder && !encoding) {
+              chunk = state.decoder.write(chunk);
+              if (state.objectMode || chunk.length !== 0)
+                addChunk(stream, state, chunk, false);
+              else
+                maybeReadMore(stream, state);
+            } else {
+              addChunk(stream, state, chunk, false);
+            }
+          }
+        } else if (!addToFront) {
+          state.reading = false;
+          maybeReadMore(stream, state);
+        }
+      }
+      return !state.ended && (state.length < state.highWaterMark || state.length === 0);
+    }
+    function addChunk(stream, state, chunk, addToFront) {
+      if (state.flowing && state.length === 0 && !state.sync) {
+        state.awaitDrain = 0;
+        stream.emit("data", chunk);
+      } else {
+        state.length += state.objectMode ? 1 : chunk.length;
+        if (addToFront)
+          state.buffer.unshift(chunk);
+        else
+          state.buffer.push(chunk);
+        if (state.needReadable)
+          emitReadable(stream);
+      }
+      maybeReadMore(stream, state);
+    }
+    function chunkInvalid(state, chunk) {
+      var er;
+      if (!_isUint8Array(chunk) && typeof chunk !== "string" && chunk !== void 0 && !state.objectMode) {
+        er = new ERR_INVALID_ARG_TYPE("chunk", ["string", "Buffer", "Uint8Array"], chunk);
+      }
+      return er;
+    }
+    Readable.prototype.isPaused = function() {
+      return this._readableState.flowing === false;
+    };
+    Readable.prototype.setEncoding = function(enc) {
+      if (!StringDecoder)
+        StringDecoder = require("string_decoder/").StringDecoder;
+      const decoder = new StringDecoder(enc);
+      this._readableState.decoder = decoder;
+      this._readableState.encoding = this._readableState.decoder.encoding;
+      let p = this._readableState.buffer.head;
+      let content = "";
+      while (p !== null) {
+        content += decoder.write(p.data);
+        p = p.next;
+      }
+      this._readableState.buffer.clear();
+      if (content !== "")
+        this._readableState.buffer.push(content);
+      this._readableState.length = content.length;
+      return this;
+    };
+    var MAX_HWM = 1073741824;
+    function computeNewHighWaterMark(n) {
+      if (n >= MAX_HWM) {
+        n = MAX_HWM;
+      } else {
+        n--;
+        n |= n >>> 1;
+        n |= n >>> 2;
+        n |= n >>> 4;
+        n |= n >>> 8;
+        n |= n >>> 16;
+        n++;
+      }
+      return n;
+    }
+    function howMuchToRead(n, state) {
+      if (n <= 0 || state.length === 0 && state.ended)
+        return 0;
+      if (state.objectMode)
+        return 1;
+      if (n !== n) {
+        if (state.flowing && state.length)
+          return state.buffer.head.data.length;
+        else
+          return state.length;
+      }
+      if (n > state.highWaterMark)
+        state.highWaterMark = computeNewHighWaterMark(n);
+      if (n <= state.length)
+        return n;
+      if (!state.ended) {
+        state.needReadable = true;
+        return 0;
+      }
+      return state.length;
+    }
+    Readable.prototype.read = function(n) {
+      debug("read", n);
+      n = parseInt(n, 10);
+      var state = this._readableState;
+      var nOrig = n;
+      if (n !== 0)
+        state.emittedReadable = false;
+      if (n === 0 && state.needReadable && ((state.highWaterMark !== 0 ? state.length >= state.highWaterMark : state.length > 0) || state.ended)) {
+        debug("read: emitReadable", state.length, state.ended);
+        if (state.length === 0 && state.ended)
+          endReadable(this);
+        else
+          emitReadable(this);
+        return null;
+      }
+      n = howMuchToRead(n, state);
+      if (n === 0 && state.ended) {
+        if (state.length === 0)
+          endReadable(this);
+        return null;
+      }
+      var doRead = state.needReadable;
+      debug("need readable", doRead);
+      if (state.length === 0 || state.length - n < state.highWaterMark) {
+        doRead = true;
+        debug("length less than watermark", doRead);
+      }
+      if (state.ended || state.reading) {
+        doRead = false;
+        debug("reading or ended", doRead);
+      } else if (doRead) {
+        debug("do read");
+        state.reading = true;
+        state.sync = true;
+        if (state.length === 0)
+          state.needReadable = true;
+        this._read(state.highWaterMark);
+        state.sync = false;
+        if (!state.reading)
+          n = howMuchToRead(nOrig, state);
+      }
+      var ret;
+      if (n > 0)
+        ret = fromList(n, state);
+      else
+        ret = null;
+      if (ret === null) {
+        state.needReadable = state.length <= state.highWaterMark;
+        n = 0;
+      } else {
+        state.length -= n;
+        state.awaitDrain = 0;
+      }
+      if (state.length === 0) {
+        if (!state.ended)
+          state.needReadable = true;
+        if (nOrig !== n && state.ended)
+          endReadable(this);
+      }
+      if (ret !== null)
+        this.emit("data", ret);
+      return ret;
+    };
+    function onEofChunk(stream, state) {
+      debug("onEofChunk");
+      if (state.ended)
+        return;
+      if (state.decoder) {
+        var chunk = state.decoder.end();
+        if (chunk && chunk.length) {
+          state.buffer.push(chunk);
+          state.length += state.objectMode ? 1 : chunk.length;
+        }
+      }
+      state.ended = true;
+      if (state.sync) {
+        emitReadable(stream);
+      } else {
+        state.needReadable = false;
+        if (!state.emittedReadable) {
+          state.emittedReadable = true;
+          emitReadable_(stream);
+        }
+      }
+    }
+    function emitReadable(stream) {
+      var state = stream._readableState;
+      debug("emitReadable", state.needReadable, state.emittedReadable);
+      state.needReadable = false;
+      if (!state.emittedReadable) {
+        debug("emitReadable", state.flowing);
+        state.emittedReadable = true;
+        process.nextTick(emitReadable_, stream);
+      }
+    }
+    function emitReadable_(stream) {
+      var state = stream._readableState;
+      debug("emitReadable_", state.destroyed, state.length, state.ended);
+      if (!state.destroyed && (state.length || state.ended)) {
+        stream.emit("readable");
+        state.emittedReadable = false;
+      }
+      state.needReadable = !state.flowing && !state.ended && state.length <= state.highWaterMark;
+      flow(stream);
+    }
+    function maybeReadMore(stream, state) {
+      if (!state.readingMore) {
+        state.readingMore = true;
+        process.nextTick(maybeReadMore_, stream, state);
+      }
+    }
+    function maybeReadMore_(stream, state) {
+      while (!state.reading && !state.ended && (state.length < state.highWaterMark || state.flowing && state.length === 0)) {
+        const len = state.length;
+        debug("maybeReadMore read 0");
+        stream.read(0);
+        if (len === state.length)
+          break;
+      }
+      state.readingMore = false;
+    }
+    Readable.prototype._read = function(n) {
+      errorOrDestroy(this, new ERR_METHOD_NOT_IMPLEMENTED("_read()"));
+    };
+    Readable.prototype.pipe = function(dest, pipeOpts) {
+      var src = this;
+      var state = this._readableState;
+      switch (state.pipesCount) {
+        case 0:
+          state.pipes = dest;
+          break;
+        case 1:
+          state.pipes = [state.pipes, dest];
+          break;
+        default:
+          state.pipes.push(dest);
+          break;
+      }
+      state.pipesCount += 1;
+      debug("pipe count=%d opts=%j", state.pipesCount, pipeOpts);
+      var doEnd = (!pipeOpts || pipeOpts.end !== false) && dest !== process.stdout && dest !== process.stderr;
+      var endFn = doEnd ? onend : unpipe;
+      if (state.endEmitted)
+        process.nextTick(endFn);
+      else
+        src.once("end", endFn);
+      dest.on("unpipe", onunpipe);
+      function onunpipe(readable, unpipeInfo) {
+        debug("onunpipe");
+        if (readable === src) {
+          if (unpipeInfo && unpipeInfo.hasUnpiped === false) {
+            unpipeInfo.hasUnpiped = true;
+            cleanup();
+          }
+        }
+      }
+      function onend() {
+        debug("onend");
+        dest.end();
+      }
+      var ondrain = pipeOnDrain(src);
+      dest.on("drain", ondrain);
+      var cleanedUp = false;
+      function cleanup() {
+        debug("cleanup");
+        dest.removeListener("close", onclose);
+        dest.removeListener("finish", onfinish);
+        dest.removeListener("drain", ondrain);
+        dest.removeListener("error", onerror);
+        dest.removeListener("unpipe", onunpipe);
+        src.removeListener("end", onend);
+        src.removeListener("end", unpipe);
+        src.removeListener("data", ondata);
+        cleanedUp = true;
+        if (state.awaitDrain && (!dest._writableState || dest._writableState.needDrain))
+          ondrain();
+      }
+      src.on("data", ondata);
+      function ondata(chunk) {
+        debug("ondata");
+        var ret = dest.write(chunk);
+        debug("dest.write", ret);
+        if (ret === false) {
+          if ((state.pipesCount === 1 && state.pipes === dest || state.pipesCount > 1 && indexOf(state.pipes, dest) !== -1) && !cleanedUp) {
+            debug("false write response, pause", state.awaitDrain);
+            state.awaitDrain++;
+          }
+          src.pause();
+        }
+      }
+      function onerror(er) {
+        debug("onerror", er);
+        unpipe();
+        dest.removeListener("error", onerror);
+        if (EElistenerCount(dest, "error") === 0)
+          errorOrDestroy(dest, er);
+      }
+      prependListener(dest, "error", onerror);
+      function onclose() {
+        dest.removeListener("finish", onfinish);
+        unpipe();
+      }
+      dest.once("close", onclose);
+      function onfinish() {
+        debug("onfinish");
+        dest.removeListener("close", onclose);
+        unpipe();
+      }
+      dest.once("finish", onfinish);
+      function unpipe() {
+        debug("unpipe");
+        src.unpipe(dest);
+      }
+      dest.emit("pipe", src);
+      if (!state.flowing) {
+        debug("pipe resume");
+        src.resume();
+      }
+      return dest;
+    };
+    function pipeOnDrain(src) {
+      return function pipeOnDrainFunctionResult() {
+        var state = src._readableState;
+        debug("pipeOnDrain", state.awaitDrain);
+        if (state.awaitDrain)
+          state.awaitDrain--;
+        if (state.awaitDrain === 0 && EElistenerCount(src, "data")) {
+          state.flowing = true;
+          flow(src);
+        }
+      };
+    }
+    Readable.prototype.unpipe = function(dest) {
+      var state = this._readableState;
+      var unpipeInfo = {
+        hasUnpiped: false
+      };
+      if (state.pipesCount === 0)
+        return this;
+      if (state.pipesCount === 1) {
+        if (dest && dest !== state.pipes)
+          return this;
+        if (!dest)
+          dest = state.pipes;
+        state.pipes = null;
+        state.pipesCount = 0;
+        state.flowing = false;
+        if (dest)
+          dest.emit("unpipe", this, unpipeInfo);
+        return this;
+      }
+      if (!dest) {
+        var dests = state.pipes;
+        var len = state.pipesCount;
+        state.pipes = null;
+        state.pipesCount = 0;
+        state.flowing = false;
+        for (var i = 0; i < len; i++)
+          dests[i].emit("unpipe", this, {
+            hasUnpiped: false
+          });
+        return this;
+      }
+      var index = indexOf(state.pipes, dest);
+      if (index === -1)
+        return this;
+      state.pipes.splice(index, 1);
+      state.pipesCount -= 1;
+      if (state.pipesCount === 1)
+        state.pipes = state.pipes[0];
+      dest.emit("unpipe", this, unpipeInfo);
+      return this;
+    };
+    Readable.prototype.on = function(ev, fn) {
+      const res = Stream.prototype.on.call(this, ev, fn);
+      const state = this._readableState;
+      if (ev === "data") {
+        state.readableListening = this.listenerCount("readable") > 0;
+        if (state.flowing !== false)
+          this.resume();
+      } else if (ev === "readable") {
+        if (!state.endEmitted && !state.readableListening) {
+          state.readableListening = state.needReadable = true;
+          state.flowing = false;
+          state.emittedReadable = false;
+          debug("on readable", state.length, state.reading);
+          if (state.length) {
+            emitReadable(this);
+          } else if (!state.reading) {
+            process.nextTick(nReadingNextTick, this);
+          }
+        }
+      }
+      return res;
+    };
+    Readable.prototype.addListener = Readable.prototype.on;
+    Readable.prototype.removeListener = function(ev, fn) {
+      const res = Stream.prototype.removeListener.call(this, ev, fn);
+      if (ev === "readable") {
+        process.nextTick(updateReadableListening, this);
+      }
+      return res;
+    };
+    Readable.prototype.removeAllListeners = function(ev) {
+      const res = Stream.prototype.removeAllListeners.apply(this, arguments);
+      if (ev === "readable" || ev === void 0) {
+        process.nextTick(updateReadableListening, this);
+      }
+      return res;
+    };
+    function updateReadableListening(self2) {
+      const state = self2._readableState;
+      state.readableListening = self2.listenerCount("readable") > 0;
+      if (state.resumeScheduled && !state.paused) {
+        state.flowing = true;
+      } else if (self2.listenerCount("data") > 0) {
+        self2.resume();
+      }
+    }
+    function nReadingNextTick(self2) {
+      debug("readable nexttick read 0");
+      self2.read(0);
+    }
+    Readable.prototype.resume = function() {
+      var state = this._readableState;
+      if (!state.flowing) {
+        debug("resume");
+        state.flowing = !state.readableListening;
+        resume(this, state);
+      }
+      state.paused = false;
+      return this;
+    };
+    function resume(stream, state) {
+      if (!state.resumeScheduled) {
+        state.resumeScheduled = true;
+        process.nextTick(resume_, stream, state);
+      }
+    }
+    function resume_(stream, state) {
+      debug("resume", state.reading);
+      if (!state.reading) {
+        stream.read(0);
+      }
+      state.resumeScheduled = false;
+      stream.emit("resume");
+      flow(stream);
+      if (state.flowing && !state.reading)
+        stream.read(0);
+    }
+    Readable.prototype.pause = function() {
+      debug("call pause flowing=%j", this._readableState.flowing);
+      if (this._readableState.flowing !== false) {
+        debug("pause");
+        this._readableState.flowing = false;
+        this.emit("pause");
+      }
+      this._readableState.paused = true;
+      return this;
+    };
+    function flow(stream) {
+      const state = stream._readableState;
+      debug("flow", state.flowing);
+      while (state.flowing && stream.read() !== null)
+        ;
+    }
+    Readable.prototype.wrap = function(stream) {
+      var state = this._readableState;
+      var paused = false;
+      stream.on("end", () => {
+        debug("wrapped end");
+        if (state.decoder && !state.ended) {
+          var chunk = state.decoder.end();
+          if (chunk && chunk.length)
+            this.push(chunk);
+        }
+        this.push(null);
+      });
+      stream.on("data", (chunk) => {
+        debug("wrapped data");
+        if (state.decoder)
+          chunk = state.decoder.write(chunk);
+        if (state.objectMode && (chunk === null || chunk === void 0))
+          return;
+        else if (!state.objectMode && (!chunk || !chunk.length))
+          return;
+        var ret = this.push(chunk);
+        if (!ret) {
+          paused = true;
+          stream.pause();
+        }
+      });
+      for (var i in stream) {
+        if (this[i] === void 0 && typeof stream[i] === "function") {
+          this[i] = function methodWrap(method) {
+            return function methodWrapReturnFunction() {
+              return stream[method].apply(stream, arguments);
+            };
+          }(i);
+        }
+      }
+      for (var n = 0; n < kProxyEvents.length; n++) {
+        stream.on(kProxyEvents[n], this.emit.bind(this, kProxyEvents[n]));
+      }
+      this._read = (n2) => {
+        debug("wrapped _read", n2);
+        if (paused) {
+          paused = false;
+          stream.resume();
+        }
+      };
+      return this;
+    };
+    if (typeof Symbol === "function") {
+      Readable.prototype[Symbol.asyncIterator] = function() {
+        if (createReadableStreamAsyncIterator === void 0) {
+          createReadableStreamAsyncIterator = require_async_iterator();
+        }
+        return createReadableStreamAsyncIterator(this);
+      };
+    }
+    Object.defineProperty(Readable.prototype, "readableHighWaterMark", {
+      // making it explicit this property is not enumerable
+      // because otherwise some prototype manipulation in
+      // userland will fail
+      enumerable: false,
+      get: function get() {
+        return this._readableState.highWaterMark;
+      }
+    });
+    Object.defineProperty(Readable.prototype, "readableBuffer", {
+      // making it explicit this property is not enumerable
+      // because otherwise some prototype manipulation in
+      // userland will fail
+      enumerable: false,
+      get: function get() {
+        return this._readableState && this._readableState.buffer;
+      }
+    });
+    Object.defineProperty(Readable.prototype, "readableFlowing", {
+      // making it explicit this property is not enumerable
+      // because otherwise some prototype manipulation in
+      // userland will fail
+      enumerable: false,
+      get: function get() {
+        return this._readableState.flowing;
+      },
+      set: function set(state) {
+        if (this._readableState) {
+          this._readableState.flowing = state;
+        }
+      }
+    });
+    Readable._fromList = fromList;
+    Object.defineProperty(Readable.prototype, "readableLength", {
+      // making it explicit this property is not enumerable
+      // because otherwise some prototype manipulation in
+      // userland will fail
+      enumerable: false,
+      get() {
+        return this._readableState.length;
+      }
+    });
+    function fromList(n, state) {
+      if (state.length === 0)
+        return null;
+      var ret;
+      if (state.objectMode)
+        ret = state.buffer.shift();
+      else if (!n || n >= state.length) {
+        if (state.decoder)
+          ret = state.buffer.join("");
+        else if (state.buffer.length === 1)
+          ret = state.buffer.first();
+        else
+          ret = state.buffer.concat(state.length);
+        state.buffer.clear();
+      } else {
+        ret = state.buffer.consume(n, state.decoder);
+      }
+      return ret;
+    }
+    function endReadable(stream) {
+      var state = stream._readableState;
+      debug("endReadable", state.endEmitted);
+      if (!state.endEmitted) {
+        state.ended = true;
+        process.nextTick(endReadableNT, state, stream);
+      }
+    }
+    function endReadableNT(state, stream) {
+      debug("endReadableNT", state.endEmitted, state.length);
+      if (!state.endEmitted && state.length === 0) {
+        state.endEmitted = true;
+        stream.readable = false;
+        stream.emit("end");
+        if (state.autoDestroy) {
+          const wState = stream._writableState;
+          if (!wState || wState.autoDestroy && wState.finished) {
+            stream.destroy();
+          }
+        }
+      }
+    }
+    if (typeof Symbol === "function") {
+      Readable.from = function(iterable, opts) {
+        if (from === void 0) {
+          from = require_from_browser();
+        }
+        return from(Readable, iterable, opts);
+      };
+    }
+    function indexOf(xs, x) {
+      for (var i = 0, l = xs.length; i < l; i++) {
+        if (xs[i] === x)
+          return i;
+      }
+      return -1;
+    }
+  }
+});
+
+// node_modules/readable-stream/lib/_stream_transform.js
+var require_stream_transform = __commonJS({
+  "node_modules/readable-stream/lib/_stream_transform.js"(exports, module2) {
+    "use strict";
+    module2.exports = Transform;
+    var _require$codes = require_errors_browser().codes;
+    var ERR_METHOD_NOT_IMPLEMENTED = _require$codes.ERR_METHOD_NOT_IMPLEMENTED;
+    var ERR_MULTIPLE_CALLBACK = _require$codes.ERR_MULTIPLE_CALLBACK;
+    var ERR_TRANSFORM_ALREADY_TRANSFORMING = _require$codes.ERR_TRANSFORM_ALREADY_TRANSFORMING;
+    var ERR_TRANSFORM_WITH_LENGTH_0 = _require$codes.ERR_TRANSFORM_WITH_LENGTH_0;
+    var Duplex = require_stream_duplex();
+    require_inherits_browser()(Transform, Duplex);
+    function afterTransform(er, data) {
+      var ts = this._transformState;
+      ts.transforming = false;
+      var cb = ts.writecb;
+      if (cb === null) {
+        return this.emit("error", new ERR_MULTIPLE_CALLBACK());
+      }
+      ts.writechunk = null;
+      ts.writecb = null;
+      if (data != null)
+        this.push(data);
+      cb(er);
+      var rs = this._readableState;
+      rs.reading = false;
+      if (rs.needReadable || rs.length < rs.highWaterMark) {
+        this._read(rs.highWaterMark);
+      }
+    }
+    function Transform(options) {
+      if (!(this instanceof Transform))
+        return new Transform(options);
+      Duplex.call(this, options);
+      this._transformState = {
+        afterTransform: afterTransform.bind(this),
+        needTransform: false,
+        transforming: false,
+        writecb: null,
+        writechunk: null,
+        writeencoding: null
+      };
+      this._readableState.needReadable = true;
+      this._readableState.sync = false;
+      if (options) {
+        if (typeof options.transform === "function")
+          this._transform = options.transform;
+        if (typeof options.flush === "function")
+          this._flush = options.flush;
+      }
+      this.on("prefinish", prefinish);
+    }
+    function prefinish() {
+      if (typeof this._flush === "function" && !this._readableState.destroyed) {
+        this._flush((er, data) => {
+          done(this, er, data);
+        });
+      } else {
+        done(this, null, null);
+      }
+    }
+    Transform.prototype.push = function(chunk, encoding) {
+      this._transformState.needTransform = false;
+      return Duplex.prototype.push.call(this, chunk, encoding);
+    };
+    Transform.prototype._transform = function(chunk, encoding, cb) {
+      cb(new ERR_METHOD_NOT_IMPLEMENTED("_transform()"));
+    };
+    Transform.prototype._write = function(chunk, encoding, cb) {
+      var ts = this._transformState;
+      ts.writecb = cb;
+      ts.writechunk = chunk;
+      ts.writeencoding = encoding;
+      if (!ts.transforming) {
+        var rs = this._readableState;
+        if (ts.needTransform || rs.needReadable || rs.length < rs.highWaterMark)
+          this._read(rs.highWaterMark);
+      }
+    };
+    Transform.prototype._read = function(n) {
+      var ts = this._transformState;
+      if (ts.writechunk !== null && !ts.transforming) {
+        ts.transforming = true;
+        this._transform(ts.writechunk, ts.writeencoding, ts.afterTransform);
+      } else {
+        ts.needTransform = true;
+      }
+    };
+    Transform.prototype._destroy = function(err, cb) {
+      Duplex.prototype._destroy.call(this, err, (err2) => {
+        cb(err2);
+      });
+    };
+    function done(stream, er, data) {
+      if (er)
+        return stream.emit("error", er);
+      if (data != null)
+        stream.push(data);
+      if (stream._writableState.length)
+        throw new ERR_TRANSFORM_WITH_LENGTH_0();
+      if (stream._transformState.transforming)
+        throw new ERR_TRANSFORM_ALREADY_TRANSFORMING();
+      return stream.push(null);
+    }
+  }
+});
+
+// node_modules/readable-stream/lib/_stream_passthrough.js
+var require_stream_passthrough = __commonJS({
+  "node_modules/readable-stream/lib/_stream_passthrough.js"(exports, module2) {
+    "use strict";
+    module2.exports = PassThrough;
+    var Transform = require_stream_transform();
+    require_inherits_browser()(PassThrough, Transform);
+    function PassThrough(options) {
+      if (!(this instanceof PassThrough))
+        return new PassThrough(options);
+      Transform.call(this, options);
+    }
+    PassThrough.prototype._transform = function(chunk, encoding, cb) {
+      cb(null, chunk);
+    };
+  }
+});
+
+// node_modules/readable-stream/lib/internal/streams/pipeline.js
+var require_pipeline = __commonJS({
+  "node_modules/readable-stream/lib/internal/streams/pipeline.js"(exports, module2) {
+    "use strict";
+    var eos;
+    function once(callback) {
+      let called = false;
+      return function() {
+        if (called)
+          return;
+        called = true;
+        callback(...arguments);
+      };
+    }
+    var _require$codes = require_errors_browser().codes;
+    var ERR_MISSING_ARGS = _require$codes.ERR_MISSING_ARGS;
+    var ERR_STREAM_DESTROYED = _require$codes.ERR_STREAM_DESTROYED;
+    function noop(err) {
+      if (err)
+        throw err;
+    }
+    function isRequest(stream) {
+      return stream.setHeader && typeof stream.abort === "function";
+    }
+    function destroyer(stream, reading, writing, callback) {
+      callback = once(callback);
+      let closed = false;
+      stream.on("close", () => {
+        closed = true;
+      });
+      if (eos === void 0)
+        eos = require_end_of_stream();
+      eos(stream, {
+        readable: reading,
+        writable: writing
+      }, (err) => {
+        if (err)
+          return callback(err);
+        closed = true;
+        callback();
+      });
+      let destroyed = false;
+      return (err) => {
+        if (closed)
+          return;
+        if (destroyed)
+          return;
+        destroyed = true;
+        if (isRequest(stream))
+          return stream.abort();
+        if (typeof stream.destroy === "function")
+          return stream.destroy();
+        callback(err || new ERR_STREAM_DESTROYED("pipe"));
+      };
+    }
+    function call(fn) {
+      fn();
+    }
+    function pipe(from, to) {
+      return from.pipe(to);
+    }
+    function popCallback(streams) {
+      if (!streams.length)
+        return noop;
+      if (typeof streams[streams.length - 1] !== "function")
+        return noop;
+      return streams.pop();
+    }
+    function pipeline() {
+      for (var _len = arguments.length, streams = new Array(_len), _key = 0; _key < _len; _key++) {
+        streams[_key] = arguments[_key];
+      }
+      const callback = popCallback(streams);
+      if (Array.isArray(streams[0]))
+        streams = streams[0];
+      if (streams.length < 2) {
+        throw new ERR_MISSING_ARGS("streams");
+      }
+      let error;
+      const destroys = streams.map(function(stream, i) {
+        const reading = i < streams.length - 1;
+        const writing = i > 0;
+        return destroyer(stream, reading, writing, function(err) {
+          if (!error)
+            error = err;
+          if (err)
+            destroys.forEach(call);
+          if (reading)
+            return;
+          destroys.forEach(call);
+          callback(error);
+        });
+      });
+      return streams.reduce(pipe);
+    }
+    module2.exports = pipeline;
+  }
+});
+
+// node_modules/readable-stream/readable-browser.js
+var require_readable_browser = __commonJS({
+  "node_modules/readable-stream/readable-browser.js"(exports, module2) {
+    exports = module2.exports = require_stream_readable();
+    exports.Stream = exports;
+    exports.Readable = exports;
+    exports.Writable = require_stream_writable();
+    exports.Duplex = require_stream_duplex();
+    exports.Transform = require_stream_transform();
+    exports.PassThrough = require_stream_passthrough();
+    exports.finished = require_end_of_stream();
+    exports.pipeline = require_pipeline();
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/rng.js
+function rng() {
+  if (!getRandomValues) {
+    getRandomValues = typeof crypto !== "undefined" && crypto.getRandomValues && crypto.getRandomValues.bind(crypto) || typeof msCrypto !== "undefined" && typeof msCrypto.getRandomValues === "function" && msCrypto.getRandomValues.bind(msCrypto);
+    if (!getRandomValues) {
+      throw new Error("crypto.getRandomValues() not supported. See https://github.com/uuidjs/uuid#getrandomvalues-not-supported");
+    }
+  }
+  return getRandomValues(rnds8);
+}
+var getRandomValues, rnds8;
+var init_rng = __esm({
+  "node_modules/uuid/dist/esm-browser/rng.js"() {
+    rnds8 = new Uint8Array(16);
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/regex.js
+var regex_default;
+var init_regex = __esm({
+  "node_modules/uuid/dist/esm-browser/regex.js"() {
+    regex_default = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000)$/i;
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/validate.js
+function validate(uuid) {
+  return typeof uuid === "string" && regex_default.test(uuid);
+}
+var validate_default;
+var init_validate = __esm({
+  "node_modules/uuid/dist/esm-browser/validate.js"() {
+    init_regex();
+    validate_default = validate;
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/stringify.js
+function stringify(arr) {
+  var offset = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : 0;
+  var uuid = (byteToHex[arr[offset + 0]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + "-" + byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + "-" + byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + "-" + byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + "-" + byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]]).toLowerCase();
+  if (!validate_default(uuid)) {
+    throw TypeError("Stringified UUID is invalid");
+  }
+  return uuid;
+}
+var byteToHex, i, stringify_default;
+var init_stringify = __esm({
+  "node_modules/uuid/dist/esm-browser/stringify.js"() {
+    init_validate();
+    byteToHex = [];
+    for (i = 0; i < 256; ++i) {
+      byteToHex.push((i + 256).toString(16).substr(1));
+    }
+    stringify_default = stringify;
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/v1.js
+function v1(options, buf, offset) {
+  var i = buf && offset || 0;
+  var b = buf || new Array(16);
+  options = options || {};
+  var node = options.node || _nodeId;
+  var clockseq = options.clockseq !== void 0 ? options.clockseq : _clockseq;
+  if (node == null || clockseq == null) {
+    var seedBytes = options.random || (options.rng || rng)();
+    if (node == null) {
+      node = _nodeId = [seedBytes[0] | 1, seedBytes[1], seedBytes[2], seedBytes[3], seedBytes[4], seedBytes[5]];
+    }
+    if (clockseq == null) {
+      clockseq = _clockseq = (seedBytes[6] << 8 | seedBytes[7]) & 16383;
+    }
+  }
+  var msecs = options.msecs !== void 0 ? options.msecs : Date.now();
+  var nsecs = options.nsecs !== void 0 ? options.nsecs : _lastNSecs + 1;
+  var dt = msecs - _lastMSecs + (nsecs - _lastNSecs) / 1e4;
+  if (dt < 0 && options.clockseq === void 0) {
+    clockseq = clockseq + 1 & 16383;
+  }
+  if ((dt < 0 || msecs > _lastMSecs) && options.nsecs === void 0) {
+    nsecs = 0;
+  }
+  if (nsecs >= 1e4) {
+    throw new Error("uuid.v1(): Can't create more than 10M uuids/sec");
+  }
+  _lastMSecs = msecs;
+  _lastNSecs = nsecs;
+  _clockseq = clockseq;
+  msecs += 122192928e5;
+  var tl = ((msecs & 268435455) * 1e4 + nsecs) % 4294967296;
+  b[i++] = tl >>> 24 & 255;
+  b[i++] = tl >>> 16 & 255;
+  b[i++] = tl >>> 8 & 255;
+  b[i++] = tl & 255;
+  var tmh = msecs / 4294967296 * 1e4 & 268435455;
+  b[i++] = tmh >>> 8 & 255;
+  b[i++] = tmh & 255;
+  b[i++] = tmh >>> 24 & 15 | 16;
+  b[i++] = tmh >>> 16 & 255;
+  b[i++] = clockseq >>> 8 | 128;
+  b[i++] = clockseq & 255;
+  for (var n = 0; n < 6; ++n) {
+    b[i + n] = node[n];
+  }
+  return buf || stringify_default(b);
+}
+var _nodeId, _clockseq, _lastMSecs, _lastNSecs, v1_default;
+var init_v1 = __esm({
+  "node_modules/uuid/dist/esm-browser/v1.js"() {
+    init_rng();
+    init_stringify();
+    _lastMSecs = 0;
+    _lastNSecs = 0;
+    v1_default = v1;
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/parse.js
+function parse(uuid) {
+  if (!validate_default(uuid)) {
+    throw TypeError("Invalid UUID");
+  }
+  var v;
+  var arr = new Uint8Array(16);
+  arr[0] = (v = parseInt(uuid.slice(0, 8), 16)) >>> 24;
+  arr[1] = v >>> 16 & 255;
+  arr[2] = v >>> 8 & 255;
+  arr[3] = v & 255;
+  arr[4] = (v = parseInt(uuid.slice(9, 13), 16)) >>> 8;
+  arr[5] = v & 255;
+  arr[6] = (v = parseInt(uuid.slice(14, 18), 16)) >>> 8;
+  arr[7] = v & 255;
+  arr[8] = (v = parseInt(uuid.slice(19, 23), 16)) >>> 8;
+  arr[9] = v & 255;
+  arr[10] = (v = parseInt(uuid.slice(24, 36), 16)) / 1099511627776 & 255;
+  arr[11] = v / 4294967296 & 255;
+  arr[12] = v >>> 24 & 255;
+  arr[13] = v >>> 16 & 255;
+  arr[14] = v >>> 8 & 255;
+  arr[15] = v & 255;
+  return arr;
+}
+var parse_default;
+var init_parse = __esm({
+  "node_modules/uuid/dist/esm-browser/parse.js"() {
+    init_validate();
+    parse_default = parse;
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/v35.js
+function stringToBytes(str) {
+  str = unescape(encodeURIComponent(str));
+  var bytes = [];
+  for (var i = 0; i < str.length; ++i) {
+    bytes.push(str.charCodeAt(i));
+  }
+  return bytes;
+}
+function v35_default(name, version2, hashfunc) {
+  function generateUUID(value, namespace, buf, offset) {
+    if (typeof value === "string") {
+      value = stringToBytes(value);
+    }
+    if (typeof namespace === "string") {
+      namespace = parse_default(namespace);
+    }
+    if (namespace.length !== 16) {
+      throw TypeError("Namespace must be array-like (16 iterable integer values, 0-255)");
+    }
+    var bytes = new Uint8Array(16 + value.length);
+    bytes.set(namespace);
+    bytes.set(value, namespace.length);
+    bytes = hashfunc(bytes);
+    bytes[6] = bytes[6] & 15 | version2;
+    bytes[8] = bytes[8] & 63 | 128;
+    if (buf) {
+      offset = offset || 0;
+      for (var i = 0; i < 16; ++i) {
+        buf[offset + i] = bytes[i];
+      }
+      return buf;
+    }
+    return stringify_default(bytes);
+  }
+  try {
+    generateUUID.name = name;
+  } catch (err) {
+  }
+  generateUUID.DNS = DNS;
+  generateUUID.URL = URL;
+  return generateUUID;
+}
+var DNS, URL;
+var init_v35 = __esm({
+  "node_modules/uuid/dist/esm-browser/v35.js"() {
+    init_stringify();
+    init_parse();
+    DNS = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+    URL = "6ba7b811-9dad-11d1-80b4-00c04fd430c8";
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/md5.js
+function md5(bytes) {
+  if (typeof bytes === "string") {
+    var msg = unescape(encodeURIComponent(bytes));
+    bytes = new Uint8Array(msg.length);
+    for (var i = 0; i < msg.length; ++i) {
+      bytes[i] = msg.charCodeAt(i);
+    }
+  }
+  return md5ToHexEncodedArray(wordsToMd5(bytesToWords(bytes), bytes.length * 8));
+}
+function md5ToHexEncodedArray(input) {
+  var output = [];
+  var length32 = input.length * 32;
+  var hexTab = "0123456789abcdef";
+  for (var i = 0; i < length32; i += 8) {
+    var x = input[i >> 5] >>> i % 32 & 255;
+    var hex = parseInt(hexTab.charAt(x >>> 4 & 15) + hexTab.charAt(x & 15), 16);
+    output.push(hex);
+  }
+  return output;
+}
+function getOutputLength(inputLength8) {
+  return (inputLength8 + 64 >>> 9 << 4) + 14 + 1;
+}
+function wordsToMd5(x, len) {
+  x[len >> 5] |= 128 << len % 32;
+  x[getOutputLength(len) - 1] = len;
+  var a = 1732584193;
+  var b = -271733879;
+  var c = -1732584194;
+  var d = 271733878;
+  for (var i = 0; i < x.length; i += 16) {
+    var olda = a;
+    var oldb = b;
+    var oldc = c;
+    var oldd = d;
+    a = md5ff(a, b, c, d, x[i], 7, -680876936);
+    d = md5ff(d, a, b, c, x[i + 1], 12, -389564586);
+    c = md5ff(c, d, a, b, x[i + 2], 17, 606105819);
+    b = md5ff(b, c, d, a, x[i + 3], 22, -1044525330);
+    a = md5ff(a, b, c, d, x[i + 4], 7, -176418897);
+    d = md5ff(d, a, b, c, x[i + 5], 12, 1200080426);
+    c = md5ff(c, d, a, b, x[i + 6], 17, -1473231341);
+    b = md5ff(b, c, d, a, x[i + 7], 22, -45705983);
+    a = md5ff(a, b, c, d, x[i + 8], 7, 1770035416);
+    d = md5ff(d, a, b, c, x[i + 9], 12, -1958414417);
+    c = md5ff(c, d, a, b, x[i + 10], 17, -42063);
+    b = md5ff(b, c, d, a, x[i + 11], 22, -1990404162);
+    a = md5ff(a, b, c, d, x[i + 12], 7, 1804603682);
+    d = md5ff(d, a, b, c, x[i + 13], 12, -40341101);
+    c = md5ff(c, d, a, b, x[i + 14], 17, -1502002290);
+    b = md5ff(b, c, d, a, x[i + 15], 22, 1236535329);
+    a = md5gg(a, b, c, d, x[i + 1], 5, -165796510);
+    d = md5gg(d, a, b, c, x[i + 6], 9, -1069501632);
+    c = md5gg(c, d, a, b, x[i + 11], 14, 643717713);
+    b = md5gg(b, c, d, a, x[i], 20, -373897302);
+    a = md5gg(a, b, c, d, x[i + 5], 5, -701558691);
+    d = md5gg(d, a, b, c, x[i + 10], 9, 38016083);
+    c = md5gg(c, d, a, b, x[i + 15], 14, -660478335);
+    b = md5gg(b, c, d, a, x[i + 4], 20, -405537848);
+    a = md5gg(a, b, c, d, x[i + 9], 5, 568446438);
+    d = md5gg(d, a, b, c, x[i + 14], 9, -1019803690);
+    c = md5gg(c, d, a, b, x[i + 3], 14, -187363961);
+    b = md5gg(b, c, d, a, x[i + 8], 20, 1163531501);
+    a = md5gg(a, b, c, d, x[i + 13], 5, -1444681467);
+    d = md5gg(d, a, b, c, x[i + 2], 9, -51403784);
+    c = md5gg(c, d, a, b, x[i + 7], 14, 1735328473);
+    b = md5gg(b, c, d, a, x[i + 12], 20, -1926607734);
+    a = md5hh(a, b, c, d, x[i + 5], 4, -378558);
+    d = md5hh(d, a, b, c, x[i + 8], 11, -2022574463);
+    c = md5hh(c, d, a, b, x[i + 11], 16, 1839030562);
+    b = md5hh(b, c, d, a, x[i + 14], 23, -35309556);
+    a = md5hh(a, b, c, d, x[i + 1], 4, -1530992060);
+    d = md5hh(d, a, b, c, x[i + 4], 11, 1272893353);
+    c = md5hh(c, d, a, b, x[i + 7], 16, -155497632);
+    b = md5hh(b, c, d, a, x[i + 10], 23, -1094730640);
+    a = md5hh(a, b, c, d, x[i + 13], 4, 681279174);
+    d = md5hh(d, a, b, c, x[i], 11, -358537222);
+    c = md5hh(c, d, a, b, x[i + 3], 16, -722521979);
+    b = md5hh(b, c, d, a, x[i + 6], 23, 76029189);
+    a = md5hh(a, b, c, d, x[i + 9], 4, -640364487);
+    d = md5hh(d, a, b, c, x[i + 12], 11, -421815835);
+    c = md5hh(c, d, a, b, x[i + 15], 16, 530742520);
+    b = md5hh(b, c, d, a, x[i + 2], 23, -995338651);
+    a = md5ii(a, b, c, d, x[i], 6, -198630844);
+    d = md5ii(d, a, b, c, x[i + 7], 10, 1126891415);
+    c = md5ii(c, d, a, b, x[i + 14], 15, -1416354905);
+    b = md5ii(b, c, d, a, x[i + 5], 21, -57434055);
+    a = md5ii(a, b, c, d, x[i + 12], 6, 1700485571);
+    d = md5ii(d, a, b, c, x[i + 3], 10, -1894986606);
+    c = md5ii(c, d, a, b, x[i + 10], 15, -1051523);
+    b = md5ii(b, c, d, a, x[i + 1], 21, -2054922799);
+    a = md5ii(a, b, c, d, x[i + 8], 6, 1873313359);
+    d = md5ii(d, a, b, c, x[i + 15], 10, -30611744);
+    c = md5ii(c, d, a, b, x[i + 6], 15, -1560198380);
+    b = md5ii(b, c, d, a, x[i + 13], 21, 1309151649);
+    a = md5ii(a, b, c, d, x[i + 4], 6, -145523070);
+    d = md5ii(d, a, b, c, x[i + 11], 10, -1120210379);
+    c = md5ii(c, d, a, b, x[i + 2], 15, 718787259);
+    b = md5ii(b, c, d, a, x[i + 9], 21, -343485551);
+    a = safeAdd(a, olda);
+    b = safeAdd(b, oldb);
+    c = safeAdd(c, oldc);
+    d = safeAdd(d, oldd);
+  }
+  return [a, b, c, d];
+}
+function bytesToWords(input) {
+  if (input.length === 0) {
+    return [];
+  }
+  var length8 = input.length * 8;
+  var output = new Uint32Array(getOutputLength(length8));
+  for (var i = 0; i < length8; i += 8) {
+    output[i >> 5] |= (input[i / 8] & 255) << i % 32;
+  }
+  return output;
+}
+function safeAdd(x, y) {
+  var lsw = (x & 65535) + (y & 65535);
+  var msw = (x >> 16) + (y >> 16) + (lsw >> 16);
+  return msw << 16 | lsw & 65535;
+}
+function bitRotateLeft(num, cnt) {
+  return num << cnt | num >>> 32 - cnt;
+}
+function md5cmn(q, a, b, x, s, t) {
+  return safeAdd(bitRotateLeft(safeAdd(safeAdd(a, q), safeAdd(x, t)), s), b);
+}
+function md5ff(a, b, c, d, x, s, t) {
+  return md5cmn(b & c | ~b & d, a, b, x, s, t);
+}
+function md5gg(a, b, c, d, x, s, t) {
+  return md5cmn(b & d | c & ~d, a, b, x, s, t);
+}
+function md5hh(a, b, c, d, x, s, t) {
+  return md5cmn(b ^ c ^ d, a, b, x, s, t);
+}
+function md5ii(a, b, c, d, x, s, t) {
+  return md5cmn(c ^ (b | ~d), a, b, x, s, t);
+}
+var md5_default;
+var init_md5 = __esm({
+  "node_modules/uuid/dist/esm-browser/md5.js"() {
+    md5_default = md5;
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/v3.js
+var v3, v3_default;
+var init_v3 = __esm({
+  "node_modules/uuid/dist/esm-browser/v3.js"() {
+    init_v35();
+    init_md5();
+    v3 = v35_default("v3", 48, md5_default);
+    v3_default = v3;
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/v4.js
+function v4(options, buf, offset) {
+  options = options || {};
+  var rnds = options.random || (options.rng || rng)();
+  rnds[6] = rnds[6] & 15 | 64;
+  rnds[8] = rnds[8] & 63 | 128;
+  if (buf) {
+    offset = offset || 0;
+    for (var i = 0; i < 16; ++i) {
+      buf[offset + i] = rnds[i];
+    }
+    return buf;
+  }
+  return stringify_default(rnds);
+}
+var v4_default;
+var init_v4 = __esm({
+  "node_modules/uuid/dist/esm-browser/v4.js"() {
+    init_rng();
+    init_stringify();
+    v4_default = v4;
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/sha1.js
+function f(s, x, y, z) {
+  switch (s) {
+    case 0:
+      return x & y ^ ~x & z;
+    case 1:
+      return x ^ y ^ z;
+    case 2:
+      return x & y ^ x & z ^ y & z;
+    case 3:
+      return x ^ y ^ z;
+  }
+}
+function ROTL(x, n) {
+  return x << n | x >>> 32 - n;
+}
+function sha1(bytes) {
+  var K = [1518500249, 1859775393, 2400959708, 3395469782];
+  var H = [1732584193, 4023233417, 2562383102, 271733878, 3285377520];
+  if (typeof bytes === "string") {
+    var msg = unescape(encodeURIComponent(bytes));
+    bytes = [];
+    for (var i = 0; i < msg.length; ++i) {
+      bytes.push(msg.charCodeAt(i));
+    }
+  } else if (!Array.isArray(bytes)) {
+    bytes = Array.prototype.slice.call(bytes);
+  }
+  bytes.push(128);
+  var l = bytes.length / 4 + 2;
+  var N = Math.ceil(l / 16);
+  var M = new Array(N);
+  for (var _i = 0; _i < N; ++_i) {
+    var arr = new Uint32Array(16);
+    for (var j = 0; j < 16; ++j) {
+      arr[j] = bytes[_i * 64 + j * 4] << 24 | bytes[_i * 64 + j * 4 + 1] << 16 | bytes[_i * 64 + j * 4 + 2] << 8 | bytes[_i * 64 + j * 4 + 3];
+    }
+    M[_i] = arr;
+  }
+  M[N - 1][14] = (bytes.length - 1) * 8 / Math.pow(2, 32);
+  M[N - 1][14] = Math.floor(M[N - 1][14]);
+  M[N - 1][15] = (bytes.length - 1) * 8 & 4294967295;
+  for (var _i2 = 0; _i2 < N; ++_i2) {
+    var W = new Uint32Array(80);
+    for (var t = 0; t < 16; ++t) {
+      W[t] = M[_i2][t];
+    }
+    for (var _t = 16; _t < 80; ++_t) {
+      W[_t] = ROTL(W[_t - 3] ^ W[_t - 8] ^ W[_t - 14] ^ W[_t - 16], 1);
+    }
+    var a = H[0];
+    var b = H[1];
+    var c = H[2];
+    var d = H[3];
+    var e = H[4];
+    for (var _t2 = 0; _t2 < 80; ++_t2) {
+      var s = Math.floor(_t2 / 20);
+      var T = ROTL(a, 5) + f(s, b, c, d) + e + K[s] + W[_t2] >>> 0;
+      e = d;
+      d = c;
+      c = ROTL(b, 30) >>> 0;
+      b = a;
+      a = T;
+    }
+    H[0] = H[0] + a >>> 0;
+    H[1] = H[1] + b >>> 0;
+    H[2] = H[2] + c >>> 0;
+    H[3] = H[3] + d >>> 0;
+    H[4] = H[4] + e >>> 0;
+  }
+  return [H[0] >> 24 & 255, H[0] >> 16 & 255, H[0] >> 8 & 255, H[0] & 255, H[1] >> 24 & 255, H[1] >> 16 & 255, H[1] >> 8 & 255, H[1] & 255, H[2] >> 24 & 255, H[2] >> 16 & 255, H[2] >> 8 & 255, H[2] & 255, H[3] >> 24 & 255, H[3] >> 16 & 255, H[3] >> 8 & 255, H[3] & 255, H[4] >> 24 & 255, H[4] >> 16 & 255, H[4] >> 8 & 255, H[4] & 255];
+}
+var sha1_default;
+var init_sha1 = __esm({
+  "node_modules/uuid/dist/esm-browser/sha1.js"() {
+    sha1_default = sha1;
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/v5.js
+var v5, v5_default;
+var init_v5 = __esm({
+  "node_modules/uuid/dist/esm-browser/v5.js"() {
+    init_v35();
+    init_sha1();
+    v5 = v35_default("v5", 80, sha1_default);
+    v5_default = v5;
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/nil.js
+var nil_default;
+var init_nil = __esm({
+  "node_modules/uuid/dist/esm-browser/nil.js"() {
+    nil_default = "00000000-0000-0000-0000-000000000000";
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/version.js
+function version(uuid) {
+  if (!validate_default(uuid)) {
+    throw TypeError("Invalid UUID");
+  }
+  return parseInt(uuid.substr(14, 1), 16);
+}
+var version_default;
+var init_version = __esm({
+  "node_modules/uuid/dist/esm-browser/version.js"() {
+    init_validate();
+    version_default = version;
+  }
+});
+
+// node_modules/uuid/dist/esm-browser/index.js
+var esm_browser_exports = {};
+__export(esm_browser_exports, {
+  NIL: () => nil_default,
+  parse: () => parse_default,
+  stringify: () => stringify_default,
+  v1: () => v1_default,
+  v3: () => v3_default,
+  v4: () => v4_default,
+  v5: () => v5_default,
+  validate: () => validate_default,
+  version: () => version_default
+});
+var init_esm_browser = __esm({
+  "node_modules/uuid/dist/esm-browser/index.js"() {
+    init_v1();
+    init_v3();
+    init_v4();
+    init_v5();
+    init_nil();
+    init_version();
+    init_validate();
+    init_stringify();
+    init_parse();
+  }
+});
+
+// node_modules/pdfjs/lib/content.js
+var require_content = __commonJS({
+  "node_modules/pdfjs/lib/content.js"(exports, module2) {
+    "use strict";
+    var PDF = require_object2();
+    module2.exports = class ContentChunk {
+      constructor(doc, obj) {
+        this._doc = doc;
+        this._fonts = {};
+        this._xobjects = {};
+        this._object = obj || new PDF.Object();
+        this._length = new PDF.Object();
+        doc._registerObject(this._object);
+        doc._registerObject(this._length);
+        this._object.prop("Length", this._length.toReference());
+      }
+    };
+  }
+});
+
+// node_modules/pdfjs/lib/external.js
+var require_external = __commonJS({
+  "node_modules/pdfjs/lib/external.js"(exports, module2) {
+    "use strict";
+    var PDF = require_object2();
+    var Parser = require_parser();
+    var PROPERTIES_TO_COPY = {
+      colorSpaces: "ColorSpace",
+      fonts: "Font",
+      xobjects: "XObject",
+      extGStates: "ExtGState",
+      shadings: "Shading"
+    };
+    module2.exports = class ExternalDocument {
+      constructor(src) {
+        const parser = new Parser(src);
+        parser.parse();
+        const catalog = parser.trailer.get("Root").object.properties;
+        const pages = catalog.get("Pages").object.properties;
+        this.pages = pages;
+        this.mediaBox = pages.get("MediaBox");
+        const kids = pages.get("Kids");
+        this.pageCount = this._countPagesRecursively(kids, 0);
+      }
+      _countPagesRecursively(kids, i) {
+        for (const kid of kids) {
+          const page = kid.object;
+          if (page.properties.get("Type").toString() === "/Pages") {
+            i = this._countPagesRecursively(page.properties.get("Kids"), i);
+          } else {
+            i++;
+          }
+        }
+        return i;
+      }
+      // TODO: add mutex to not write concurrently (because of document specific _registerObject)
+      async write(doc, page) {
+        await doc._endPage();
+        const kids = this.pages.get("Kids");
+        const filter = page ? (i) => i === page - 1 : void 0;
+        for (const page2 of this._iterPagesRecursively(doc, kids, filter)) {
+          if (!page2.properties.has("MediaBox") && this.mediaBox) {
+            page2.properties.set("MediaBox", this.mediaBox);
+          }
+          doc._registerObject(page2, true);
+          const objects = [];
+          Parser.addObjectsRecursive(objects, page2, 0);
+          for (const obj of objects) {
+            doc._registerObject(obj, true);
+          }
+          for (const obj of objects) {
+            await doc._writeObject(obj);
+          }
+          page2.prop("Parent", doc._pagesObj.toReference());
+          await doc._writeObject(page2);
+          doc._pages.push(page2.toReference());
+        }
+      }
+      *_iterPagesRecursively(doc, kids, filter, cursor) {
+        if (!cursor) {
+          cursor = { i: 0 };
+        }
+        for (const kid of kids) {
+          const page = kid.object;
+          if (page.properties.get("Type").toString() === "/Pages") {
+            yield* this._iterPagesRecursively(doc, page.properties.get("Kids"), filter, cursor);
+            continue;
+          } else if (!filter || filter(cursor.i)) {
+            yield page;
+          }
+          cursor.i++;
+        }
+      }
+      async setAsTemplate(doc, firstPageOnly) {
+        await doc._endPage();
+        const filter = (i) => i === 0;
+        const kids = this.pages.get("Kids");
+        if (!kids[0]) {
+          throw new TypeError("External document is invalid");
+        }
+        for (const page of this._iterPagesRecursively(doc, kids, filter)) {
+          if (!page.properties.has("MediaBox") && this.mediaBox) {
+            page.properties.set("MediaBox", this.mediaBox);
+          }
+          const first = page.properties;
+          const objects = [];
+          Parser.addObjectsRecursive(objects, page, 0);
+          for (const obj of objects) {
+            doc._registerObject(obj, true);
+          }
+          for (const obj of objects) {
+            await doc._writeObject(obj);
+          }
+          let contents = first.get("Contents");
+          if (!Array.isArray(contents)) {
+            contents = [contents];
+          }
+          let resources = first.get("Resources");
+          if (resources instanceof PDF.Reference) {
+            resources = resources.object.properties;
+          }
+          doc._template = {
+            contents: contents.map((c) => c && c.toString() || ""),
+            colorSpaces: {},
+            fonts: {},
+            xobjects: {},
+            extGStates: {},
+            shadings: {}
+          };
+          for (const prop in PROPERTIES_TO_COPY) {
+            const dict = resources && resources.get(PROPERTIES_TO_COPY[prop]);
+            if (dict) {
+              for (const alias in dict.dictionary) {
+                doc._template[prop][alias] = dict.dictionary[alias].toString();
+                doc._aliases.block(alias);
+              }
+            }
+          }
+          doc._template.firstPageOnly = firstPageOnly;
+        }
+      }
+      async _getPagesRecursively(doc, kids, i, filter) {
+        for (const kid of kids) {
+          const page = kid.object;
+          if (page.properties.get("Type").toString() === "/Pages") {
+            i = await this._addPagesRecursively(doc, page.properties.get("Kids"), i, filter);
+            continue;
+          } else if (!filter || filter(i)) {
+            if (!page.properties.has("MediaBox") && this.mediaBox) {
+              page.properties.set("MediaBox", this.mediaBox);
+            }
+            doc._registerObject(page, true);
+            const objects = [];
+            Parser.addObjectsRecursive(objects, page, 0);
+            for (const obj of objects) {
+              doc._registerObject(obj, true);
+            }
+            for (const obj of objects) {
+              await doc._writeObject(obj);
+            }
+            page.prop("Parent", doc._pagesObj.toReference());
+            await doc._writeObject(page);
+            doc._pages.push(page.toReference());
+          }
+          i++;
+        }
+        return i;
+      }
+    };
+  }
+});
+
+// node_modules/pdfjs/lib/font/afm.js
+var require_afm = __commonJS({
+  "node_modules/pdfjs/lib/font/afm.js"(exports, module2) {
+    "use strict";
+    var PDFName = require_name();
+    var PDFObject = require_object();
+    var PDFString = require_string();
+    var PDFArray = require_array();
+    var Base = require_base();
+    var StringWidth = Base.StringWidth;
+    module2.exports = class AFMFont extends Base {
+      constructor(data) {
+        super();
+        this._data = data;
+        this.lineGap = this._data.fontBBox[3] - this._data.fontBBox[1] - (this._data.ascender - this._data.descender);
+        this.parent = this;
+      }
+      instance() {
+        return this;
+      }
+      encode(str) {
+        let encoded = "";
+        for (let i = 0, len = str.length; i < len; ++i) {
+          switch (str[i]) {
+            case "\\":
+              encoded += "\\\\";
+              break;
+            case "(":
+              encoded += "\\(";
+              break;
+            case ")":
+              encoded += "\\)";
+              break;
+            default:
+              encoded += String.fromCharCode(this._charCodeFor(str[i]));
+          }
+        }
+        return "(" + encoded + ")";
+      }
+      _charCodeFor(c) {
+        return c in UNICODE_TO_WIN1252 ? UNICODE_TO_WIN1252[c] : c.charCodeAt(0);
+      }
+      stringWidth(str, size) {
+        const scale = size / 1e3;
+        let width = 0;
+        const kerning = [];
+        for (let i = 0, len = str.length; i < len; ++i) {
+          const left = this._charCodeFor(str[i]);
+          const advanceWidth = this._data.widths[left];
+          if (advanceWidth) {
+            width += advanceWidth;
+          }
+          if (str[i + 1] !== void 0 && left in this._data.kerning) {
+            const right = this._charCodeFor(str[i + 1]);
+            const offset = this._data.kerning[left][right];
+            if (offset !== void 0) {
+              width += offset;
+              kerning.push({ pos: i + 1, offset: -offset });
+            }
+          }
+        }
+        return new StringWidth(width * scale, kerning);
+      }
+      lineHeight(size, includeGap) {
+        if (includeGap == null) {
+          includeGap = false;
+        }
+        const gap = includeGap ? this.lineGap : 0;
+        return (this._data.ascender - this._data.descender) * size / 1e3;
+      }
+      ascent(size) {
+        return this._data.ascender * size / 1e3;
+      }
+      descent(size) {
+        return this._data.descender * size / 1e3;
+      }
+      underlinePosition(size) {
+        return this._data.underlinePosition * size / 1e3;
+      }
+      underlineThickness(size) {
+        return this._data.underlineThickness * size / 1e3;
+      }
+      async write(doc, fontObj) {
+        fontObj.prop("Subtype", "Type1");
+        fontObj.prop("BaseFont", this._data.fontName);
+        fontObj.prop("Encoding", "WinAnsiEncoding");
+        await doc._writeObject(fontObj);
+      }
+    };
+    var UNICODE_TO_WIN1252 = {
+      "\u20AC": 128,
+      "\u201A": 130,
+      "\u0192": 131,
+      "\u201E": 132,
+      "\u2026": 133,
+      "\u2020": 134,
+      "\u2021": 135,
+      "\u02C6": 136,
+      "\u2030": 137,
+      "\u0160": 138,
+      "\u2039": 139,
+      "\u0152": 140,
+      "\u017D": 142,
+      "\u2018": 145,
+      "\u2019": 146,
+      "\u201C": 147,
+      "\u201D": 148,
+      "\u2022": 149,
+      "\u2013": 150,
+      "\u2014": 151,
+      "\u02DC": 152,
+      "\u2122": 153,
+      "\u0161": 154,
+      "\u203A": 155,
+      "\u0153": 156,
+      "\u017E": 158,
+      "\u0178": 159
+    };
+  }
+});
+
+// node_modules/pdfjs/font/Helvetica.json
+var require_Helvetica = __commonJS({
+  "node_modules/pdfjs/font/Helvetica.json"(exports, module2) {
+    module2.exports = { fontName: "Helvetica", fullName: "Helvetica", familyName: "Helvetica", italicAngle: 0, characterSet: "ExtendedRoman", fontBBox: [-166, -225, 1e3, 931], underlinePosition: -100, underlineThickness: 50, capHeight: 718, xHeight: 523, ascender: 718, descender: -207, kerning: { "44": { "146": -100, "148": -100 }, "46": { "146": -100, "148": -100, "160": -60 }, "58": { "160": -50 }, "59": { "160": -50 }, "65": { "67": -30, "71": -30, "79": -30, "81": -30, "84": -120, "85": -50, "86": -70, "87": -50, "89": -100, "117": -30, "118": -40, "119": -40, "121": -40, "199": -30, "210": -30, "211": -30, "212": -30, "213": -30, "214": -30, "216": -30, "217": -50, "218": -50, "219": -50, "220": -50, "221": -100, "249": -30, "250": -30, "251": -30, "252": -30, "253": -40, "255": -40 }, "66": { "44": -20, "46": -20, "85": -10, "217": -10, "218": -10, "219": -10, "220": -10 }, "67": { "44": -30, "46": -30 }, "68": { "44": -70, "46": -70, "65": -40, "86": -70, "87": -40, "89": -90, "192": -40, "193": -40, "194": -40, "195": -40, "196": -40, "197": -40, "221": -90 }, "70": { "44": -150, "46": -150, "65": -80, "97": -50, "101": -30, "111": -30, "114": -45, "192": -80, "193": -80, "194": -80, "195": -80, "196": -80, "197": -80, "224": -50, "225": -50, "226": -50, "227": -50, "228": -50, "229": -50, "232": -30, "233": -30, "234": -30, "235": -30, "242": -30, "243": -30, "244": -30, "245": -30, "246": -30, "248": -30 }, "74": { "44": -30, "46": -30, "65": -20, "97": -20, "117": -20, "192": -20, "193": -20, "194": -20, "195": -20, "196": -20, "197": -20, "224": -20, "225": -20, "226": -20, "227": -20, "228": -20, "229": -20, "249": -20, "250": -20, "251": -20, "252": -20 }, "75": { "79": -50, "101": -40, "111": -40, "117": -30, "121": -50, "210": -50, "211": -50, "212": -50, "213": -50, "214": -50, "216": -50, "232": -40, "233": -40, "234": -40, "235": -40, "242": -40, "243": -40, "244": -40, "245": -40, "246": -40, "248": -40, "249": -30, "250": -30, "251": -30, "252": -30, "253": -50, "255": -50 }, "76": { "84": -110, "86": -110, "87": -70, "89": -140, "121": -30, "146": -160, "148": -140, "221": -140, "253": -30, "255": -30 }, "79": { "44": -40, "46": -40, "65": -20, "84": -40, "86": -50, "87": -30, "88": -60, "89": -70, "192": -20, "193": -20, "194": -20, "195": -20, "196": -20, "197": -20, "221": -70 }, "80": { "44": -180, "46": -180, "65": -120, "97": -40, "101": -50, "111": -50, "192": -120, "193": -120, "194": -120, "195": -120, "196": -120, "197": -120, "224": -40, "225": -40, "226": -40, "227": -40, "228": -40, "229": -40, "232": -50, "233": -50, "234": -50, "235": -50, "242": -50, "243": -50, "244": -50, "245": -50, "246": -50, "248": -50 }, "81": { "85": -10, "217": -10, "218": -10, "219": -10, "220": -10 }, "82": { "79": -20, "84": -30, "85": -40, "86": -50, "87": -30, "89": -50, "210": -20, "211": -20, "212": -20, "213": -20, "214": -20, "216": -20, "217": -40, "218": -40, "219": -40, "220": -40, "221": -50 }, "83": { "44": -20, "46": -20 }, "84": { "44": -120, "46": -120, "58": -20, "59": -20, "65": -120, "79": -40, "97": -120, "101": -120, "111": -120, "114": -120, "117": -120, "119": -120, "121": -120, "173": -140, "192": -120, "193": -120, "194": -120, "195": -120, "196": -120, "197": -120, "210": -40, "211": -40, "212": -40, "213": -40, "214": -40, "216": -40, "224": -120, "225": -120, "226": -120, "227": -60, "228": -120, "229": -120, "232": -60, "233": -120, "234": -120, "235": -120, "242": -120, "243": -120, "244": -120, "245": -60, "246": -120, "248": -120, "249": -120, "250": -120, "251": -120, "252": -120, "253": -120, "255": -60 }, "85": { "44": -40, "46": -40, "65": -40, "192": -40, "193": -40, "194": -40, "195": -40, "196": -40, "197": -40 }, "86": { "44": -125, "46": -125, "58": -40, "59": -40, "65": -80, "71": -40, "79": -40, "97": -70, "101": -80, "111": -80, "117": -70, "173": -80, "192": -80, "193": -80, "194": -80, "195": -80, "196": -80, "197": -80, "210": -40, "211": -40, "212": -40, "213": -40, "214": -40, "216": -40, "224": -70, "225": -70, "226": -70, "227": -70, "228": -70, "229": -70, "232": -80, "233": -80, "234": -80, "235": -80, "242": -80, "243": -80, "244": -80, "245": -80, "246": -80, "248": -80, "249": -70, "250": -70, "251": -70, "252": -70 }, "87": { "44": -80, "46": -80, "65": -50, "79": -20, "97": -40, "101": -30, "111": -30, "117": -30, "121": -20, "173": -40, "192": -50, "193": -50, "194": -50, "195": -50, "196": -50, "197": -50, "210": -20, "211": -20, "212": -20, "213": -20, "214": -20, "216": -20, "224": -40, "225": -40, "226": -40, "227": -40, "228": -40, "229": -40, "232": -30, "233": -30, "234": -30, "235": -30, "242": -30, "243": -30, "244": -30, "245": -30, "246": -30, "248": -30, "249": -30, "250": -30, "251": -30, "252": -30, "253": -20, "255": -20 }, "89": { "44": -140, "46": -140, "58": -60, "59": -60, "65": -110, "79": -85, "97": -140, "101": -140, "105": -20, "111": -140, "117": -110, "173": -140, "192": -110, "193": -110, "194": -110, "195": -110, "196": -110, "197": -110, "210": -85, "211": -85, "212": -85, "213": -85, "214": -85, "216": -85, "224": -140, "225": -140, "226": -140, "227": -140, "228": -140, "229": -140, "232": -140, "233": -140, "234": -140, "235": -140, "237": -20, "242": -140, "243": -140, "244": -140, "245": -140, "246": -140, "248": -140, "249": -110, "250": -110, "251": -110, "252": -110 }, "97": { "118": -20, "119": -20, "121": -30, "253": -30, "255": -30 }, "98": { "44": -40, "46": -40, "98": -10, "108": -20, "117": -20, "118": -20, "121": -20, "249": -20, "250": -20, "251": -20, "252": -20, "253": -20, "255": -20 }, "99": { "44": -15, "107": -20 }, "101": { "44": -15, "46": -15, "118": -30, "119": -20, "120": -30, "121": -20, "253": -20, "255": -20 }, "102": { "44": -30, "46": -30, "97": -30, "101": -30, "111": -30, "146": 50, "148": 60, "224": -30, "225": -30, "226": -30, "227": -30, "228": -30, "229": -30, "232": -30, "233": -30, "234": -30, "235": -30, "242": -30, "243": -30, "244": -30, "245": -30, "246": -30, "248": -30 }, "103": { "114": -10 }, "104": { "121": -30, "253": -30, "255": -30 }, "107": { "101": -20, "111": -20, "232": -20, "233": -20, "234": -20, "235": -20, "242": -20, "243": -20, "244": -20, "245": -20, "246": -20, "248": -20 }, "109": { "117": -10, "121": -15, "249": -10, "250": -10, "251": -10, "252": -10, "253": -15, "255": -15 }, "110": { "117": -10, "118": -20, "121": -15, "249": -10, "250": -10, "251": -10, "252": -10, "253": -15, "255": -15 }, "111": { "44": -40, "46": -40, "118": -15, "119": -15, "120": -30, "121": -30, "253": -30, "255": -30 }, "112": { "44": -35, "46": -35, "121": -30, "253": -30, "255": -30 }, "114": { "44": -50, "46": -50, "58": 30, "59": 30, "97": -10, "105": 15, "107": 15, "108": 15, "109": 25, "110": 25, "112": 30, "116": 40, "117": 15, "118": 30, "121": 30, "224": -10, "225": -10, "226": -10, "227": -10, "228": -10, "229": -10, "236": 15, "237": 15, "238": 15, "239": 15, "241": 25, "249": 15, "250": 15, "251": 15, "252": 15, "253": 30, "255": 30 }, "115": { "44": -15, "46": -15, "119": -30 }, "118": { "44": -80, "46": -80, "97": -25, "101": -25, "111": -25, "224": -25, "225": -25, "226": -25, "227": -25, "228": -25, "229": -25, "232": -25, "233": -25, "234": -25, "235": -25, "242": -25, "243": -25, "244": -25, "245": -25, "246": -25, "248": -25 }, "119": { "44": -60, "46": -60, "97": -15, "101": -10, "111": -10, "224": -15, "225": -15, "226": -15, "227": -15, "228": -15, "229": -15, "232": -10, "233": -10, "234": -10, "235": -10, "242": -10, "243": -10, "244": -10, "245": -10, "246": -10, "248": -10 }, "120": { "101": -30, "232": -30, "233": -30, "234": -30, "235": -30 }, "121": { "44": -100, "46": -100, "97": -20, "101": -20, "111": -20, "224": -20, "225": -20, "226": -20, "227": -20, "228": -20, "229": -20, "232": -20, "233": -20, "234": -20, "235": -20, "242": -20, "243": -20, "244": -20, "245": -20, "246": -20, "248": -20 }, "122": { "101": -15, "111": -15, "232": -15, "233": -15, "234": -15, "235": -15, "242": -15, "243": -15, "244": -15, "245": -15, "246": -15, "248": -15 }, "138": { "44": -20, "46": -20 }, "145": { "145": -57 }, "146": { "100": -50, "114": -50, "115": -50, "146": -57, "154": -50, "160": -70 }, "148": { "160": -40 }, "154": { "44": -15, "46": -15, "119": -30 }, "158": { "101": -15, "111": -15, "232": -15, "233": -15, "234": -15, "235": -15, "242": -15, "243": -15, "244": -15, "245": -15, "246": -15, "248": -15 }, "160": { "84": -50, "86": -50, "87": -40, "89": -90, "145": -60, "147": -30, "221": -90 }, "192": { "67": -30, "71": -30, "79": -30, "81": -30, "84": -120, "85": -50, "86": -70, "87": -50, "89": -100, "117": -30, "118": -40, "119": -40, "121": -40, "199": -30, "210": -30, "211": -30, "212": -30, "213": -30, "214": -30, "216": -30, "217": -50, "218": -50, "219": -50, "220": -50, "221": -100, "249": -30, "250": -30, "251": -30, "252": -30, "253": -40, "255": -40 }, "193": { "67": -30, "71": -30, "79": -30, "81": -30, "84": -120, "85": -50, "86": -70, "87": -50, "89": -100, "117": -30, "118": -40, "119": -40, "121": -40, "199": -30, "210": -30, "211": -30, "212": -30, "213": -30, "214": -30, "216": -30, "217": -50, "218": -50, "219": -50, "220": -50, "221": -100, "249": -30, "250": -30, "251": -30, "252": -30, "253": -40, "255": -40 }, "194": { "67": -30, "71": -30, "79": -30, "81": -30, "84": -120, "85": -50, "86": -70, "87": -50, "89": -100, "117": -30, "118": -40, "119": -40, "121": -40, "199": -30, "210": -30, "211": -30, "212": -30, "213": -30, "214": -30, "216": -30, "217": -50, "218": -50, "219": -50, "220": -50, "221": -100, "249": -30, "250": -30, "251": -30, "252": -30, "253": -40, "255": -40 }, "195": { "67": -30, "71": -30, "79": -30, "81": -30, "84": -120, "85": -50, "86": -70, "87": -50, "89": -100, "117": -30, "118": -40, "119": -40, "121": -40, "199": -30, "210": -30, "211": -30, "212": -30, "213": -30, "214": -30, "216": -30, "217": -50, "218": -50, "219": -50, "220": -50, "221": -100, "249": -30, "250": -30, "251": -30, "252": -30, "253": -40, "255": -40 }, "196": { "67": -30, "71": -30, "79": -30, "81": -30, "84": -120, "85": -50, "86": -70, "87": -50, "89": -100, "117": -30, "118": -40, "119": -40, "121": -40, "199": -30, "210": -30, "211": -30, "212": -30, "213": -30, "214": -30, "216": -30, "217": -50, "218": -50, "219": -50, "220": -50, "221": -100, "249": -30, "250": -30, "251": -30, "252": -30, "253": -40, "255": -40 }, "197": { "67": -30, "71": -30, "79": -30, "81": -30, "84": -120, "85": -50, "86": -70, "87": -50, "89": -100, "117": -30, "118": -40, "119": -40, "121": -40, "199": -30, "210": -30, "211": -30, "212": -30, "213": -30, "214": -30, "216": -30, "217": -50, "218": -50, "219": -50, "220": -50, "221": -100, "249": -30, "250": -30, "251": -30, "252": -30, "253": -40, "255": -40 }, "199": { "44": -30, "46": -30 }, "210": { "44": -40, "46": -40, "65": -20, "84": -40, "86": -50, "87": -30, "88": -60, "89": -70, "192": -20, "193": -20, "194": -20, "195": -20, "196": -20, "197": -20, "221": -70 }, "211": { "44": -40, "46": -40, "65": -20, "84": -40, "86": -50, "87": -30, "88": -60, "89": -70, "192": -20, "193": -20, "194": -20, "195": -20, "196": -20, "197": -20, "221": -70 }, "212": { "44": -40, "46": -40, "65": -20, "84": -40, "86": -50, "87": -30, "88": -60, "89": -70, "192": -20, "193": -20, "194": -20, "195": -20, "196": -20, "197": -20, "221": -70 }, "213": { "44": -40, "46": -40, "65": -20, "84": -40, "86": -50, "87": -30, "88": -60, "89": -70, "192": -20, "193": -20, "194": -20, "195": -20, "196": -20, "197": -20, "221": -70 }, "214": { "44": -40, "46": -40, "65": -20, "84": -40, "86": -50, "87": -30, "88": -60, "89": -70, "192": -20, "193": -20, "194": -20, "195": -20, "196": -20, "197": -20, "221": -70 }, "216": { "44": -40, "46": -40, "65": -20, "84": -40, "86": -50, "87": -30, "88": -60, "89": -70, "192": -20, "193": -20, "194": -20, "195": -20, "196": -20, "197": -20, "221": -70 }, "217": { "44": -40, "46": -40, "65": -40, "192": -40, "193": -40, "194": -40, "195": -40, "196": -40, "197": -40 }, "218": { "44": -40, "46": -40, "65": -40, "192": -40, "193": -40, "194": -40, "195": -40, "196": -40, "197": -40 }, "219": { "44": -40, "46": -40, "65": -40, "192": -40, "193": -40, "194": -40, "195": -40, "196": -40, "197": -40 }, "220": { "44": -40, "46": -40, "65": -40, "192": -40, "193": -40, "194": -40, "195": -40, "196": -40, "197": -40 }, "221": { "44": -140, "46": -140, "58": -60, "59": -60, "65": -110, "79": -85, "97": -140, "101": -140, "105": -20, "111": -140, "117": -110, "173": -140, "192": -110, "193": -110, "194": -110, "195": -110, "196": -110, "197": -110, "210": -85, "211": -85, "212": -85, "213": -85, "214": -85, "216": -85, "224": -140, "225": -140, "226": -140, "227": -70, "228": -140, "229": -140, "232": -140, "233": -140, "234": -140, "235": -140, "237": -20, "242": -140, "243": -140, "244": -140, "245": -140, "246": -140, "248": -140, "249": -110, "250": -110, "251": -110, "252": -110 }, "224": { "118": -20, "119": -20, "121": -30, "253": -30, "255": -30 }, "225": { "118": -20, "119": -20, "121": -30, "253": -30, "255": -30 }, "226": { "118": -20, "119": -20, "121": -30, "253": -30, "255": -30 }, "227": { "118": -20, "119": -20, "121": -30, "253": -30, "255": -30 }, "228": { "118": -20, "119": -20, "121": -30, "253": -30, "255": -30 }, "229": { "118": -20, "119": -20, "121": -30, "253": -30, "255": -30 }, "231": { "44": -15, "107": -20 }, "232": { "44": -15, "46": -15, "118": -30, "119": -20, "120": -30, "121": -20, "253": -20, "255": -20 }, "233": { "44": -15, "46": -15, "118": -30, "119": -20, "120": -30, "121": -20, "253": -20, "255": -20 }, "234": { "44": -15, "46": -15, "118": -30, "119": -20, "120": -30, "121": -20, "253": -20, "255": -20 }, "235": { "44": -15, "46": -15, "118": -30, "119": -20, "120": -30, "121": -20, "253": -20, "255": -20 }, "241": { "117": -10, "118": -20, "121": -15, "249": -10, "250": -10, "251": -10, "252": -10, "253": -15, "255": -15 }, "242": { "44": -40, "46": -40, "118": -15, "119": -15, "120": -30, "121": -30, "253": -30, "255": -30 }, "243": { "44": -40, "46": -40, "118": -15, "119": -15, "120": -30, "121": -30, "253": -30, "255": -30 }, "244": { "44": -40, "46": -40, "118": -15, "119": -15, "120": -30, "121": -30, "253": -30, "255": -30 }, "245": { "44": -40, "46": -40, "118": -15, "119": -15, "120": -30, "121": -30, "253": -30, "255": -30 }, "246": { "44": -40, "46": -40, "118": -15, "119": -15, "120": -30, "121": -30, "253": -30, "255": -30 }, "248": { "44": -95, "46": -95, "97": -55, "98": -55, "99": -55, "100": -55, "101": -55, "102": -55, "103": -55, "104": -55, "105": -55, "106": -55, "107": -55, "108": -55, "109": -55, "110": -55, "111": -55, "112": -55, "113": -55, "114": -55, "115": -55, "116": -55, "117": -55, "118": -70, "119": -70, "120": -85, "121": -70, "122": -55, "154": -55, "158": -55, "224": -55, "225": -55, "226": -55, "227": -55, "228": -55, "229": -55, "231": -55, "232": -55, "233": -55, "234": -55, "235": -55, "236": -55, "237": -55, "238": -55, "239": -55, "241": -55, "242": -55, "243": -55, "244": -55, "245": -55, "246": -55, "248": -55, "249": -55, "250": -55, "251": -55, "252": -55, "253": -70, "255": -70 }, "253": { "44": -100, "46": -100, "97": -20, "101": -20, "111": -20, "224": -20, "225": -20, "226": -20, "227": -20, "228": -20, "229": -20, "232": -20, "233": -20, "234": -20, "235": -20, "242": -20, "243": -20, "244": -20, "245": -20, "246": -20, "248": -20 }, "255": { "44": -100, "46": -100, "97": -20, "101": -20, "111": -20, "224": -20, "225": -20, "226": -20, "227": -20, "228": -20, "229": -20, "232": -20, "233": -20, "234": -20, "235": -20, "242": -20, "243": -20, "244": -20, "245": -20, "246": -20, "248": -20 } }, widths: [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, 278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584, null, 556, null, 222, 556, 333, 1e3, 556, 556, 333, 1e3, 667, 333, 1e3, null, 611, null, null, 222, 222, 333, 333, 350, 556, 1e3, 333, 1e3, 500, 333, 944, null, 500, 500, 278, 333, 556, 556, 556, 556, 260, 556, 333, 737, 370, 556, 584, 333, 737, 333, 400, 584, 333, 333, 333, 556, 537, 278, 333, 333, 365, 556, 834, 834, 834, 611, 667, 667, 667, 667, 667, 667, 1e3, 722, 667, 667, 667, 667, 278, 278, 278, 278, 722, 722, 778, 778, 778, 778, 778, 584, 778, 722, 722, 722, 722, 667, 667, 611, 556, 556, 556, 556, 556, 556, 889, 500, 556, 556, 556, 556, 278, 278, 278, 278, 556, 556, 556, 556, 556, 556, 556, 584, 611, 556, 556, 556, 556, 500, 556, 500] };
+  }
+});
+
+// node_modules/pdfjs/font/Helvetica.js
+var require_Helvetica2 = __commonJS({
+  "node_modules/pdfjs/font/Helvetica.js"(exports, module2) {
+    var AFMFont = require_afm();
+    module2.exports = new AFMFont(require_Helvetica());
+  }
+});
+
+// node_modules/pdfjs/lib/sRGB_IEC61966-2-1_black_scaled.js
+var require_sRGB_IEC61966_2_1_black_scaled = __commonJS({
+  "node_modules/pdfjs/lib/sRGB_IEC61966-2-1_black_scaled.js"(exports, module2) {
+    "use strict";
+    module2.exports = `!!!Djz!WW3#D/OH9;Fa%r=BSfM#MB(Z!#knQ!$hOd@:O@tzzzz!!!!"zz!!)\`D!!*'"!!(J"z'&psr\`WC#h?J?20S8TbAzzzzzzz!!!!1A7]gl!!!$f!!!"E@TZc:!!!&8!!!!5@T65m!!!&L!!!95B2hbr!!!&L!!!95E\`>q(!!!&L!!!95A8Pjf!!!>\`!!!"TB38;?!!!@>!!!!5CisT/!!!@R!!!!5D.R-s!!!@f!!!!E@V]q)!!!A5!!!!5E\`cIJ!!!AI!!!!5FCerq!!!A]!!!!-G'.A,!!!Ai!!!"SGB@eG!!!CG!!!!5@rQI1!!!C[!!!!X@q]:]!!!D>!!!!MA7]glz!!!!@F&GLp+A#!h2DI3M2D$[90d'qA@:O'qF(8WpARkc@zzzzzzzzzzzzzzzzzzzz=BSfMz!!":;!!!O_!!'IR@s)g8z!!!-%!!!!&!"&]:!#,DN!$2+b!%7h!!&=O5!':0G!(?l[!)ESo!*K;.!+Q"B!,V^V!-\\Ej!.b-)!/gi=!0mPQ!1s7e!3#t$!3uU6!5&<J!6,#^!71_r!8@M3!9F4H!:U!^!;cct!=&W7!>>JO!?V=g!@n1+!B:*D!C[#_!E&r$!FPq@!H%p\\!IOp#!K-uA!La%_!N?+)!P&6I!QbAi!SIM4!U0XU!Vuj"!Xo,E!Z_=h!\\XU7!^Ql\\!\`T5,!bVRS!dXp$!fd>L!hoat!k&0H!m:Yq!oO.G!qcWq!t,2H"!Iau"#pBM"&B#&"(hXU"+C?0"-s%\`"0Ma;"31Mm"5j:J"8N'(";:n\\">'a<"@rYq"ChRS"F^K4"I]Il"L\\HO"OdM4"RlQn"UtVT"Y0a;"\\Al""_S!_"bm2H"f;I2"iUYq"m#p]"pP8I"t'U6#"Sr$#&4?h#)ibW#-S6H#13Y8#5&3+#8mas#<\`;f#@RjZ#DNJO#HS0F#LWk=#P\\Q4#Tj=-#Y#)'#]9p"#aPar#egSm#j2Kj#nRCh#s&Ag$"O?f$',Cg$+^Gh$0;Kj$5!Um$9\\_q$>Kp!$CD1'$H3A-$M+W5$R,s=$W.:G$\\/VP$a:#[$fMKh$k\`su$ptG.%!;u=%&XNL%+u'\\%1Nan%6tA+%<N&>%B0fS%GhQh%MK=)%S7.@%Y"tX%^lkq%dji6%j_\`P%pfcm&!da4&'kdQ&.&mp&47";&:P1[&@iA(&G6VK&MXkn&T&,=&ZQGb&a0i4&ge5[&nDW.&u-)W'&sW-'-e/X'4V].';Q;\\'BKo4'IOSd'P\\>?'Wi(p'^uhM'f6Y+'mLI_'tk@?('>=!(.f9X(696:(=j8t(EF;X(M+D>(TnS&(\\\\ac(dJpL(lB06(tBK")'Bec)/C+P)7LL>)?^s.)GqDs)P.kd)XJCW)\`o!K)i>T?)ql85*%Dq+*.&[#*6]Dq*?H4k*H3$e*Q&oa*Yoe^*bla\\*ki][*to_[+))g]+28o_+;H"b+D\`0f+N,Dl+WMXr+a"s%+jM8.+t"R7,(_#B,2FIN,<-o[,EsFi,Ocs#,Y]P3,c\`3E,mbkW-"nTk--%>+-7:-A-ANqW-Klfo-V5\\3-\`\\WM-k.Rh-ugZ0.+B[M.6&bl.@hp7.KV(W.VL<$.aKUH.lJnl/"J3</-RRb/8d#5/CuH^/O:t3/ZUJ^/f$'5/qP^b0((A<03U#k0?5aF0JtP#0VgDW0bQ350nM-k1%I(L11N)/1=S)h1Ia0M1Uo721b1Co1nHPV2%qiA22='+2>oEl2KC^Y2X*.G2deS72qL#'3)DSn364)\`3C5\`U3P7BJ3]9$@3jLg84"WO04/tC+4=<7&4JY+"4X*$t4eY$s4s3$s5+k*t59W7"5GCC%5U/O)5c-g05q,*76**B?681\`H6FB/S6TRS_6bl(l6q9Y&7*\\4679)dF7G^KX7V>2k7dro*7sdbA8-MOW8<HHp8KCB48Z>;N8iK@j9#O@292eKP9B&Vp9QEh<9\`e$]9p8<,:*iYQ::F"!:J"?G:Yehp:iT=D;$Klo;4CGF;DD's;TD]L;dWJ';ta0W<0(#5<@Cji<PhcI<a8\\)<qfZ\`=-?YC=>*d)=Nahc=_V$K=pJ53>,GKr>=Db]>NK*I>_ZM7>pip&?--Ck?>Nr]?OpLP?aF,D?rpa9@/OG/@A73'@S(%!@dmkpA!^]kA3a[iAEdYgAWgWfAj'ahB'<kjB9QumBKp0rB^BG#Bprc+C.N*3CA2L>CSttJCfbGVD$XudD7ONsDJO..D]WhADp\`MSE/&>iEB8*)EU\\!AEi*mYF'WjsF;/h9FNekUFbOtsG!:)=G5-8^GI)N+G]%cMGq+)rH09KCHDPrkHXhE>Hm*lgI,TK>IA))jIU[cCIj9GrJ)u2NJ>e#+JSTh]JhVe>K(O[sK=Z^VKRea9Kh$itL(8rYL=_2BLS'A*LhV[jM)1!VM>iBCMTUi2MjB;!N+7ghNA6E[NW5#NNm<\\DO.MF;OD^02O["u,OqEk'P2ha#PI?\\uP_t^tQ!]fuQ8Fo"QO9(%Qf+6)R(/P0R?3j7RV8/?RmNUJS/e&USG/RbS^O)pT!"\\+T8T?<TP:(OTgtfbU*cV#UB[K:UZS@QUrT;kV5^=1VMh>MVf&EjW)BS4WAgfUWZ8%"Wrf>EX6H]jXO+(;XgkMcY+\`$7YD]UbY][28Z!aifZ:hL?ZT,:oZmE)L[1fs*[K3g^[d^b>\\)=c!\\C%iZ\\\\bp>]!].&];N:b]UQSL]oTl7^4a6#^O!Zf^i7*U_.UUE_I(17_cXh+\`)4Iu\`Cn1k\`^[tca$Ib\\a?@VWaZ@PSauIPQb;RPPbVdVPbr*bRc8NtVcSs1[coKIad6,gjdQc0rdmV[)e4J05eP=ZBelC;Rf3HqcfOWXufkf@3g323IgOS&_gkso!h3Qn;hP/mVhlkrri4\\);iQU:[inNL'j6PcIjS\\+mjpgI=k9&ldkVDA7ksjpal<EQ8lYu1em"Xm>m@<Smm^2FJn'(9'nE'1\\nc/0=o,7.toJH3Wohb><p20O#pPS_\`po+!Jq8\`>5qWIa"r!3.er@.]Vr_*7Gs)%f9A7]glz!!!!O8OYuh2DI3M2D$[90d&kqAmoguF<FIO66JX6Ci=H:+B*5f@q?c7+ELFN63$uczzzzzzzzzzzzzzzzzzz=BSfMz!!$Jr!!'K^!!!ki=BSfMzz!)NXqzD.R-sz!!!!"zzzzz!!!!#=BSfMz!!!"j!!!"p!!!"S=BSfMz!!$r3!!#"O!!!+_F(o80z6W-l+A7]glz!!!!N;IsHOEb0,uAKY#fATqj+B-9Q[DIdI'Bl@l3Bl5%b77/1U0f_-M/M\\n4zzzzzzzzzzzzzzzzzzzz=BSfMz!!)\`D!!*'"!!(J"FCf]=z6Z6phEbT0"F<F.mFCfK1@<?4%DII?(6Z6dZEZd_fDKB\`:FD5l7/0H]%0KB+5F(R3\`z!!*Kr!!!2[s8V[;!!!7g!!)tYs8Vtis8W%l!!!,U!!'fW`;
+  }
+});
+
+// node_modules/pdfjs/lib/footer.js
+var require_footer = __commonJS({
+  "node_modules/pdfjs/lib/footer.js"(exports, module2) {
+    "use strict";
+    var PDF = require_object2();
+    var Header = require_header();
+    module2.exports = class Footer extends Header {
+      constructor(doc, parent) {
+        super(doc, parent);
+      }
+      /// private API
+      _createObject() {
+        const xobj = Header.prototype._createObject.call(this);
+        xobj.prop("Matrix", this._matrix.toReference());
+        return xobj;
+      }
+      async _pageBreak(level) {
+        throw new Error("Footer is to long (tried to execute a page break inside the footer)");
+      }
+      async _start() {
+        this._matrix = new PDF.Object();
+        this._doc._registerObject(this._matrix);
+        await Header.prototype._start.call(this);
+      }
+      async _end() {
+        const innerHeight = this._doc._cursor.startY - this._doc._cursor.bottom;
+        await Header.prototype._end.call(this);
+        const offset = innerHeight - this.height;
+        this._matrix.content = new PDF.Array([1, 0, 0, 1, 0, -offset]);
+        await this._doc._writeObject(this._matrix);
+        for (const instance of this._pageNumbers) {
+          instance.y -= offset;
+        }
+      }
+    };
+  }
+});
+
+// node_modules/pdfjs/lib/document.js
+var require_document = __commonJS({
+  "node_modules/pdfjs/lib/document.js"(exports, module2) {
+    "use strict";
+    var Cursor = require_cursor();
+    var Fragment = require_fragment();
+    var ops = require_ops();
+    var PDF = require_object2();
+    var Readable = require_readable_browser();
+    var { v4: uuidv4 } = (init_esm_browser(), __toCommonJS(esm_browser_exports));
+    var util = require_util();
+    var ContentChunk = require_content();
+    var ExternalDocument = require_external();
+    var Font = require_base();
+    var RESOLVE = Promise.resolve();
+    var Document = class extends Readable {
+      constructor(opts) {
+        if (!opts) {
+          opts = {};
+        }
+        super({
+          highWaterMark: opts.highWaterMark || 16384
+          // 16kB
+        });
+        this.version = "1.6";
+        this.info = Object.assign({}, opts.properties, { id: uuidv4() });
+        this.width = opts.width || 595.296;
+        this.height = opts.height || 841.896;
+        this._nextObjectId = 1;
+        this._xref = new PDF.Xref();
+        this._reading = false;
+        this._length = 0;
+        const header = `%PDF-${this.version}
+%\xFF\xFF\xFF\xFF
+
+`;
+        this._pending = [
+          () => this._write(header)
+        ];
+        this._pending.current = null;
+        this.defaultFont = opts.font || require_Helvetica2();
+        this.defaultFontSize = opts.fontSize || 11;
+        this.defaultColor = opts.color && util.colorToRgb(opts.color) || [0, 0, 0];
+        this.defaultLineHeight = opts.lineHeight || 1.15;
+        if (!Font.isFont(this.defaultFont)) {
+          throw new TypeError("opts.font must be set to a valid default font");
+        }
+        this._fonts = {};
+        this._xobjects = {};
+        this._pageFonts = {};
+        this._annotations = [];
+        this._aliases = new AliasGenerator();
+        this._mapping = /* @__PURE__ */ new WeakMap();
+        this._currentContent = null;
+        this._contents = [];
+        this._contentObjCreator = null;
+        this._finalize = [];
+        this._header = this._footer = this._template = null;
+        const padding = opts.padding >= 0 ? opts.padding : 20;
+        this.paddingTop = util.defaults(opts.paddingTop, padding);
+        this.paddingBottom = util.defaults(opts.paddingBottom, padding);
+        this.paddingLeft = util.defaults(opts.paddingLeft, padding);
+        this.paddingRight = util.defaults(opts.paddingRight, padding);
+        this._cursor = new Cursor(
+          this.width - this.paddingLeft - this.paddingRight,
+          this.height - this.paddingTop - this.paddingBottom,
+          // width, height
+          this.paddingLeft,
+          this.height - this.paddingTop
+          // x, y
+        );
+        this._pages = new PDF.Array();
+        this._pagesObj = new PDF.Object("Pages");
+        this._registerObject(this._pagesObj);
+        this._destinations = new PDF.NameTree();
+        this._outlines = [];
+        this._colorSpace = new PDF.Object();
+        const iccProfile = require_sRGB_IEC61966_2_1_black_scaled() + "~>";
+        this._colorSpace.content = "stream\n" + iccProfile + "\nendstream\n";
+        this._colorSpace.prop("Length", iccProfile.length);
+        this._colorSpace.prop("N", 3);
+        this._colorSpace.prop("Alternate", "DeviceRGB");
+        this._colorSpace.prop("Filter", new PDF.Name("ASCII85Decode"));
+        this._registerObject(this._colorSpace);
+        this._currentColorSpace = "/CS1";
+        this._next();
+        Fragment.prototype._init.call(this, this, this);
+      }
+      /// private API
+      _next() {
+        if (this._pending.current) {
+          return this._pending.current;
+        }
+        let parent = this._pending;
+        let next = parent[0];
+        if (!next) {
+          return RESOLVE;
+        }
+        while (Array.isArray(next)) {
+          if (next.length === 0) {
+            parent.shift();
+            return this._next();
+          }
+          parent = next;
+          next = next[0];
+        }
+        parent.shift();
+        return this._pending.current = next().then(() => {
+          this._pending.current = null;
+          return this._next();
+        });
+      }
+      // This is method is used by Node.js stream.Readable class, which we inherit from.
+      // The method is called, if data is available from the resource, which means that we should
+      // start pushing data into the read queue (using `this.push(dataChunk)`). It should continue
+      // reading from the resoruce and pushing data until `this.push()` return `false`. Only when it
+      // is called again aft it has stopped should it resume pushing additional data onto the
+      // read queue.
+      _read() {
+        this._reading = true;
+        this.emit("read");
+      }
+      // This method is used to push data onto the read queue. If the Readable stream is currently
+      // not read from, the writing is postponed.
+      _write(chunk) {
+        if (this._reading) {
+          if (!this.push(chunk, "binary")) {
+            this._reading = false;
+          }
+          this._length += chunk.length;
+          return RESOLVE;
+        } else {
+          return new Promise((resolve) => {
+            this.once("read", () => {
+              resolve(this._write(chunk));
+            });
+          });
+        }
+      }
+      _useFont(font) {
+        let alias;
+        if (this._mapping.has(font)) {
+          alias = this._mapping.get(font);
+          if (this._aliases.isBlocked(alias)) {
+            this._mapping.delete(font);
+            alias = void 0;
+          }
+        }
+        if (!alias) {
+          alias = new PDF.Name(this._aliases.next("F"));
+          this._mapping.set(font, alias);
+          const fontObj = new PDF.Object("Font");
+          this._fonts[alias] = { f: font.instance(), o: fontObj };
+          this._registerObject(fontObj);
+        }
+        if (this._currentContent && !(alias in this._currentContent._fonts)) {
+          this._currentContent._fonts[alias] = this._fonts[alias].o.toReference();
+        }
+        return alias;
+      }
+      _fontAlias(instance) {
+        return this._useFont(instance.parent);
+      }
+      _fontInstance(font) {
+        return this._fonts[this._useFont(font)].f;
+      }
+      _useXObject(xobj) {
+        let alias;
+        if (this._mapping.has(xobj)) {
+          alias = this._mapping.get(xobj);
+          if (this._aliases.isBlocked(alias)) {
+            this._mapping.delete(xobj);
+            alias = void 0;
+          }
+        }
+        if (!alias) {
+          alias = new PDF.Name(this._aliases.next("X"));
+          this._mapping.set(xobj, alias);
+          const xobjObjs = [];
+          for (let i = 0; i < xobj.xobjCount; ++i) {
+            const xobjObj = new PDF.Object("XObject");
+            this._registerObject(xobjObj);
+            xobjObjs.push(xobjObj);
+          }
+          this._xobjects[alias] = { x: xobj, o: xobjObjs };
+        }
+        if (this._currentContent && !(alias in this._currentContent._xobjects)) {
+          for (let i = 0; i < this._xobjects[alias].o.length; ++i) {
+            this._currentContent._xobjects[alias + "." + i] = this._xobjects[alias].o[i].toReference();
+          }
+        }
+        const aliases = [];
+        for (let i = 0; i < this._xobjects[alias].o.length; ++i) {
+          aliases.push(alias + "." + i);
+        }
+        return aliases;
+      }
+      async _startPage() {
+        if (this._currentPage) {
+          throw new Error("There is already a started page");
+        }
+        const page = this._currentPage = new PDF.Object("Page");
+        this._pages.push(page.toReference());
+        if (this._template) {
+          const taken = {};
+          for (const alias in this._template.colorSpaces) {
+            taken[alias] = null;
+          }
+          let i = 1;
+          for (1; "/CS" + i in taken; ++i) {
+          }
+          this._currentColorSpace = "/CS" + i;
+        } else {
+          this._currentColorSpace = "/CS1";
+        }
+        await this._startContentObject();
+        if (this._header) {
+          let chunk = "";
+          for (const i in this._header._objects) {
+            const obj = this._header._objects[i];
+            const alias = new PDF.Name(this._aliases.next("H"));
+            this._currentContent._xobjects[alias] = obj.toReference();
+            chunk += ops.Do(alias);
+          }
+          await this._write(chunk);
+          await this._header._render();
+        }
+        if (this._footer) {
+          let chunk = "";
+          for (const i in this._footer._objects) {
+            const obj = this._footer._objects[i];
+            const alias = new PDF.Name(this._aliases.next("F"));
+            this._currentContent._xobjects[alias] = obj.toReference();
+            chunk += ops.Do(alias);
+          }
+          await this._write(chunk);
+          await this._footer._render();
+        }
+        this._cursor.reset();
+        if (this._header) {
+          this._cursor.y -= this._header.height;
+        }
+        if (this._footer) {
+          this._cursor.bottomOffset = this._footer.height;
+        }
+      }
+      async _endPage() {
+        if (!this._currentPage) {
+          return;
+        }
+        await this._endContentObject();
+        const fonts = new PDF.Dictionary({});
+        const xobjects = new PDF.Dictionary({});
+        for (const content of this._contents) {
+          for (const alias in content._fonts) {
+            fonts.add(alias, content._fonts[alias]);
+          }
+          for (const alias in content._xobjects) {
+            xobjects.add(alias, content._xobjects[alias]);
+          }
+        }
+        const page = this._currentPage;
+        page.prop("Parent", this._pagesObj.toReference());
+        const colorSpace = new PDF.Dictionary({
+          [this._currentColorSpace]: new PDF.Array([new PDF.Name("ICCBased"), this._colorSpace.toReference()])
+        });
+        const resources = new PDF.Dictionary({
+          ColorSpace: colorSpace,
+          ProcSet: new PDF.Array([
+            new PDF.Name("PDF"),
+            new PDF.Name("Text"),
+            new PDF.Name("ImageB"),
+            new PDF.Name("ImageC"),
+            new PDF.Name("ImageI")
+          ]),
+          Font: fonts,
+          XObject: xobjects
+        });
+        page.prop("Resources", resources);
+        if (this._annotations.length > 0) {
+          page.prop("Annots", new PDF.Array(this._annotations));
+          this._annotations = [];
+        }
+        const contents = this._contents.map((c) => c._object.toReference());
+        page.prop("Contents", new PDF.Array(contents));
+        if (this._template) {
+          contents.unshift.apply(contents, this._template.contents);
+          for (const alias in this._template.colorSpaces) {
+            colorSpace.dictionary[alias] = this._template.colorSpaces[alias];
+          }
+          for (const alias in this._template.fonts) {
+            fonts.dictionary[alias] = this._template.fonts[alias];
+          }
+          for (const alias in this._template.xobjects) {
+            xobjects.dictionary[alias] = this._template.xobjects[alias];
+          }
+          const extGStates = new PDF.Dictionary({});
+          for (const alias in this._template.extGStates) {
+            extGStates.dictionary[alias] = this._template.extGStates[alias];
+          }
+          if (extGStates.length > 0) {
+            resources.set("ExtGState", extGStates);
+          }
+          const shadings = new PDF.Dictionary({});
+          for (const alias in this._template.shadings) {
+            shadings.dictionary[alias] = this._template.shadings[alias];
+          }
+          if (shadings.length > 0) {
+            resources.set("Shading", shadings);
+          }
+        }
+        await this._writeObject(page);
+        this._currentContent = this._currentPage = null;
+        this._contents.length = 0;
+        if (this._template && this._template.firstPageOnly) {
+          this._template = null;
+        }
+      }
+      async _pageBreak() {
+        if (!this._currentPage) {
+          await this._startPage();
+        }
+        await this._cursor.reset();
+        await this._endPage();
+        await this._startPage();
+      }
+      async _startContentObject(obj, force) {
+        if (!force && this._length - 16 == this._contentStart) {
+          return this._currentContent;
+        }
+        if (this._currentContent) {
+          await this._endContentObject();
+        }
+        if (this._contentObjCreator) {
+          obj = this._contentObjCreator();
+        }
+        const content = this._currentContent = new ContentChunk(this, obj);
+        this._contents.push(content);
+        this._xref.add(content._object.id, {
+          offset: this._length,
+          obj: content._object
+        });
+        let chunk = content._object.id + " " + content._object.rev + " obj\n" + content._object.properties.toString() + "\nstream\n";
+        this._contentStart = this._length + chunk.length;
+        chunk += ops.CS(this._currentColorSpace) + ops.cs(this._currentColorSpace);
+        await this._write(chunk);
+        return content;
+      }
+      async _endContentObject() {
+        if (!this._currentContent) {
+          return;
+        }
+        this._currentContent._length.content = this._length - this._contentStart - 1;
+        if (this._currentContent._length.content < 0) {
+          this._currentContent._length.content = 0;
+        }
+        const chunk = "endstream\nendobj\n\n";
+        await this._write(chunk);
+        await this._writeObject(this._currentContent._length);
+        this._currentContent = null;
+      }
+      _registerObject(object, force) {
+        if (object instanceof PDF.Stream) {
+          object = object.object;
+        }
+        if (!force && object.id) {
+          return;
+        }
+        object.id = this._nextObjectId;
+        this._nextObjectId++;
+      }
+      _writeObject(object) {
+        if (object instanceof PDF.Stream) {
+          object = object.object;
+        }
+        if (!object.id) {
+          this._registerObject(object);
+        }
+        this._xref.add(object.id, {
+          offset: this._length,
+          obj: object
+        });
+        return this._write(object.toString() + "\n\n");
+      }
+      _updateOutlinesCount(id) {
+        if (this._outlines[id].data.count < 1) {
+          this._outlines[id].data.count -= 1;
+          this._outlines[id].prop("Count", this._outlines[id].data.count);
+        } else {
+          this._outlines[id].data.count = -1;
+          this._outlines[id].prop("Count", this._outlines[id].data.count);
+        }
+        const nextParent = this._outlines[id].data.parentIndex;
+        if (nextParent !== void 0) {
+          this._updateOutlinesCount(nextParent);
+        }
+      }
+      // public API
+      async end() {
+        await Fragment.prototype.end.call(this);
+        await this._next();
+        await this._endPage();
+        for (const fn of this._finalize) {
+          await fn();
+        }
+        this._pagesObj.prop("MediaBox", new PDF.Array([0, 0, this.width, this.height]));
+        this._pagesObj.prop("Kids", this._pages);
+        this._pagesObj.prop("Count", this._pages.length);
+        await this._writeObject(this._pagesObj);
+        await this._writeObject(this._colorSpace);
+        for (const alias in this._fonts) {
+          const font = this._fonts[alias];
+          await font.f.write(this, font.o);
+        }
+        for (const alias in this._xobjects) {
+          const xobj = this._xobjects[alias];
+          await xobj.x.write(this, xobj.o);
+        }
+        const catalog = new PDF.Object("Catalog");
+        catalog.prop("Pages", this._pagesObj.toReference());
+        if (this._destinations.length > 0) {
+          const destsObj = new PDF.Object();
+          destsObj.prop("Dests", this._destinations);
+          await this._writeObject(destsObj);
+          catalog.prop("Names", destsObj.toReference());
+        }
+        if (this._outlines.length > 0) {
+          for (let i = 0; i < this._outlines.length; i += 1) {
+            await this._writeObject(this._outlines[i]);
+          }
+          catalog.prop("Outlines", this._outlines[0].toReference());
+        }
+        await this._writeObject(catalog);
+        const startxref = this._length;
+        await this._write(this._xref.toString());
+        const objectsCount = this._nextObjectId - 1;
+        const trailer = new PDF.Trailer(objectsCount + 1, catalog, this.info);
+        await this._write(trailer.toString() + "\n");
+        await this._write("startxref\n" + startxref + "\n%%EOF");
+        this.push(null);
+      }
+      asBuffer(opts, callback) {
+        if (typeof opts === "function") {
+          callback = opts;
+          opts = void 0;
+        }
+        const shouldEnd = !opts || opts.end !== false;
+        let p = new Promise((resolve, reject) => {
+          const chunks = [];
+          this.on("data", (chunk) => chunks.push(chunk));
+          this.on("end", () => resolve(Buffer.concat(chunks)));
+          this.on("error", reject);
+          if (shouldEnd) {
+            this.end();
+          }
+        });
+        if (typeof callback === "function") {
+          p = p.then((data) => callback(null, data)).catch(callback);
+        }
+        return p;
+      }
+      header() {
+        const Header = require_header();
+        const ctx = new Header(this, this);
+        this._begin(ctx);
+        this._pending.push(() => {
+          this._header = ctx;
+          return ctx._start();
+        });
+        return ctx;
+      }
+      footer() {
+        const Footer = require_footer();
+        const ctx = new Footer(this, this);
+        this._begin(ctx);
+        this._pending.push(() => {
+          this._footer = ctx;
+          return ctx._start();
+        });
+        return ctx;
+      }
+      addPagesOf(external) {
+        if (!(external instanceof ExternalDocument)) {
+          throw new TypeError("argument must be of type ExternalDocument");
+        }
+        this._begin(null);
+        this._pending.push(() => external.write(this));
+      }
+      addPageOf(page, external) {
+        if (!(external instanceof ExternalDocument)) {
+          throw new TypeError("argument must be of type ExternalDocument");
+        }
+        if (!page || page < 1 || page > external.pageCount) {
+          throw new TypeError("ExternalDocument does not have page " + page);
+        }
+        this._begin(null);
+        this._pending.push(() => external.write(this, page));
+      }
+      setTemplate(external, firstPageOnly = false) {
+        if (!(external instanceof ExternalDocument)) {
+          throw new TypeError("argument must be of type ExternalDocument");
+        }
+        this._begin(null);
+        this._pending.push(() => external.setAsTemplate(this, firstPageOnly));
+      }
+      outline(title, destination, parent) {
+        if (title === void 0 || destination === void 0)
+          return;
+        if (this._outlines.length === 0) {
+          this._outlines[0] = new PDF.Object("Outlines");
+          this._outlines[0].data = { type: "Outlines" };
+          this._registerObject(this._outlines[0]);
+        }
+        let parentIndex;
+        if (typeof parent === "number" && parent >= 0 && parent <= this._outlines.length) {
+          parentIndex = parent;
+        } else {
+          if (parent === void 0 || parent === "") {
+            parentIndex = 0;
+          } else {
+            parentIndex = this._outlines.findIndex(
+              (item, index) => item.data.title === parent
+            );
+            if (parentIndex === -1)
+              parentIndex = this.outline(parent, destination);
+          }
+        }
+        let siblingsIndexes = this._outlines.reduce((result, item, index) => {
+          if (index !== 0 && item.data.parentIndex === parentIndex)
+            result.push(index);
+          return result;
+        }, []);
+        const outline = new PDF.Object();
+        outline.data = { title, destination, parent };
+        outline.prop("Title", new PDF.String(title));
+        outline.prop("Parent", this._outlines[parentIndex].toReference());
+        outline.prop("A", new PDF.Dictionary({
+          S: "GoTo",
+          D: new PDF.String(destination)
+        }));
+        this._registerObject(outline);
+        const outlineIndex = this._outlines.push(outline) - 1;
+        const prevSiblingIndex = siblingsIndexes[siblingsIndexes.length - 1];
+        if (prevSiblingIndex > 0) {
+          this._outlines[prevSiblingIndex].data.nextId = outlineIndex;
+          this._outlines[prevSiblingIndex].prop("Next", this._outlines[outlineIndex].toReference());
+          this._outlines[outlineIndex].data.prevId = prevSiblingIndex;
+          this._outlines[outlineIndex].prop("Prev", this._outlines[prevSiblingIndex].toReference());
+        }
+        this._outlines[outlineIndex].data.parentIndex = parentIndex;
+        if (siblingsIndexes.length === 0) {
+          this._outlines[parentIndex].data.firstIndex = outlineIndex;
+          this._outlines[parentIndex].prop("First", this._outlines[outlineIndex].toReference());
+        }
+        this._outlines[parentIndex].data.lastIndex = outlineIndex;
+        this._outlines[parentIndex].prop("Last", this._outlines[outlineIndex].toReference());
+        this._updateOutlinesCount(parentIndex);
+        return outlineIndex;
+      }
+    };
+    Object.assign(Document.prototype, {
+      _begin: Fragment.prototype._begin,
+      _end: Fragment.prototype._end,
+      _opts: Fragment.prototype._opts,
+      text: Fragment.prototype.text,
+      cell: Fragment.prototype.cell,
+      table: Fragment.prototype.table,
+      image: Fragment.prototype.image,
+      pageBreak: Fragment.prototype.pageBreak,
+      op: Fragment.prototype.op,
+      destination: Fragment.prototype.destination
+    });
+    var AliasGenerator = class {
+      constructor() {
+        this.nextId = {};
+        this.blocked = /* @__PURE__ */ new Set();
+      }
+      next(prefix) {
+        if (!(prefix in this.nextId)) {
+          this.nextId[prefix] = 1;
+        }
+        let next;
+        do {
+          next = prefix + this.nextId[prefix]++;
+        } while (this.blocked.has(next));
+        return next;
+      }
+      block(alias) {
+        alias = String(alias);
+        if (alias[0] === "/") {
+          alias = alias.slice(1);
+        }
+        this.blocked.add(alias);
+      }
+      isBlocked(alias) {
+        alias = String(alias);
+        if (alias[0] === "/") {
+          alias = alias.slice(1);
+        }
+        return this.blocked.has(alias);
+      }
+      reset(prefix) {
+        this.nextId[prefix] = 1;
+      }
+    };
+    module2.exports = Document;
+  }
+});
+
+// node_modules/opentype.js/dist/opentype.js
+var require_opentype = __commonJS({
+  "node_modules/opentype.js/dist/opentype.js"(exports, module2) {
+    (function(global2, factory) {
+      typeof exports === "object" && typeof module2 !== "undefined" ? factory(exports) : typeof define === "function" && define.amd ? define(["exports"], factory) : (global2 = global2 || self, factory(global2.opentype = {}));
+    })(exports, function(exports2) {
+      "use strict";
+      if (!String.prototype.codePointAt) {
+        (function() {
+          var defineProperty = function() {
+            try {
+              var object = {};
+              var $defineProperty = Object.defineProperty;
+              var result = $defineProperty(object, object, object) && $defineProperty;
+            } catch (error) {
+            }
+            return result;
+          }();
+          var codePointAt = function(position) {
+            if (this == null) {
+              throw TypeError();
+            }
+            var string = String(this);
+            var size = string.length;
+            var index = position ? Number(position) : 0;
+            if (index != index) {
+              index = 0;
+            }
+            if (index < 0 || index >= size) {
+              return void 0;
+            }
+            var first = string.charCodeAt(index);
+            var second;
+            if (
+              // check if it’s the start of a surrogate pair
+              first >= 55296 && first <= 56319 && // high surrogate
+              size > index + 1
+            ) {
+              second = string.charCodeAt(index + 1);
+              if (second >= 56320 && second <= 57343) {
+                return (first - 55296) * 1024 + second - 56320 + 65536;
+              }
+            }
+            return first;
+          };
+          if (defineProperty) {
+            defineProperty(String.prototype, "codePointAt", {
+              "value": codePointAt,
+              "configurable": true,
+              "writable": true
+            });
+          } else {
+            String.prototype.codePointAt = codePointAt;
+          }
+        })();
+      }
+      var TINF_OK = 0;
+      var TINF_DATA_ERROR = -3;
+      function Tree() {
+        this.table = new Uint16Array(16);
+        this.trans = new Uint16Array(288);
+      }
+      function Data(source, dest) {
+        this.source = source;
+        this.sourceIndex = 0;
+        this.tag = 0;
+        this.bitcount = 0;
+        this.dest = dest;
+        this.destLen = 0;
+        this.ltree = new Tree();
+        this.dtree = new Tree();
+      }
+      var sltree = new Tree();
+      var sdtree = new Tree();
+      var length_bits = new Uint8Array(30);
+      var length_base = new Uint16Array(30);
+      var dist_bits = new Uint8Array(30);
+      var dist_base = new Uint16Array(30);
+      var clcidx = new Uint8Array([
+        16,
+        17,
+        18,
+        0,
+        8,
+        7,
+        9,
+        6,
+        10,
+        5,
+        11,
+        4,
+        12,
+        3,
+        13,
+        2,
+        14,
+        1,
+        15
+      ]);
+      var code_tree = new Tree();
+      var lengths = new Uint8Array(288 + 32);
+      function tinf_build_bits_base(bits, base, delta, first) {
+        var i, sum;
+        for (i = 0; i < delta; ++i) {
+          bits[i] = 0;
+        }
+        for (i = 0; i < 30 - delta; ++i) {
+          bits[i + delta] = i / delta | 0;
+        }
+        for (sum = first, i = 0; i < 30; ++i) {
+          base[i] = sum;
+          sum += 1 << bits[i];
+        }
+      }
+      function tinf_build_fixed_trees(lt, dt) {
+        var i;
+        for (i = 0; i < 7; ++i) {
+          lt.table[i] = 0;
+        }
+        lt.table[7] = 24;
+        lt.table[8] = 152;
+        lt.table[9] = 112;
+        for (i = 0; i < 24; ++i) {
+          lt.trans[i] = 256 + i;
+        }
+        for (i = 0; i < 144; ++i) {
+          lt.trans[24 + i] = i;
+        }
+        for (i = 0; i < 8; ++i) {
+          lt.trans[24 + 144 + i] = 280 + i;
+        }
+        for (i = 0; i < 112; ++i) {
+          lt.trans[24 + 144 + 8 + i] = 144 + i;
+        }
+        for (i = 0; i < 5; ++i) {
+          dt.table[i] = 0;
+        }
+        dt.table[5] = 32;
+        for (i = 0; i < 32; ++i) {
+          dt.trans[i] = i;
+        }
+      }
+      var offs = new Uint16Array(16);
+      function tinf_build_tree(t, lengths2, off, num) {
+        var i, sum;
+        for (i = 0; i < 16; ++i) {
+          t.table[i] = 0;
+        }
+        for (i = 0; i < num; ++i) {
+          t.table[lengths2[off + i]]++;
+        }
+        t.table[0] = 0;
+        for (sum = 0, i = 0; i < 16; ++i) {
+          offs[i] = sum;
+          sum += t.table[i];
+        }
+        for (i = 0; i < num; ++i) {
+          if (lengths2[off + i]) {
+            t.trans[offs[lengths2[off + i]]++] = i;
+          }
+        }
+      }
+      function tinf_getbit(d) {
+        if (!d.bitcount--) {
+          d.tag = d.source[d.sourceIndex++];
+          d.bitcount = 7;
+        }
+        var bit = d.tag & 1;
+        d.tag >>>= 1;
+        return bit;
+      }
+      function tinf_read_bits(d, num, base) {
+        if (!num) {
+          return base;
+        }
+        while (d.bitcount < 24) {
+          d.tag |= d.source[d.sourceIndex++] << d.bitcount;
+          d.bitcount += 8;
+        }
+        var val = d.tag & 65535 >>> 16 - num;
+        d.tag >>>= num;
+        d.bitcount -= num;
+        return val + base;
+      }
+      function tinf_decode_symbol(d, t) {
+        while (d.bitcount < 24) {
+          d.tag |= d.source[d.sourceIndex++] << d.bitcount;
+          d.bitcount += 8;
+        }
+        var sum = 0, cur = 0, len = 0;
+        var tag = d.tag;
+        do {
+          cur = 2 * cur + (tag & 1);
+          tag >>>= 1;
+          ++len;
+          sum += t.table[len];
+          cur -= t.table[len];
+        } while (cur >= 0);
+        d.tag = tag;
+        d.bitcount -= len;
+        return t.trans[sum + cur];
+      }
+      function tinf_decode_trees(d, lt, dt) {
+        var hlit, hdist, hclen;
+        var i, num, length;
+        hlit = tinf_read_bits(d, 5, 257);
+        hdist = tinf_read_bits(d, 5, 1);
+        hclen = tinf_read_bits(d, 4, 4);
+        for (i = 0; i < 19; ++i) {
+          lengths[i] = 0;
+        }
+        for (i = 0; i < hclen; ++i) {
+          var clen = tinf_read_bits(d, 3, 0);
+          lengths[clcidx[i]] = clen;
+        }
+        tinf_build_tree(code_tree, lengths, 0, 19);
+        for (num = 0; num < hlit + hdist; ) {
+          var sym = tinf_decode_symbol(d, code_tree);
+          switch (sym) {
+            case 16:
+              var prev = lengths[num - 1];
+              for (length = tinf_read_bits(d, 2, 3); length; --length) {
+                lengths[num++] = prev;
+              }
+              break;
+            case 17:
+              for (length = tinf_read_bits(d, 3, 3); length; --length) {
+                lengths[num++] = 0;
+              }
+              break;
+            case 18:
+              for (length = tinf_read_bits(d, 7, 11); length; --length) {
+                lengths[num++] = 0;
+              }
+              break;
+            default:
+              lengths[num++] = sym;
+              break;
+          }
+        }
+        tinf_build_tree(lt, lengths, 0, hlit);
+        tinf_build_tree(dt, lengths, hlit, hdist);
+      }
+      function tinf_inflate_block_data(d, lt, dt) {
+        while (1) {
+          var sym = tinf_decode_symbol(d, lt);
+          if (sym === 256) {
+            return TINF_OK;
+          }
+          if (sym < 256) {
+            d.dest[d.destLen++] = sym;
+          } else {
+            var length, dist, offs2;
+            var i;
+            sym -= 257;
+            length = tinf_read_bits(d, length_bits[sym], length_base[sym]);
+            dist = tinf_decode_symbol(d, dt);
+            offs2 = d.destLen - tinf_read_bits(d, dist_bits[dist], dist_base[dist]);
+            for (i = offs2; i < offs2 + length; ++i) {
+              d.dest[d.destLen++] = d.dest[i];
+            }
+          }
+        }
+      }
+      function tinf_inflate_uncompressed_block(d) {
+        var length, invlength;
+        var i;
+        while (d.bitcount > 8) {
+          d.sourceIndex--;
+          d.bitcount -= 8;
+        }
+        length = d.source[d.sourceIndex + 1];
+        length = 256 * length + d.source[d.sourceIndex];
+        invlength = d.source[d.sourceIndex + 3];
+        invlength = 256 * invlength + d.source[d.sourceIndex + 2];
+        if (length !== (~invlength & 65535)) {
+          return TINF_DATA_ERROR;
+        }
+        d.sourceIndex += 4;
+        for (i = length; i; --i) {
+          d.dest[d.destLen++] = d.source[d.sourceIndex++];
+        }
+        d.bitcount = 0;
+        return TINF_OK;
+      }
+      function tinf_uncompress(source, dest) {
+        var d = new Data(source, dest);
+        var bfinal, btype, res;
+        do {
+          bfinal = tinf_getbit(d);
+          btype = tinf_read_bits(d, 2, 0);
+          switch (btype) {
+            case 0:
+              res = tinf_inflate_uncompressed_block(d);
+              break;
+            case 1:
+              res = tinf_inflate_block_data(d, sltree, sdtree);
+              break;
+            case 2:
+              tinf_decode_trees(d, d.ltree, d.dtree);
+              res = tinf_inflate_block_data(d, d.ltree, d.dtree);
+              break;
+            default:
+              res = TINF_DATA_ERROR;
+          }
+          if (res !== TINF_OK) {
+            throw new Error("Data error");
+          }
+        } while (!bfinal);
+        if (d.destLen < d.dest.length) {
+          if (typeof d.dest.slice === "function") {
+            return d.dest.slice(0, d.destLen);
+          } else {
+            return d.dest.subarray(0, d.destLen);
+          }
+        }
+        return d.dest;
+      }
+      tinf_build_fixed_trees(sltree, sdtree);
+      tinf_build_bits_base(length_bits, length_base, 4, 3);
+      tinf_build_bits_base(dist_bits, dist_base, 2, 1);
+      length_bits[28] = 0;
+      length_base[28] = 258;
+      var tinyInflate = tinf_uncompress;
+      function derive(v0, v12, v2, v32, t) {
+        return Math.pow(1 - t, 3) * v0 + 3 * Math.pow(1 - t, 2) * t * v12 + 3 * (1 - t) * Math.pow(t, 2) * v2 + Math.pow(t, 3) * v32;
+      }
+      function BoundingBox() {
+        this.x1 = Number.NaN;
+        this.y1 = Number.NaN;
+        this.x2 = Number.NaN;
+        this.y2 = Number.NaN;
+      }
+      BoundingBox.prototype.isEmpty = function() {
+        return isNaN(this.x1) || isNaN(this.y1) || isNaN(this.x2) || isNaN(this.y2);
+      };
+      BoundingBox.prototype.addPoint = function(x, y) {
+        if (typeof x === "number") {
+          if (isNaN(this.x1) || isNaN(this.x2)) {
+            this.x1 = x;
+            this.x2 = x;
+          }
+          if (x < this.x1) {
+            this.x1 = x;
+          }
+          if (x > this.x2) {
+            this.x2 = x;
+          }
+        }
+        if (typeof y === "number") {
+          if (isNaN(this.y1) || isNaN(this.y2)) {
+            this.y1 = y;
+            this.y2 = y;
+          }
+          if (y < this.y1) {
+            this.y1 = y;
+          }
+          if (y > this.y2) {
+            this.y2 = y;
+          }
+        }
+      };
+      BoundingBox.prototype.addX = function(x) {
+        this.addPoint(x, null);
+      };
+      BoundingBox.prototype.addY = function(y) {
+        this.addPoint(null, y);
+      };
+      BoundingBox.prototype.addBezier = function(x0, y0, x1, y1, x2, y2, x, y) {
+        var p0 = [x0, y0];
+        var p1 = [x1, y1];
+        var p2 = [x2, y2];
+        var p3 = [x, y];
+        this.addPoint(x0, y0);
+        this.addPoint(x, y);
+        for (var i = 0; i <= 1; i++) {
+          var b = 6 * p0[i] - 12 * p1[i] + 6 * p2[i];
+          var a = -3 * p0[i] + 9 * p1[i] - 9 * p2[i] + 3 * p3[i];
+          var c = 3 * p1[i] - 3 * p0[i];
+          if (a === 0) {
+            if (b === 0) {
+              continue;
+            }
+            var t = -c / b;
+            if (0 < t && t < 1) {
+              if (i === 0) {
+                this.addX(derive(p0[i], p1[i], p2[i], p3[i], t));
+              }
+              if (i === 1) {
+                this.addY(derive(p0[i], p1[i], p2[i], p3[i], t));
+              }
+            }
+            continue;
+          }
+          var b2ac = Math.pow(b, 2) - 4 * c * a;
+          if (b2ac < 0) {
+            continue;
+          }
+          var t1 = (-b + Math.sqrt(b2ac)) / (2 * a);
+          if (0 < t1 && t1 < 1) {
+            if (i === 0) {
+              this.addX(derive(p0[i], p1[i], p2[i], p3[i], t1));
+            }
+            if (i === 1) {
+              this.addY(derive(p0[i], p1[i], p2[i], p3[i], t1));
+            }
+          }
+          var t2 = (-b - Math.sqrt(b2ac)) / (2 * a);
+          if (0 < t2 && t2 < 1) {
+            if (i === 0) {
+              this.addX(derive(p0[i], p1[i], p2[i], p3[i], t2));
+            }
+            if (i === 1) {
+              this.addY(derive(p0[i], p1[i], p2[i], p3[i], t2));
+            }
+          }
+        }
+      };
+      BoundingBox.prototype.addQuad = function(x0, y0, x1, y1, x, y) {
+        var cp1x = x0 + 2 / 3 * (x1 - x0);
+        var cp1y = y0 + 2 / 3 * (y1 - y0);
+        var cp2x = cp1x + 1 / 3 * (x - x0);
+        var cp2y = cp1y + 1 / 3 * (y - y0);
+        this.addBezier(x0, y0, cp1x, cp1y, cp2x, cp2y, x, y);
+      };
+      function Path() {
+        this.commands = [];
+        this.fill = "black";
+        this.stroke = null;
+        this.strokeWidth = 1;
+      }
+      Path.prototype.moveTo = function(x, y) {
+        this.commands.push({
+          type: "M",
+          x,
+          y
+        });
+      };
+      Path.prototype.lineTo = function(x, y) {
+        this.commands.push({
+          type: "L",
+          x,
+          y
+        });
+      };
+      Path.prototype.curveTo = Path.prototype.bezierCurveTo = function(x1, y1, x2, y2, x, y) {
+        this.commands.push({
+          type: "C",
+          x1,
+          y1,
+          x2,
+          y2,
+          x,
+          y
+        });
+      };
+      Path.prototype.quadTo = Path.prototype.quadraticCurveTo = function(x1, y1, x, y) {
+        this.commands.push({
+          type: "Q",
+          x1,
+          y1,
+          x,
+          y
+        });
+      };
+      Path.prototype.close = Path.prototype.closePath = function() {
+        this.commands.push({
+          type: "Z"
+        });
+      };
+      Path.prototype.extend = function(pathOrCommands) {
+        if (pathOrCommands.commands) {
+          pathOrCommands = pathOrCommands.commands;
+        } else if (pathOrCommands instanceof BoundingBox) {
+          var box = pathOrCommands;
+          this.moveTo(box.x1, box.y1);
+          this.lineTo(box.x2, box.y1);
+          this.lineTo(box.x2, box.y2);
+          this.lineTo(box.x1, box.y2);
+          this.close();
+          return;
+        }
+        Array.prototype.push.apply(this.commands, pathOrCommands);
+      };
+      Path.prototype.getBoundingBox = function() {
+        var box = new BoundingBox();
+        var startX = 0;
+        var startY = 0;
+        var prevX = 0;
+        var prevY = 0;
+        for (var i = 0; i < this.commands.length; i++) {
+          var cmd = this.commands[i];
+          switch (cmd.type) {
+            case "M":
+              box.addPoint(cmd.x, cmd.y);
+              startX = prevX = cmd.x;
+              startY = prevY = cmd.y;
+              break;
+            case "L":
+              box.addPoint(cmd.x, cmd.y);
+              prevX = cmd.x;
+              prevY = cmd.y;
+              break;
+            case "Q":
+              box.addQuad(prevX, prevY, cmd.x1, cmd.y1, cmd.x, cmd.y);
+              prevX = cmd.x;
+              prevY = cmd.y;
+              break;
+            case "C":
+              box.addBezier(prevX, prevY, cmd.x1, cmd.y1, cmd.x2, cmd.y2, cmd.x, cmd.y);
+              prevX = cmd.x;
+              prevY = cmd.y;
+              break;
+            case "Z":
+              prevX = startX;
+              prevY = startY;
+              break;
+            default:
+              throw new Error("Unexpected path command " + cmd.type);
+          }
+        }
+        if (box.isEmpty()) {
+          box.addPoint(0, 0);
+        }
+        return box;
+      };
+      Path.prototype.draw = function(ctx) {
+        ctx.beginPath();
+        for (var i = 0; i < this.commands.length; i += 1) {
+          var cmd = this.commands[i];
+          if (cmd.type === "M") {
+            ctx.moveTo(cmd.x, cmd.y);
+          } else if (cmd.type === "L") {
+            ctx.lineTo(cmd.x, cmd.y);
+          } else if (cmd.type === "C") {
+            ctx.bezierCurveTo(cmd.x1, cmd.y1, cmd.x2, cmd.y2, cmd.x, cmd.y);
+          } else if (cmd.type === "Q") {
+            ctx.quadraticCurveTo(cmd.x1, cmd.y1, cmd.x, cmd.y);
+          } else if (cmd.type === "Z") {
+            ctx.closePath();
+          }
+        }
+        if (this.fill) {
+          ctx.fillStyle = this.fill;
+          ctx.fill();
+        }
+        if (this.stroke) {
+          ctx.strokeStyle = this.stroke;
+          ctx.lineWidth = this.strokeWidth;
+          ctx.stroke();
+        }
+      };
+      Path.prototype.toPathData = function(decimalPlaces) {
+        decimalPlaces = decimalPlaces !== void 0 ? decimalPlaces : 2;
+        function floatToString(v) {
+          if (Math.round(v) === v) {
+            return "" + Math.round(v);
+          } else {
+            return v.toFixed(decimalPlaces);
+          }
+        }
+        function packValues() {
+          var arguments$1 = arguments;
+          var s = "";
+          for (var i2 = 0; i2 < arguments.length; i2 += 1) {
+            var v = arguments$1[i2];
+            if (v >= 0 && i2 > 0) {
+              s += " ";
+            }
+            s += floatToString(v);
+          }
+          return s;
+        }
+        var d = "";
+        for (var i = 0; i < this.commands.length; i += 1) {
+          var cmd = this.commands[i];
+          if (cmd.type === "M") {
+            d += "M" + packValues(cmd.x, cmd.y);
+          } else if (cmd.type === "L") {
+            d += "L" + packValues(cmd.x, cmd.y);
+          } else if (cmd.type === "C") {
+            d += "C" + packValues(cmd.x1, cmd.y1, cmd.x2, cmd.y2, cmd.x, cmd.y);
+          } else if (cmd.type === "Q") {
+            d += "Q" + packValues(cmd.x1, cmd.y1, cmd.x, cmd.y);
+          } else if (cmd.type === "Z") {
+            d += "Z";
+          }
+        }
+        return d;
+      };
+      Path.prototype.toSVG = function(decimalPlaces) {
+        var svg = '<path d="';
+        svg += this.toPathData(decimalPlaces);
+        svg += '"';
+        if (this.fill && this.fill !== "black") {
+          if (this.fill === null) {
+            svg += ' fill="none"';
+          } else {
+            svg += ' fill="' + this.fill + '"';
+          }
+        }
+        if (this.stroke) {
+          svg += ' stroke="' + this.stroke + '" stroke-width="' + this.strokeWidth + '"';
+        }
+        svg += "/>";
+        return svg;
+      };
+      Path.prototype.toDOMElement = function(decimalPlaces) {
+        var temporaryPath = this.toPathData(decimalPlaces);
+        var newPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        newPath.setAttribute("d", temporaryPath);
+        return newPath;
+      };
+      function fail(message) {
+        throw new Error(message);
+      }
+      function argument(predicate, message) {
+        if (!predicate) {
+          fail(message);
+        }
+      }
+      var check = { fail, argument, assert: argument };
+      var LIMIT16 = 32768;
+      var LIMIT32 = 2147483648;
+      var decode = {};
+      var encode = {};
+      var sizeOf = {};
+      function constant(v) {
+        return function() {
+          return v;
+        };
+      }
+      encode.BYTE = function(v) {
+        check.argument(v >= 0 && v <= 255, "Byte value should be between 0 and 255.");
+        return [v];
+      };
+      sizeOf.BYTE = constant(1);
+      encode.CHAR = function(v) {
+        return [v.charCodeAt(0)];
+      };
+      sizeOf.CHAR = constant(1);
+      encode.CHARARRAY = function(v) {
+        if (typeof v === "undefined") {
+          v = "";
+          console.warn("Undefined CHARARRAY encountered and treated as an empty string. This is probably caused by a missing glyph name.");
+        }
+        var b = [];
+        for (var i = 0; i < v.length; i += 1) {
+          b[i] = v.charCodeAt(i);
+        }
+        return b;
+      };
+      sizeOf.CHARARRAY = function(v) {
+        if (typeof v === "undefined") {
+          return 0;
+        }
+        return v.length;
+      };
+      encode.USHORT = function(v) {
+        return [v >> 8 & 255, v & 255];
+      };
+      sizeOf.USHORT = constant(2);
+      encode.SHORT = function(v) {
+        if (v >= LIMIT16) {
+          v = -(2 * LIMIT16 - v);
+        }
+        return [v >> 8 & 255, v & 255];
+      };
+      sizeOf.SHORT = constant(2);
+      encode.UINT24 = function(v) {
+        return [v >> 16 & 255, v >> 8 & 255, v & 255];
+      };
+      sizeOf.UINT24 = constant(3);
+      encode.ULONG = function(v) {
+        return [v >> 24 & 255, v >> 16 & 255, v >> 8 & 255, v & 255];
+      };
+      sizeOf.ULONG = constant(4);
+      encode.LONG = function(v) {
+        if (v >= LIMIT32) {
+          v = -(2 * LIMIT32 - v);
+        }
+        return [v >> 24 & 255, v >> 16 & 255, v >> 8 & 255, v & 255];
+      };
+      sizeOf.LONG = constant(4);
+      encode.FIXED = encode.ULONG;
+      sizeOf.FIXED = sizeOf.ULONG;
+      encode.FWORD = encode.SHORT;
+      sizeOf.FWORD = sizeOf.SHORT;
+      encode.UFWORD = encode.USHORT;
+      sizeOf.UFWORD = sizeOf.USHORT;
+      encode.LONGDATETIME = function(v) {
+        return [0, 0, 0, 0, v >> 24 & 255, v >> 16 & 255, v >> 8 & 255, v & 255];
+      };
+      sizeOf.LONGDATETIME = constant(8);
+      encode.TAG = function(v) {
+        check.argument(v.length === 4, "Tag should be exactly 4 ASCII characters.");
+        return [
+          v.charCodeAt(0),
+          v.charCodeAt(1),
+          v.charCodeAt(2),
+          v.charCodeAt(3)
+        ];
+      };
+      sizeOf.TAG = constant(4);
+      encode.Card8 = encode.BYTE;
+      sizeOf.Card8 = sizeOf.BYTE;
+      encode.Card16 = encode.USHORT;
+      sizeOf.Card16 = sizeOf.USHORT;
+      encode.OffSize = encode.BYTE;
+      sizeOf.OffSize = sizeOf.BYTE;
+      encode.SID = encode.USHORT;
+      sizeOf.SID = sizeOf.USHORT;
+      encode.NUMBER = function(v) {
+        if (v >= -107 && v <= 107) {
+          return [v + 139];
+        } else if (v >= 108 && v <= 1131) {
+          v = v - 108;
+          return [(v >> 8) + 247, v & 255];
+        } else if (v >= -1131 && v <= -108) {
+          v = -v - 108;
+          return [(v >> 8) + 251, v & 255];
+        } else if (v >= -32768 && v <= 32767) {
+          return encode.NUMBER16(v);
+        } else {
+          return encode.NUMBER32(v);
+        }
+      };
+      sizeOf.NUMBER = function(v) {
+        return encode.NUMBER(v).length;
+      };
+      encode.NUMBER16 = function(v) {
+        return [28, v >> 8 & 255, v & 255];
+      };
+      sizeOf.NUMBER16 = constant(3);
+      encode.NUMBER32 = function(v) {
+        return [29, v >> 24 & 255, v >> 16 & 255, v >> 8 & 255, v & 255];
+      };
+      sizeOf.NUMBER32 = constant(5);
+      encode.REAL = function(v) {
+        var value = v.toString();
+        var m = /\.(\d*?)(?:9{5,20}|0{5,20})\d{0,2}(?:e(.+)|$)/.exec(value);
+        if (m) {
+          var epsilon = parseFloat("1e" + ((m[2] ? +m[2] : 0) + m[1].length));
+          value = (Math.round(v * epsilon) / epsilon).toString();
+        }
+        var nibbles = "";
+        for (var i = 0, ii = value.length; i < ii; i += 1) {
+          var c = value[i];
+          if (c === "e") {
+            nibbles += value[++i] === "-" ? "c" : "b";
+          } else if (c === ".") {
+            nibbles += "a";
+          } else if (c === "-") {
+            nibbles += "e";
+          } else {
+            nibbles += c;
+          }
+        }
+        nibbles += nibbles.length & 1 ? "f" : "ff";
+        var out = [30];
+        for (var i$1 = 0, ii$1 = nibbles.length; i$1 < ii$1; i$1 += 2) {
+          out.push(parseInt(nibbles.substr(i$1, 2), 16));
+        }
+        return out;
+      };
+      sizeOf.REAL = function(v) {
+        return encode.REAL(v).length;
+      };
+      encode.NAME = encode.CHARARRAY;
+      sizeOf.NAME = sizeOf.CHARARRAY;
+      encode.STRING = encode.CHARARRAY;
+      sizeOf.STRING = sizeOf.CHARARRAY;
+      decode.UTF8 = function(data, offset, numBytes) {
+        var codePoints = [];
+        var numChars = numBytes;
+        for (var j = 0; j < numChars; j++, offset += 1) {
+          codePoints[j] = data.getUint8(offset);
+        }
+        return String.fromCharCode.apply(null, codePoints);
+      };
+      decode.UTF16 = function(data, offset, numBytes) {
+        var codePoints = [];
+        var numChars = numBytes / 2;
+        for (var j = 0; j < numChars; j++, offset += 2) {
+          codePoints[j] = data.getUint16(offset);
+        }
+        return String.fromCharCode.apply(null, codePoints);
+      };
+      encode.UTF16 = function(v) {
+        var b = [];
+        for (var i = 0; i < v.length; i += 1) {
+          var codepoint = v.charCodeAt(i);
+          b[b.length] = codepoint >> 8 & 255;
+          b[b.length] = codepoint & 255;
+        }
+        return b;
+      };
+      sizeOf.UTF16 = function(v) {
+        return v.length * 2;
+      };
+      var eightBitMacEncodings = {
+        "x-mac-croatian": (
+          // Python: 'mac_croatian'
+          "\xC4\xC5\xC7\xC9\xD1\xD6\xDC\xE1\xE0\xE2\xE4\xE3\xE5\xE7\xE9\xE8\xEA\xEB\xED\xEC\xEE\xEF\xF1\xF3\xF2\xF4\xF6\xF5\xFA\xF9\xFB\xFC\u2020\xB0\xA2\xA3\xA7\u2022\xB6\xDF\xAE\u0160\u2122\xB4\xA8\u2260\u017D\xD8\u221E\xB1\u2264\u2265\u2206\xB5\u2202\u2211\u220F\u0161\u222B\xAA\xBA\u03A9\u017E\xF8\xBF\xA1\xAC\u221A\u0192\u2248\u0106\xAB\u010C\u2026\xA0\xC0\xC3\xD5\u0152\u0153\u0110\u2014\u201C\u201D\u2018\u2019\xF7\u25CA\uF8FF\xA9\u2044\u20AC\u2039\u203A\xC6\xBB\u2013\xB7\u201A\u201E\u2030\xC2\u0107\xC1\u010D\xC8\xCD\xCE\xCF\xCC\xD3\xD4\u0111\xD2\xDA\xDB\xD9\u0131\u02C6\u02DC\xAF\u03C0\xCB\u02DA\xB8\xCA\xE6\u02C7"
+        ),
+        "x-mac-cyrillic": (
+          // Python: 'mac_cyrillic'
+          "\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F\u2020\xB0\u0490\xA3\xA7\u2022\xB6\u0406\xAE\xA9\u2122\u0402\u0452\u2260\u0403\u0453\u221E\xB1\u2264\u2265\u0456\xB5\u0491\u0408\u0404\u0454\u0407\u0457\u0409\u0459\u040A\u045A\u0458\u0405\xAC\u221A\u0192\u2248\u2206\xAB\xBB\u2026\xA0\u040B\u045B\u040C\u045C\u0455\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u201E\u040E\u045E\u040F\u045F\u2116\u0401\u0451\u044F\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E"
+        ),
+        "x-mac-gaelic": (
+          // http://unicode.org/Public/MAPPINGS/VENDORS/APPLE/GAELIC.TXT
+          "\xC4\xC5\xC7\xC9\xD1\xD6\xDC\xE1\xE0\xE2\xE4\xE3\xE5\xE7\xE9\xE8\xEA\xEB\xED\xEC\xEE\xEF\xF1\xF3\xF2\xF4\xF6\xF5\xFA\xF9\xFB\xFC\u2020\xB0\xA2\xA3\xA7\u2022\xB6\xDF\xAE\xA9\u2122\xB4\xA8\u2260\xC6\xD8\u1E02\xB1\u2264\u2265\u1E03\u010A\u010B\u1E0A\u1E0B\u1E1E\u1E1F\u0120\u0121\u1E40\xE6\xF8\u1E41\u1E56\u1E57\u027C\u0192\u017F\u1E60\xAB\xBB\u2026\xA0\xC0\xC3\xD5\u0152\u0153\u2013\u2014\u201C\u201D\u2018\u2019\u1E61\u1E9B\xFF\u0178\u1E6A\u20AC\u2039\u203A\u0176\u0177\u1E6B\xB7\u1EF2\u1EF3\u204A\xC2\xCA\xC1\xCB\xC8\xCD\xCE\xCF\xCC\xD3\xD4\u2663\xD2\xDA\xDB\xD9\u0131\xDD\xFD\u0174\u0175\u1E84\u1E85\u1E80\u1E81\u1E82\u1E83"
+        ),
+        "x-mac-greek": (
+          // Python: 'mac_greek'
+          "\xC4\xB9\xB2\xC9\xB3\xD6\xDC\u0385\xE0\xE2\xE4\u0384\xA8\xE7\xE9\xE8\xEA\xEB\xA3\u2122\xEE\xEF\u2022\xBD\u2030\xF4\xF6\xA6\u20AC\xF9\xFB\xFC\u2020\u0393\u0394\u0398\u039B\u039E\u03A0\xDF\xAE\xA9\u03A3\u03AA\xA7\u2260\xB0\xB7\u0391\xB1\u2264\u2265\xA5\u0392\u0395\u0396\u0397\u0399\u039A\u039C\u03A6\u03AB\u03A8\u03A9\u03AC\u039D\xAC\u039F\u03A1\u2248\u03A4\xAB\xBB\u2026\xA0\u03A5\u03A7\u0386\u0388\u0153\u2013\u2015\u201C\u201D\u2018\u2019\xF7\u0389\u038A\u038C\u038E\u03AD\u03AE\u03AF\u03CC\u038F\u03CD\u03B1\u03B2\u03C8\u03B4\u03B5\u03C6\u03B3\u03B7\u03B9\u03BE\u03BA\u03BB\u03BC\u03BD\u03BF\u03C0\u03CE\u03C1\u03C3\u03C4\u03B8\u03C9\u03C2\u03C7\u03C5\u03B6\u03CA\u03CB\u0390\u03B0\xAD"
+        ),
+        "x-mac-icelandic": (
+          // Python: 'mac_iceland'
+          "\xC4\xC5\xC7\xC9\xD1\xD6\xDC\xE1\xE0\xE2\xE4\xE3\xE5\xE7\xE9\xE8\xEA\xEB\xED\xEC\xEE\xEF\xF1\xF3\xF2\xF4\xF6\xF5\xFA\xF9\xFB\xFC\xDD\xB0\xA2\xA3\xA7\u2022\xB6\xDF\xAE\xA9\u2122\xB4\xA8\u2260\xC6\xD8\u221E\xB1\u2264\u2265\xA5\xB5\u2202\u2211\u220F\u03C0\u222B\xAA\xBA\u03A9\xE6\xF8\xBF\xA1\xAC\u221A\u0192\u2248\u2206\xAB\xBB\u2026\xA0\xC0\xC3\xD5\u0152\u0153\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u25CA\xFF\u0178\u2044\u20AC\xD0\xF0\xDE\xFE\xFD\xB7\u201A\u201E\u2030\xC2\xCA\xC1\xCB\xC8\xCD\xCE\xCF\xCC\xD3\xD4\uF8FF\xD2\xDA\xDB\xD9\u0131\u02C6\u02DC\xAF\u02D8\u02D9\u02DA\xB8\u02DD\u02DB\u02C7"
+        ),
+        "x-mac-inuit": (
+          // http://unicode.org/Public/MAPPINGS/VENDORS/APPLE/INUIT.TXT
+          "\u1403\u1404\u1405\u1406\u140A\u140B\u1431\u1432\u1433\u1434\u1438\u1439\u1449\u144E\u144F\u1450\u1451\u1455\u1456\u1466\u146D\u146E\u146F\u1470\u1472\u1473\u1483\u148B\u148C\u148D\u148E\u1490\u1491\xB0\u14A1\u14A5\u14A6\u2022\xB6\u14A7\xAE\xA9\u2122\u14A8\u14AA\u14AB\u14BB\u14C2\u14C3\u14C4\u14C5\u14C7\u14C8\u14D0\u14EF\u14F0\u14F1\u14F2\u14F4\u14F5\u1505\u14D5\u14D6\u14D7\u14D8\u14DA\u14DB\u14EA\u1528\u1529\u152A\u152B\u152D\u2026\xA0\u152E\u153E\u1555\u1556\u1557\u2013\u2014\u201C\u201D\u2018\u2019\u1558\u1559\u155A\u155D\u1546\u1547\u1548\u1549\u154B\u154C\u1550\u157F\u1580\u1581\u1582\u1583\u1584\u1585\u158F\u1590\u1591\u1592\u1593\u1594\u1595\u1671\u1672\u1673\u1674\u1675\u1676\u1596\u15A0\u15A1\u15A2\u15A3\u15A4\u15A5\u15A6\u157C\u0141\u0142"
+        ),
+        "x-mac-ce": (
+          // Python: 'mac_latin2'
+          "\xC4\u0100\u0101\xC9\u0104\xD6\xDC\xE1\u0105\u010C\xE4\u010D\u0106\u0107\xE9\u0179\u017A\u010E\xED\u010F\u0112\u0113\u0116\xF3\u0117\xF4\xF6\xF5\xFA\u011A\u011B\xFC\u2020\xB0\u0118\xA3\xA7\u2022\xB6\xDF\xAE\xA9\u2122\u0119\xA8\u2260\u0123\u012E\u012F\u012A\u2264\u2265\u012B\u0136\u2202\u2211\u0142\u013B\u013C\u013D\u013E\u0139\u013A\u0145\u0146\u0143\xAC\u221A\u0144\u0147\u2206\xAB\xBB\u2026\xA0\u0148\u0150\xD5\u0151\u014C\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u25CA\u014D\u0154\u0155\u0158\u2039\u203A\u0159\u0156\u0157\u0160\u201A\u201E\u0161\u015A\u015B\xC1\u0164\u0165\xCD\u017D\u017E\u016A\xD3\xD4\u016B\u016E\xDA\u016F\u0170\u0171\u0172\u0173\xDD\xFD\u0137\u017B\u0141\u017C\u0122\u02C7"
+        ),
+        macintosh: (
+          // Python: 'mac_roman'
+          "\xC4\xC5\xC7\xC9\xD1\xD6\xDC\xE1\xE0\xE2\xE4\xE3\xE5\xE7\xE9\xE8\xEA\xEB\xED\xEC\xEE\xEF\xF1\xF3\xF2\xF4\xF6\xF5\xFA\xF9\xFB\xFC\u2020\xB0\xA2\xA3\xA7\u2022\xB6\xDF\xAE\xA9\u2122\xB4\xA8\u2260\xC6\xD8\u221E\xB1\u2264\u2265\xA5\xB5\u2202\u2211\u220F\u03C0\u222B\xAA\xBA\u03A9\xE6\xF8\xBF\xA1\xAC\u221A\u0192\u2248\u2206\xAB\xBB\u2026\xA0\xC0\xC3\xD5\u0152\u0153\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u25CA\xFF\u0178\u2044\u20AC\u2039\u203A\uFB01\uFB02\u2021\xB7\u201A\u201E\u2030\xC2\xCA\xC1\xCB\xC8\xCD\xCE\xCF\xCC\xD3\xD4\uF8FF\xD2\xDA\xDB\xD9\u0131\u02C6\u02DC\xAF\u02D8\u02D9\u02DA\xB8\u02DD\u02DB\u02C7"
+        ),
+        "x-mac-romanian": (
+          // Python: 'mac_romanian'
+          "\xC4\xC5\xC7\xC9\xD1\xD6\xDC\xE1\xE0\xE2\xE4\xE3\xE5\xE7\xE9\xE8\xEA\xEB\xED\xEC\xEE\xEF\xF1\xF3\xF2\xF4\xF6\xF5\xFA\xF9\xFB\xFC\u2020\xB0\xA2\xA3\xA7\u2022\xB6\xDF\xAE\xA9\u2122\xB4\xA8\u2260\u0102\u0218\u221E\xB1\u2264\u2265\xA5\xB5\u2202\u2211\u220F\u03C0\u222B\xAA\xBA\u03A9\u0103\u0219\xBF\xA1\xAC\u221A\u0192\u2248\u2206\xAB\xBB\u2026\xA0\xC0\xC3\xD5\u0152\u0153\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u25CA\xFF\u0178\u2044\u20AC\u2039\u203A\u021A\u021B\u2021\xB7\u201A\u201E\u2030\xC2\xCA\xC1\xCB\xC8\xCD\xCE\xCF\xCC\xD3\xD4\uF8FF\xD2\xDA\xDB\xD9\u0131\u02C6\u02DC\xAF\u02D8\u02D9\u02DA\xB8\u02DD\u02DB\u02C7"
+        ),
+        "x-mac-turkish": (
+          // Python: 'mac_turkish'
+          "\xC4\xC5\xC7\xC9\xD1\xD6\xDC\xE1\xE0\xE2\xE4\xE3\xE5\xE7\xE9\xE8\xEA\xEB\xED\xEC\xEE\xEF\xF1\xF3\xF2\xF4\xF6\xF5\xFA\xF9\xFB\xFC\u2020\xB0\xA2\xA3\xA7\u2022\xB6\xDF\xAE\xA9\u2122\xB4\xA8\u2260\xC6\xD8\u221E\xB1\u2264\u2265\xA5\xB5\u2202\u2211\u220F\u03C0\u222B\xAA\xBA\u03A9\xE6\xF8\xBF\xA1\xAC\u221A\u0192\u2248\u2206\xAB\xBB\u2026\xA0\xC0\xC3\xD5\u0152\u0153\u2013\u2014\u201C\u201D\u2018\u2019\xF7\u25CA\xFF\u0178\u011E\u011F\u0130\u0131\u015E\u015F\u2021\xB7\u201A\u201E\u2030\xC2\xCA\xC1\xCB\xC8\xCD\xCE\xCF\xCC\xD3\xD4\uF8FF\xD2\xDA\xDB\xD9\uF8A0\u02C6\u02DC\xAF\u02D8\u02D9\u02DA\xB8\u02DD\u02DB\u02C7"
+        )
+      };
+      decode.MACSTRING = function(dataView, offset, dataLength, encoding) {
+        var table2 = eightBitMacEncodings[encoding];
+        if (table2 === void 0) {
+          return void 0;
+        }
+        var result = "";
+        for (var i = 0; i < dataLength; i++) {
+          var c = dataView.getUint8(offset + i);
+          if (c <= 127) {
+            result += String.fromCharCode(c);
+          } else {
+            result += table2[c & 127];
+          }
+        }
+        return result;
+      };
+      var macEncodingTableCache = typeof WeakMap === "function" && /* @__PURE__ */ new WeakMap();
+      var macEncodingCacheKeys;
+      var getMacEncodingTable = function(encoding) {
+        if (!macEncodingCacheKeys) {
+          macEncodingCacheKeys = {};
+          for (var e in eightBitMacEncodings) {
+            macEncodingCacheKeys[e] = new String(e);
+          }
+        }
+        var cacheKey = macEncodingCacheKeys[encoding];
+        if (cacheKey === void 0) {
+          return void 0;
+        }
+        if (macEncodingTableCache) {
+          var cachedTable = macEncodingTableCache.get(cacheKey);
+          if (cachedTable !== void 0) {
+            return cachedTable;
+          }
+        }
+        var decodingTable = eightBitMacEncodings[encoding];
+        if (decodingTable === void 0) {
+          return void 0;
+        }
+        var encodingTable = {};
+        for (var i = 0; i < decodingTable.length; i++) {
+          encodingTable[decodingTable.charCodeAt(i)] = i + 128;
+        }
+        if (macEncodingTableCache) {
+          macEncodingTableCache.set(cacheKey, encodingTable);
+        }
+        return encodingTable;
+      };
+      encode.MACSTRING = function(str, encoding) {
+        var table2 = getMacEncodingTable(encoding);
+        if (table2 === void 0) {
+          return void 0;
+        }
+        var result = [];
+        for (var i = 0; i < str.length; i++) {
+          var c = str.charCodeAt(i);
+          if (c >= 128) {
+            c = table2[c];
+            if (c === void 0) {
+              return void 0;
+            }
+          }
+          result[i] = c;
+        }
+        return result;
+      };
+      sizeOf.MACSTRING = function(str, encoding) {
+        var b = encode.MACSTRING(str, encoding);
+        if (b !== void 0) {
+          return b.length;
+        } else {
+          return 0;
+        }
+      };
+      function isByteEncodable(value) {
+        return value >= -128 && value <= 127;
+      }
+      function encodeVarDeltaRunAsZeroes(deltas, pos, result) {
+        var runLength = 0;
+        var numDeltas = deltas.length;
+        while (pos < numDeltas && runLength < 64 && deltas[pos] === 0) {
+          ++pos;
+          ++runLength;
+        }
+        result.push(128 | runLength - 1);
+        return pos;
+      }
+      function encodeVarDeltaRunAsBytes(deltas, offset, result) {
+        var runLength = 0;
+        var numDeltas = deltas.length;
+        var pos = offset;
+        while (pos < numDeltas && runLength < 64) {
+          var value = deltas[pos];
+          if (!isByteEncodable(value)) {
+            break;
+          }
+          if (value === 0 && pos + 1 < numDeltas && deltas[pos + 1] === 0) {
+            break;
+          }
+          ++pos;
+          ++runLength;
+        }
+        result.push(runLength - 1);
+        for (var i = offset; i < pos; ++i) {
+          result.push(deltas[i] + 256 & 255);
+        }
+        return pos;
+      }
+      function encodeVarDeltaRunAsWords(deltas, offset, result) {
+        var runLength = 0;
+        var numDeltas = deltas.length;
+        var pos = offset;
+        while (pos < numDeltas && runLength < 64) {
+          var value = deltas[pos];
+          if (value === 0) {
+            break;
+          }
+          if (isByteEncodable(value) && pos + 1 < numDeltas && isByteEncodable(deltas[pos + 1])) {
+            break;
+          }
+          ++pos;
+          ++runLength;
+        }
+        result.push(64 | runLength - 1);
+        for (var i = offset; i < pos; ++i) {
+          var val = deltas[i];
+          result.push(val + 65536 >> 8 & 255, val + 256 & 255);
+        }
+        return pos;
+      }
+      encode.VARDELTAS = function(deltas) {
+        var pos = 0;
+        var result = [];
+        while (pos < deltas.length) {
+          var value = deltas[pos];
+          if (value === 0) {
+            pos = encodeVarDeltaRunAsZeroes(deltas, pos, result);
+          } else if (value >= -128 && value <= 127) {
+            pos = encodeVarDeltaRunAsBytes(deltas, pos, result);
+          } else {
+            pos = encodeVarDeltaRunAsWords(deltas, pos, result);
+          }
+        }
+        return result;
+      };
+      encode.INDEX = function(l) {
+        var offset = 1;
+        var offsets = [offset];
+        var data = [];
+        for (var i = 0; i < l.length; i += 1) {
+          var v = encode.OBJECT(l[i]);
+          Array.prototype.push.apply(data, v);
+          offset += v.length;
+          offsets.push(offset);
+        }
+        if (data.length === 0) {
+          return [0, 0];
+        }
+        var encodedOffsets = [];
+        var offSize = 1 + Math.floor(Math.log(offset) / Math.log(2)) / 8 | 0;
+        var offsetEncoder = [void 0, encode.BYTE, encode.USHORT, encode.UINT24, encode.ULONG][offSize];
+        for (var i$1 = 0; i$1 < offsets.length; i$1 += 1) {
+          var encodedOffset = offsetEncoder(offsets[i$1]);
+          Array.prototype.push.apply(encodedOffsets, encodedOffset);
+        }
+        return Array.prototype.concat(
+          encode.Card16(l.length),
+          encode.OffSize(offSize),
+          encodedOffsets,
+          data
+        );
+      };
+      sizeOf.INDEX = function(v) {
+        return encode.INDEX(v).length;
+      };
+      encode.DICT = function(m) {
+        var d = [];
+        var keys = Object.keys(m);
+        var length = keys.length;
+        for (var i = 0; i < length; i += 1) {
+          var k = parseInt(keys[i], 0);
+          var v = m[k];
+          d = d.concat(encode.OPERAND(v.value, v.type));
+          d = d.concat(encode.OPERATOR(k));
+        }
+        return d;
+      };
+      sizeOf.DICT = function(m) {
+        return encode.DICT(m).length;
+      };
+      encode.OPERATOR = function(v) {
+        if (v < 1200) {
+          return [v];
+        } else {
+          return [12, v - 1200];
+        }
+      };
+      encode.OPERAND = function(v, type) {
+        var d = [];
+        if (Array.isArray(type)) {
+          for (var i = 0; i < type.length; i += 1) {
+            check.argument(v.length === type.length, "Not enough arguments given for type" + type);
+            d = d.concat(encode.OPERAND(v[i], type[i]));
+          }
+        } else {
+          if (type === "SID") {
+            d = d.concat(encode.NUMBER(v));
+          } else if (type === "offset") {
+            d = d.concat(encode.NUMBER32(v));
+          } else if (type === "number") {
+            d = d.concat(encode.NUMBER(v));
+          } else if (type === "real") {
+            d = d.concat(encode.REAL(v));
+          } else {
+            throw new Error("Unknown operand type " + type);
+          }
+        }
+        return d;
+      };
+      encode.OP = encode.BYTE;
+      sizeOf.OP = sizeOf.BYTE;
+      var wmm = typeof WeakMap === "function" && /* @__PURE__ */ new WeakMap();
+      encode.CHARSTRING = function(ops) {
+        if (wmm) {
+          var cachedValue = wmm.get(ops);
+          if (cachedValue !== void 0) {
+            return cachedValue;
+          }
+        }
+        var d = [];
+        var length = ops.length;
+        for (var i = 0; i < length; i += 1) {
+          var op = ops[i];
+          d = d.concat(encode[op.type](op.value));
+        }
+        if (wmm) {
+          wmm.set(ops, d);
+        }
+        return d;
+      };
+      sizeOf.CHARSTRING = function(ops) {
+        return encode.CHARSTRING(ops).length;
+      };
+      encode.OBJECT = function(v) {
+        var encodingFunction = encode[v.type];
+        check.argument(encodingFunction !== void 0, "No encoding function for type " + v.type);
+        return encodingFunction(v.value);
+      };
+      sizeOf.OBJECT = function(v) {
+        var sizeOfFunction = sizeOf[v.type];
+        check.argument(sizeOfFunction !== void 0, "No sizeOf function for type " + v.type);
+        return sizeOfFunction(v.value);
+      };
+      encode.TABLE = function(table2) {
+        var d = [];
+        var length = table2.fields.length;
+        var subtables = [];
+        var subtableOffsets = [];
+        for (var i = 0; i < length; i += 1) {
+          var field = table2.fields[i];
+          var encodingFunction = encode[field.type];
+          check.argument(encodingFunction !== void 0, "No encoding function for field type " + field.type + " (" + field.name + ")");
+          var value = table2[field.name];
+          if (value === void 0) {
+            value = field.value;
+          }
+          var bytes = encodingFunction(value);
+          if (field.type === "TABLE") {
+            subtableOffsets.push(d.length);
+            d = d.concat([0, 0]);
+            subtables.push(bytes);
+          } else {
+            d = d.concat(bytes);
+          }
+        }
+        for (var i$1 = 0; i$1 < subtables.length; i$1 += 1) {
+          var o = subtableOffsets[i$1];
+          var offset = d.length;
+          check.argument(offset < 65536, "Table " + table2.tableName + " too big.");
+          d[o] = offset >> 8;
+          d[o + 1] = offset & 255;
+          d = d.concat(subtables[i$1]);
+        }
+        return d;
+      };
+      sizeOf.TABLE = function(table2) {
+        var numBytes = 0;
+        var length = table2.fields.length;
+        for (var i = 0; i < length; i += 1) {
+          var field = table2.fields[i];
+          var sizeOfFunction = sizeOf[field.type];
+          check.argument(sizeOfFunction !== void 0, "No sizeOf function for field type " + field.type + " (" + field.name + ")");
+          var value = table2[field.name];
+          if (value === void 0) {
+            value = field.value;
+          }
+          numBytes += sizeOfFunction(value);
+          if (field.type === "TABLE") {
+            numBytes += 2;
+          }
+        }
+        return numBytes;
+      };
+      encode.RECORD = encode.TABLE;
+      sizeOf.RECORD = sizeOf.TABLE;
+      encode.LITERAL = function(v) {
+        return v;
+      };
+      sizeOf.LITERAL = function(v) {
+        return v.length;
+      };
+      function Table(tableName, fields, options) {
+        if (fields.length && (fields[0].name !== "coverageFormat" || fields[0].value === 1)) {
+          for (var i = 0; i < fields.length; i += 1) {
+            var field = fields[i];
+            this[field.name] = field.value;
+          }
+        }
+        this.tableName = tableName;
+        this.fields = fields;
+        if (options) {
+          var optionKeys = Object.keys(options);
+          for (var i$1 = 0; i$1 < optionKeys.length; i$1 += 1) {
+            var k = optionKeys[i$1];
+            var v = options[k];
+            if (this[k] !== void 0) {
+              this[k] = v;
+            }
+          }
+        }
+      }
+      Table.prototype.encode = function() {
+        return encode.TABLE(this);
+      };
+      Table.prototype.sizeOf = function() {
+        return sizeOf.TABLE(this);
+      };
+      function ushortList(itemName, list, count) {
+        if (count === void 0) {
+          count = list.length;
+        }
+        var fields = new Array(list.length + 1);
+        fields[0] = { name: itemName + "Count", type: "USHORT", value: count };
+        for (var i = 0; i < list.length; i++) {
+          fields[i + 1] = { name: itemName + i, type: "USHORT", value: list[i] };
+        }
+        return fields;
+      }
+      function tableList(itemName, records, itemCallback) {
+        var count = records.length;
+        var fields = new Array(count + 1);
+        fields[0] = { name: itemName + "Count", type: "USHORT", value: count };
+        for (var i = 0; i < count; i++) {
+          fields[i + 1] = { name: itemName + i, type: "TABLE", value: itemCallback(records[i], i) };
+        }
+        return fields;
+      }
+      function recordList(itemName, records, itemCallback) {
+        var count = records.length;
+        var fields = [];
+        fields[0] = { name: itemName + "Count", type: "USHORT", value: count };
+        for (var i = 0; i < count; i++) {
+          fields = fields.concat(itemCallback(records[i], i));
+        }
+        return fields;
+      }
+      function Coverage(coverageTable) {
+        if (coverageTable.format === 1) {
+          Table.call(
+            this,
+            "coverageTable",
+            [{ name: "coverageFormat", type: "USHORT", value: 1 }].concat(ushortList("glyph", coverageTable.glyphs))
+          );
+        } else if (coverageTable.format === 2) {
+          Table.call(
+            this,
+            "coverageTable",
+            [{ name: "coverageFormat", type: "USHORT", value: 2 }].concat(recordList("rangeRecord", coverageTable.ranges, function(RangeRecord) {
+              return [
+                { name: "startGlyphID", type: "USHORT", value: RangeRecord.start },
+                { name: "endGlyphID", type: "USHORT", value: RangeRecord.end },
+                { name: "startCoverageIndex", type: "USHORT", value: RangeRecord.index }
+              ];
+            }))
+          );
+        } else {
+          check.assert(false, "Coverage format must be 1 or 2.");
+        }
+      }
+      Coverage.prototype = Object.create(Table.prototype);
+      Coverage.prototype.constructor = Coverage;
+      function ScriptList(scriptListTable) {
+        Table.call(
+          this,
+          "scriptListTable",
+          recordList("scriptRecord", scriptListTable, function(scriptRecord, i) {
+            var script = scriptRecord.script;
+            var defaultLangSys = script.defaultLangSys;
+            check.assert(!!defaultLangSys, "Unable to write GSUB: script " + scriptRecord.tag + " has no default language system.");
+            return [
+              { name: "scriptTag" + i, type: "TAG", value: scriptRecord.tag },
+              { name: "script" + i, type: "TABLE", value: new Table("scriptTable", [
+                { name: "defaultLangSys", type: "TABLE", value: new Table("defaultLangSys", [
+                  { name: "lookupOrder", type: "USHORT", value: 0 },
+                  { name: "reqFeatureIndex", type: "USHORT", value: defaultLangSys.reqFeatureIndex }
+                ].concat(ushortList("featureIndex", defaultLangSys.featureIndexes))) }
+              ].concat(recordList("langSys", script.langSysRecords, function(langSysRecord, i2) {
+                var langSys = langSysRecord.langSys;
+                return [
+                  { name: "langSysTag" + i2, type: "TAG", value: langSysRecord.tag },
+                  { name: "langSys" + i2, type: "TABLE", value: new Table("langSys", [
+                    { name: "lookupOrder", type: "USHORT", value: 0 },
+                    { name: "reqFeatureIndex", type: "USHORT", value: langSys.reqFeatureIndex }
+                  ].concat(ushortList("featureIndex", langSys.featureIndexes))) }
+                ];
+              }))) }
+            ];
+          })
+        );
+      }
+      ScriptList.prototype = Object.create(Table.prototype);
+      ScriptList.prototype.constructor = ScriptList;
+      function FeatureList(featureListTable) {
+        Table.call(
+          this,
+          "featureListTable",
+          recordList("featureRecord", featureListTable, function(featureRecord, i) {
+            var feature = featureRecord.feature;
+            return [
+              { name: "featureTag" + i, type: "TAG", value: featureRecord.tag },
+              { name: "feature" + i, type: "TABLE", value: new Table("featureTable", [
+                { name: "featureParams", type: "USHORT", value: feature.featureParams }
+              ].concat(ushortList("lookupListIndex", feature.lookupListIndexes))) }
+            ];
+          })
+        );
+      }
+      FeatureList.prototype = Object.create(Table.prototype);
+      FeatureList.prototype.constructor = FeatureList;
+      function LookupList(lookupListTable, subtableMakers2) {
+        Table.call(this, "lookupListTable", tableList("lookup", lookupListTable, function(lookupTable) {
+          var subtableCallback = subtableMakers2[lookupTable.lookupType];
+          check.assert(!!subtableCallback, "Unable to write GSUB lookup type " + lookupTable.lookupType + " tables.");
+          return new Table("lookupTable", [
+            { name: "lookupType", type: "USHORT", value: lookupTable.lookupType },
+            { name: "lookupFlag", type: "USHORT", value: lookupTable.lookupFlag }
+          ].concat(tableList("subtable", lookupTable.subtables, subtableCallback)));
+        }));
+      }
+      LookupList.prototype = Object.create(Table.prototype);
+      LookupList.prototype.constructor = LookupList;
+      var table = {
+        Table,
+        Record: Table,
+        Coverage,
+        ScriptList,
+        FeatureList,
+        LookupList,
+        ushortList,
+        tableList,
+        recordList
+      };
+      function getByte(dataView, offset) {
+        return dataView.getUint8(offset);
+      }
+      function getUShort(dataView, offset) {
+        return dataView.getUint16(offset, false);
+      }
+      function getShort(dataView, offset) {
+        return dataView.getInt16(offset, false);
+      }
+      function getULong(dataView, offset) {
+        return dataView.getUint32(offset, false);
+      }
+      function getFixed(dataView, offset) {
+        var decimal = dataView.getInt16(offset, false);
+        var fraction = dataView.getUint16(offset + 2, false);
+        return decimal + fraction / 65535;
+      }
+      function getTag(dataView, offset) {
+        var tag = "";
+        for (var i = offset; i < offset + 4; i += 1) {
+          tag += String.fromCharCode(dataView.getInt8(i));
+        }
+        return tag;
+      }
+      function getOffset(dataView, offset, offSize) {
+        var v = 0;
+        for (var i = 0; i < offSize; i += 1) {
+          v <<= 8;
+          v += dataView.getUint8(offset + i);
+        }
+        return v;
+      }
+      function getBytes(dataView, startOffset, endOffset) {
+        var bytes = [];
+        for (var i = startOffset; i < endOffset; i += 1) {
+          bytes.push(dataView.getUint8(i));
+        }
+        return bytes;
+      }
+      function bytesToString(bytes) {
+        var s = "";
+        for (var i = 0; i < bytes.length; i += 1) {
+          s += String.fromCharCode(bytes[i]);
+        }
+        return s;
+      }
+      var typeOffsets = {
+        byte: 1,
+        uShort: 2,
+        short: 2,
+        uLong: 4,
+        fixed: 4,
+        longDateTime: 8,
+        tag: 4
+      };
+      function Parser(data, offset) {
+        this.data = data;
+        this.offset = offset;
+        this.relativeOffset = 0;
+      }
+      Parser.prototype.parseByte = function() {
+        var v = this.data.getUint8(this.offset + this.relativeOffset);
+        this.relativeOffset += 1;
+        return v;
+      };
+      Parser.prototype.parseChar = function() {
+        var v = this.data.getInt8(this.offset + this.relativeOffset);
+        this.relativeOffset += 1;
+        return v;
+      };
+      Parser.prototype.parseCard8 = Parser.prototype.parseByte;
+      Parser.prototype.parseUShort = function() {
+        var v = this.data.getUint16(this.offset + this.relativeOffset);
+        this.relativeOffset += 2;
+        return v;
+      };
+      Parser.prototype.parseCard16 = Parser.prototype.parseUShort;
+      Parser.prototype.parseSID = Parser.prototype.parseUShort;
+      Parser.prototype.parseOffset16 = Parser.prototype.parseUShort;
+      Parser.prototype.parseShort = function() {
+        var v = this.data.getInt16(this.offset + this.relativeOffset);
+        this.relativeOffset += 2;
+        return v;
+      };
+      Parser.prototype.parseF2Dot14 = function() {
+        var v = this.data.getInt16(this.offset + this.relativeOffset) / 16384;
+        this.relativeOffset += 2;
+        return v;
+      };
+      Parser.prototype.parseULong = function() {
+        var v = getULong(this.data, this.offset + this.relativeOffset);
+        this.relativeOffset += 4;
+        return v;
+      };
+      Parser.prototype.parseOffset32 = Parser.prototype.parseULong;
+      Parser.prototype.parseFixed = function() {
+        var v = getFixed(this.data, this.offset + this.relativeOffset);
+        this.relativeOffset += 4;
+        return v;
+      };
+      Parser.prototype.parseString = function(length) {
+        var dataView = this.data;
+        var offset = this.offset + this.relativeOffset;
+        var string = "";
+        this.relativeOffset += length;
+        for (var i = 0; i < length; i++) {
+          string += String.fromCharCode(dataView.getUint8(offset + i));
+        }
+        return string;
+      };
+      Parser.prototype.parseTag = function() {
+        return this.parseString(4);
+      };
+      Parser.prototype.parseLongDateTime = function() {
+        var v = getULong(this.data, this.offset + this.relativeOffset + 4);
+        v -= 2082844800;
+        this.relativeOffset += 8;
+        return v;
+      };
+      Parser.prototype.parseVersion = function(minorBase) {
+        var major = getUShort(this.data, this.offset + this.relativeOffset);
+        var minor = getUShort(this.data, this.offset + this.relativeOffset + 2);
+        this.relativeOffset += 4;
+        if (minorBase === void 0) {
+          minorBase = 4096;
+        }
+        return major + minor / minorBase / 10;
+      };
+      Parser.prototype.skip = function(type, amount) {
+        if (amount === void 0) {
+          amount = 1;
+        }
+        this.relativeOffset += typeOffsets[type] * amount;
+      };
+      Parser.prototype.parseULongList = function(count) {
+        if (count === void 0) {
+          count = this.parseULong();
+        }
+        var offsets = new Array(count);
+        var dataView = this.data;
+        var offset = this.offset + this.relativeOffset;
+        for (var i = 0; i < count; i++) {
+          offsets[i] = dataView.getUint32(offset);
+          offset += 4;
+        }
+        this.relativeOffset += count * 4;
+        return offsets;
+      };
+      Parser.prototype.parseOffset16List = Parser.prototype.parseUShortList = function(count) {
+        if (count === void 0) {
+          count = this.parseUShort();
+        }
+        var offsets = new Array(count);
+        var dataView = this.data;
+        var offset = this.offset + this.relativeOffset;
+        for (var i = 0; i < count; i++) {
+          offsets[i] = dataView.getUint16(offset);
+          offset += 2;
+        }
+        this.relativeOffset += count * 2;
+        return offsets;
+      };
+      Parser.prototype.parseShortList = function(count) {
+        var list = new Array(count);
+        var dataView = this.data;
+        var offset = this.offset + this.relativeOffset;
+        for (var i = 0; i < count; i++) {
+          list[i] = dataView.getInt16(offset);
+          offset += 2;
+        }
+        this.relativeOffset += count * 2;
+        return list;
+      };
+      Parser.prototype.parseByteList = function(count) {
+        var list = new Array(count);
+        var dataView = this.data;
+        var offset = this.offset + this.relativeOffset;
+        for (var i = 0; i < count; i++) {
+          list[i] = dataView.getUint8(offset++);
+        }
+        this.relativeOffset += count;
+        return list;
+      };
+      Parser.prototype.parseList = function(count, itemCallback) {
+        if (!itemCallback) {
+          itemCallback = count;
+          count = this.parseUShort();
+        }
+        var list = new Array(count);
+        for (var i = 0; i < count; i++) {
+          list[i] = itemCallback.call(this);
+        }
+        return list;
+      };
+      Parser.prototype.parseList32 = function(count, itemCallback) {
+        if (!itemCallback) {
+          itemCallback = count;
+          count = this.parseULong();
+        }
+        var list = new Array(count);
+        for (var i = 0; i < count; i++) {
+          list[i] = itemCallback.call(this);
+        }
+        return list;
+      };
+      Parser.prototype.parseRecordList = function(count, recordDescription) {
+        if (!recordDescription) {
+          recordDescription = count;
+          count = this.parseUShort();
+        }
+        var records = new Array(count);
+        var fields = Object.keys(recordDescription);
+        for (var i = 0; i < count; i++) {
+          var rec = {};
+          for (var j = 0; j < fields.length; j++) {
+            var fieldName = fields[j];
+            var fieldType = recordDescription[fieldName];
+            rec[fieldName] = fieldType.call(this);
+          }
+          records[i] = rec;
+        }
+        return records;
+      };
+      Parser.prototype.parseRecordList32 = function(count, recordDescription) {
+        if (!recordDescription) {
+          recordDescription = count;
+          count = this.parseULong();
+        }
+        var records = new Array(count);
+        var fields = Object.keys(recordDescription);
+        for (var i = 0; i < count; i++) {
+          var rec = {};
+          for (var j = 0; j < fields.length; j++) {
+            var fieldName = fields[j];
+            var fieldType = recordDescription[fieldName];
+            rec[fieldName] = fieldType.call(this);
+          }
+          records[i] = rec;
+        }
+        return records;
+      };
+      Parser.prototype.parseStruct = function(description) {
+        if (typeof description === "function") {
+          return description.call(this);
+        } else {
+          var fields = Object.keys(description);
+          var struct = {};
+          for (var j = 0; j < fields.length; j++) {
+            var fieldName = fields[j];
+            var fieldType = description[fieldName];
+            struct[fieldName] = fieldType.call(this);
+          }
+          return struct;
+        }
+      };
+      Parser.prototype.parseValueRecord = function(valueFormat) {
+        if (valueFormat === void 0) {
+          valueFormat = this.parseUShort();
+        }
+        if (valueFormat === 0) {
+          return;
+        }
+        var valueRecord = {};
+        if (valueFormat & 1) {
+          valueRecord.xPlacement = this.parseShort();
+        }
+        if (valueFormat & 2) {
+          valueRecord.yPlacement = this.parseShort();
+        }
+        if (valueFormat & 4) {
+          valueRecord.xAdvance = this.parseShort();
+        }
+        if (valueFormat & 8) {
+          valueRecord.yAdvance = this.parseShort();
+        }
+        if (valueFormat & 16) {
+          valueRecord.xPlaDevice = void 0;
+          this.parseShort();
+        }
+        if (valueFormat & 32) {
+          valueRecord.yPlaDevice = void 0;
+          this.parseShort();
+        }
+        if (valueFormat & 64) {
+          valueRecord.xAdvDevice = void 0;
+          this.parseShort();
+        }
+        if (valueFormat & 128) {
+          valueRecord.yAdvDevice = void 0;
+          this.parseShort();
+        }
+        return valueRecord;
+      };
+      Parser.prototype.parseValueRecordList = function() {
+        var valueFormat = this.parseUShort();
+        var valueCount = this.parseUShort();
+        var values = new Array(valueCount);
+        for (var i = 0; i < valueCount; i++) {
+          values[i] = this.parseValueRecord(valueFormat);
+        }
+        return values;
+      };
+      Parser.prototype.parsePointer = function(description) {
+        var structOffset = this.parseOffset16();
+        if (structOffset > 0) {
+          return new Parser(this.data, this.offset + structOffset).parseStruct(description);
+        }
+        return void 0;
+      };
+      Parser.prototype.parsePointer32 = function(description) {
+        var structOffset = this.parseOffset32();
+        if (structOffset > 0) {
+          return new Parser(this.data, this.offset + structOffset).parseStruct(description);
+        }
+        return void 0;
+      };
+      Parser.prototype.parseListOfLists = function(itemCallback) {
+        var offsets = this.parseOffset16List();
+        var count = offsets.length;
+        var relativeOffset = this.relativeOffset;
+        var list = new Array(count);
+        for (var i = 0; i < count; i++) {
+          var start = offsets[i];
+          if (start === 0) {
+            list[i] = void 0;
+            continue;
+          }
+          this.relativeOffset = start;
+          if (itemCallback) {
+            var subOffsets = this.parseOffset16List();
+            var subList = new Array(subOffsets.length);
+            for (var j = 0; j < subOffsets.length; j++) {
+              this.relativeOffset = start + subOffsets[j];
+              subList[j] = itemCallback.call(this);
+            }
+            list[i] = subList;
+          } else {
+            list[i] = this.parseUShortList();
+          }
+        }
+        this.relativeOffset = relativeOffset;
+        return list;
+      };
+      Parser.prototype.parseCoverage = function() {
+        var startOffset = this.offset + this.relativeOffset;
+        var format = this.parseUShort();
+        var count = this.parseUShort();
+        if (format === 1) {
+          return {
+            format: 1,
+            glyphs: this.parseUShortList(count)
+          };
+        } else if (format === 2) {
+          var ranges = new Array(count);
+          for (var i = 0; i < count; i++) {
+            ranges[i] = {
+              start: this.parseUShort(),
+              end: this.parseUShort(),
+              index: this.parseUShort()
+            };
+          }
+          return {
+            format: 2,
+            ranges
+          };
+        }
+        throw new Error("0x" + startOffset.toString(16) + ": Coverage format must be 1 or 2.");
+      };
+      Parser.prototype.parseClassDef = function() {
+        var startOffset = this.offset + this.relativeOffset;
+        var format = this.parseUShort();
+        if (format === 1) {
+          return {
+            format: 1,
+            startGlyph: this.parseUShort(),
+            classes: this.parseUShortList()
+          };
+        } else if (format === 2) {
+          return {
+            format: 2,
+            ranges: this.parseRecordList({
+              start: Parser.uShort,
+              end: Parser.uShort,
+              classId: Parser.uShort
+            })
+          };
+        }
+        throw new Error("0x" + startOffset.toString(16) + ": ClassDef format must be 1 or 2.");
+      };
+      Parser.list = function(count, itemCallback) {
+        return function() {
+          return this.parseList(count, itemCallback);
+        };
+      };
+      Parser.list32 = function(count, itemCallback) {
+        return function() {
+          return this.parseList32(count, itemCallback);
+        };
+      };
+      Parser.recordList = function(count, recordDescription) {
+        return function() {
+          return this.parseRecordList(count, recordDescription);
+        };
+      };
+      Parser.recordList32 = function(count, recordDescription) {
+        return function() {
+          return this.parseRecordList32(count, recordDescription);
+        };
+      };
+      Parser.pointer = function(description) {
+        return function() {
+          return this.parsePointer(description);
+        };
+      };
+      Parser.pointer32 = function(description) {
+        return function() {
+          return this.parsePointer32(description);
+        };
+      };
+      Parser.tag = Parser.prototype.parseTag;
+      Parser.byte = Parser.prototype.parseByte;
+      Parser.uShort = Parser.offset16 = Parser.prototype.parseUShort;
+      Parser.uShortList = Parser.prototype.parseUShortList;
+      Parser.uLong = Parser.offset32 = Parser.prototype.parseULong;
+      Parser.uLongList = Parser.prototype.parseULongList;
+      Parser.struct = Parser.prototype.parseStruct;
+      Parser.coverage = Parser.prototype.parseCoverage;
+      Parser.classDef = Parser.prototype.parseClassDef;
+      var langSysTable = {
+        reserved: Parser.uShort,
+        reqFeatureIndex: Parser.uShort,
+        featureIndexes: Parser.uShortList
+      };
+      Parser.prototype.parseScriptList = function() {
+        return this.parsePointer(Parser.recordList({
+          tag: Parser.tag,
+          script: Parser.pointer({
+            defaultLangSys: Parser.pointer(langSysTable),
+            langSysRecords: Parser.recordList({
+              tag: Parser.tag,
+              langSys: Parser.pointer(langSysTable)
+            })
+          })
+        })) || [];
+      };
+      Parser.prototype.parseFeatureList = function() {
+        return this.parsePointer(Parser.recordList({
+          tag: Parser.tag,
+          feature: Parser.pointer({
+            featureParams: Parser.offset16,
+            lookupListIndexes: Parser.uShortList
+          })
+        })) || [];
+      };
+      Parser.prototype.parseLookupList = function(lookupTableParsers) {
+        return this.parsePointer(Parser.list(Parser.pointer(function() {
+          var lookupType = this.parseUShort();
+          check.argument(1 <= lookupType && lookupType <= 9, "GPOS/GSUB lookup type " + lookupType + " unknown.");
+          var lookupFlag = this.parseUShort();
+          var useMarkFilteringSet = lookupFlag & 16;
+          return {
+            lookupType,
+            lookupFlag,
+            subtables: this.parseList(Parser.pointer(lookupTableParsers[lookupType])),
+            markFilteringSet: useMarkFilteringSet ? this.parseUShort() : void 0
+          };
+        }))) || [];
+      };
+      Parser.prototype.parseFeatureVariationsList = function() {
+        return this.parsePointer32(function() {
+          var majorVersion = this.parseUShort();
+          var minorVersion = this.parseUShort();
+          check.argument(majorVersion === 1 && minorVersion < 1, "GPOS/GSUB feature variations table unknown.");
+          var featureVariations = this.parseRecordList32({
+            conditionSetOffset: Parser.offset32,
+            featureTableSubstitutionOffset: Parser.offset32
+          });
+          return featureVariations;
+        }) || [];
+      };
+      var parse2 = {
+        getByte,
+        getCard8: getByte,
+        getUShort,
+        getCard16: getUShort,
+        getShort,
+        getULong,
+        getFixed,
+        getTag,
+        getOffset,
+        getBytes,
+        bytesToString,
+        Parser
+      };
+      function parseCmapTableFormat12(cmap2, p) {
+        p.parseUShort();
+        cmap2.length = p.parseULong();
+        cmap2.language = p.parseULong();
+        var groupCount;
+        cmap2.groupCount = groupCount = p.parseULong();
+        cmap2.glyphIndexMap = {};
+        for (var i = 0; i < groupCount; i += 1) {
+          var startCharCode = p.parseULong();
+          var endCharCode = p.parseULong();
+          var startGlyphId = p.parseULong();
+          for (var c = startCharCode; c <= endCharCode; c += 1) {
+            cmap2.glyphIndexMap[c] = startGlyphId;
+            startGlyphId++;
+          }
+        }
+      }
+      function parseCmapTableFormat4(cmap2, p, data, start, offset) {
+        cmap2.length = p.parseUShort();
+        cmap2.language = p.parseUShort();
+        var segCount;
+        cmap2.segCount = segCount = p.parseUShort() >> 1;
+        p.skip("uShort", 3);
+        cmap2.glyphIndexMap = {};
+        var endCountParser = new parse2.Parser(data, start + offset + 14);
+        var startCountParser = new parse2.Parser(data, start + offset + 16 + segCount * 2);
+        var idDeltaParser = new parse2.Parser(data, start + offset + 16 + segCount * 4);
+        var idRangeOffsetParser = new parse2.Parser(data, start + offset + 16 + segCount * 6);
+        var glyphIndexOffset = start + offset + 16 + segCount * 8;
+        for (var i = 0; i < segCount - 1; i += 1) {
+          var glyphIndex = void 0;
+          var endCount = endCountParser.parseUShort();
+          var startCount = startCountParser.parseUShort();
+          var idDelta = idDeltaParser.parseShort();
+          var idRangeOffset = idRangeOffsetParser.parseUShort();
+          for (var c = startCount; c <= endCount; c += 1) {
+            if (idRangeOffset !== 0) {
+              glyphIndexOffset = idRangeOffsetParser.offset + idRangeOffsetParser.relativeOffset - 2;
+              glyphIndexOffset += idRangeOffset;
+              glyphIndexOffset += (c - startCount) * 2;
+              glyphIndex = parse2.getUShort(data, glyphIndexOffset);
+              if (glyphIndex !== 0) {
+                glyphIndex = glyphIndex + idDelta & 65535;
+              }
+            } else {
+              glyphIndex = c + idDelta & 65535;
+            }
+            cmap2.glyphIndexMap[c] = glyphIndex;
+          }
+        }
+      }
+      function parseCmapTable(data, start) {
+        var cmap2 = {};
+        cmap2.version = parse2.getUShort(data, start);
+        check.argument(cmap2.version === 0, "cmap table version should be 0.");
+        cmap2.numTables = parse2.getUShort(data, start + 2);
+        var offset = -1;
+        for (var i = cmap2.numTables - 1; i >= 0; i -= 1) {
+          var platformId = parse2.getUShort(data, start + 4 + i * 8);
+          var encodingId = parse2.getUShort(data, start + 4 + i * 8 + 2);
+          if (platformId === 3 && (encodingId === 0 || encodingId === 1 || encodingId === 10) || platformId === 0 && (encodingId === 0 || encodingId === 1 || encodingId === 2 || encodingId === 3 || encodingId === 4)) {
+            offset = parse2.getULong(data, start + 4 + i * 8 + 4);
+            break;
+          }
+        }
+        if (offset === -1) {
+          throw new Error("No valid cmap sub-tables found.");
+        }
+        var p = new parse2.Parser(data, start + offset);
+        cmap2.format = p.parseUShort();
+        if (cmap2.format === 12) {
+          parseCmapTableFormat12(cmap2, p);
+        } else if (cmap2.format === 4) {
+          parseCmapTableFormat4(cmap2, p, data, start, offset);
+        } else {
+          throw new Error("Only format 4 and 12 cmap tables are supported (found format " + cmap2.format + ").");
+        }
+        return cmap2;
+      }
+      function addSegment(t, code, glyphIndex) {
+        t.segments.push({
+          end: code,
+          start: code,
+          delta: -(code - glyphIndex),
+          offset: 0,
+          glyphIndex
+        });
+      }
+      function addTerminatorSegment(t) {
+        t.segments.push({
+          end: 65535,
+          start: 65535,
+          delta: 1,
+          offset: 0
+        });
+      }
+      function makeCmapTable(glyphs) {
+        var isPlan0Only = true;
+        var i;
+        for (i = glyphs.length - 1; i > 0; i -= 1) {
+          var g = glyphs.get(i);
+          if (g.unicode > 65535) {
+            console.log("Adding CMAP format 12 (needed!)");
+            isPlan0Only = false;
+            break;
+          }
+        }
+        var cmapTable = [
+          { name: "version", type: "USHORT", value: 0 },
+          { name: "numTables", type: "USHORT", value: isPlan0Only ? 1 : 2 },
+          // CMAP 4 header
+          { name: "platformID", type: "USHORT", value: 3 },
+          { name: "encodingID", type: "USHORT", value: 1 },
+          { name: "offset", type: "ULONG", value: isPlan0Only ? 12 : 12 + 8 }
+        ];
+        if (!isPlan0Only) {
+          cmapTable = cmapTable.concat([
+            // CMAP 12 header
+            { name: "cmap12PlatformID", type: "USHORT", value: 3 },
+            // We encode only for PlatformID = 3 (Windows) because it is supported everywhere
+            { name: "cmap12EncodingID", type: "USHORT", value: 10 },
+            { name: "cmap12Offset", type: "ULONG", value: 0 }
+          ]);
+        }
+        cmapTable = cmapTable.concat([
+          // CMAP 4 Subtable
+          { name: "format", type: "USHORT", value: 4 },
+          { name: "cmap4Length", type: "USHORT", value: 0 },
+          { name: "language", type: "USHORT", value: 0 },
+          { name: "segCountX2", type: "USHORT", value: 0 },
+          { name: "searchRange", type: "USHORT", value: 0 },
+          { name: "entrySelector", type: "USHORT", value: 0 },
+          { name: "rangeShift", type: "USHORT", value: 0 }
+        ]);
+        var t = new table.Table("cmap", cmapTable);
+        t.segments = [];
+        for (i = 0; i < glyphs.length; i += 1) {
+          var glyph = glyphs.get(i);
+          for (var j = 0; j < glyph.unicodes.length; j += 1) {
+            addSegment(t, glyph.unicodes[j], i);
+          }
+          t.segments = t.segments.sort(function(a, b) {
+            return a.start - b.start;
+          });
+        }
+        addTerminatorSegment(t);
+        var segCount = t.segments.length;
+        var segCountToRemove = 0;
+        var endCounts = [];
+        var startCounts = [];
+        var idDeltas = [];
+        var idRangeOffsets = [];
+        var glyphIds = [];
+        var cmap12Groups = [];
+        for (i = 0; i < segCount; i += 1) {
+          var segment = t.segments[i];
+          if (segment.end <= 65535 && segment.start <= 65535) {
+            endCounts = endCounts.concat({ name: "end_" + i, type: "USHORT", value: segment.end });
+            startCounts = startCounts.concat({ name: "start_" + i, type: "USHORT", value: segment.start });
+            idDeltas = idDeltas.concat({ name: "idDelta_" + i, type: "SHORT", value: segment.delta });
+            idRangeOffsets = idRangeOffsets.concat({ name: "idRangeOffset_" + i, type: "USHORT", value: segment.offset });
+            if (segment.glyphId !== void 0) {
+              glyphIds = glyphIds.concat({ name: "glyph_" + i, type: "USHORT", value: segment.glyphId });
+            }
+          } else {
+            segCountToRemove += 1;
+          }
+          if (!isPlan0Only && segment.glyphIndex !== void 0) {
+            cmap12Groups = cmap12Groups.concat({ name: "cmap12Start_" + i, type: "ULONG", value: segment.start });
+            cmap12Groups = cmap12Groups.concat({ name: "cmap12End_" + i, type: "ULONG", value: segment.end });
+            cmap12Groups = cmap12Groups.concat({ name: "cmap12Glyph_" + i, type: "ULONG", value: segment.glyphIndex });
+          }
+        }
+        t.segCountX2 = (segCount - segCountToRemove) * 2;
+        t.searchRange = Math.pow(2, Math.floor(Math.log(segCount - segCountToRemove) / Math.log(2))) * 2;
+        t.entrySelector = Math.log(t.searchRange / 2) / Math.log(2);
+        t.rangeShift = t.segCountX2 - t.searchRange;
+        t.fields = t.fields.concat(endCounts);
+        t.fields.push({ name: "reservedPad", type: "USHORT", value: 0 });
+        t.fields = t.fields.concat(startCounts);
+        t.fields = t.fields.concat(idDeltas);
+        t.fields = t.fields.concat(idRangeOffsets);
+        t.fields = t.fields.concat(glyphIds);
+        t.cmap4Length = 14 + // Subtable header
+        endCounts.length * 2 + 2 + // reservedPad
+        startCounts.length * 2 + idDeltas.length * 2 + idRangeOffsets.length * 2 + glyphIds.length * 2;
+        if (!isPlan0Only) {
+          var cmap12Length = 16 + // Subtable header
+          cmap12Groups.length * 4;
+          t.cmap12Offset = 12 + 2 * 2 + 4 + t.cmap4Length;
+          t.fields = t.fields.concat([
+            { name: "cmap12Format", type: "USHORT", value: 12 },
+            { name: "cmap12Reserved", type: "USHORT", value: 0 },
+            { name: "cmap12Length", type: "ULONG", value: cmap12Length },
+            { name: "cmap12Language", type: "ULONG", value: 0 },
+            { name: "cmap12nGroups", type: "ULONG", value: cmap12Groups.length / 3 }
+          ]);
+          t.fields = t.fields.concat(cmap12Groups);
+        }
+        return t;
+      }
+      var cmap = { parse: parseCmapTable, make: makeCmapTable };
+      var cffStandardStrings = [
+        ".notdef",
+        "space",
+        "exclam",
+        "quotedbl",
+        "numbersign",
+        "dollar",
+        "percent",
+        "ampersand",
+        "quoteright",
+        "parenleft",
+        "parenright",
+        "asterisk",
+        "plus",
+        "comma",
+        "hyphen",
+        "period",
+        "slash",
+        "zero",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "colon",
+        "semicolon",
+        "less",
+        "equal",
+        "greater",
+        "question",
+        "at",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T",
+        "U",
+        "V",
+        "W",
+        "X",
+        "Y",
+        "Z",
+        "bracketleft",
+        "backslash",
+        "bracketright",
+        "asciicircum",
+        "underscore",
+        "quoteleft",
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "g",
+        "h",
+        "i",
+        "j",
+        "k",
+        "l",
+        "m",
+        "n",
+        "o",
+        "p",
+        "q",
+        "r",
+        "s",
+        "t",
+        "u",
+        "v",
+        "w",
+        "x",
+        "y",
+        "z",
+        "braceleft",
+        "bar",
+        "braceright",
+        "asciitilde",
+        "exclamdown",
+        "cent",
+        "sterling",
+        "fraction",
+        "yen",
+        "florin",
+        "section",
+        "currency",
+        "quotesingle",
+        "quotedblleft",
+        "guillemotleft",
+        "guilsinglleft",
+        "guilsinglright",
+        "fi",
+        "fl",
+        "endash",
+        "dagger",
+        "daggerdbl",
+        "periodcentered",
+        "paragraph",
+        "bullet",
+        "quotesinglbase",
+        "quotedblbase",
+        "quotedblright",
+        "guillemotright",
+        "ellipsis",
+        "perthousand",
+        "questiondown",
+        "grave",
+        "acute",
+        "circumflex",
+        "tilde",
+        "macron",
+        "breve",
+        "dotaccent",
+        "dieresis",
+        "ring",
+        "cedilla",
+        "hungarumlaut",
+        "ogonek",
+        "caron",
+        "emdash",
+        "AE",
+        "ordfeminine",
+        "Lslash",
+        "Oslash",
+        "OE",
+        "ordmasculine",
+        "ae",
+        "dotlessi",
+        "lslash",
+        "oslash",
+        "oe",
+        "germandbls",
+        "onesuperior",
+        "logicalnot",
+        "mu",
+        "trademark",
+        "Eth",
+        "onehalf",
+        "plusminus",
+        "Thorn",
+        "onequarter",
+        "divide",
+        "brokenbar",
+        "degree",
+        "thorn",
+        "threequarters",
+        "twosuperior",
+        "registered",
+        "minus",
+        "eth",
+        "multiply",
+        "threesuperior",
+        "copyright",
+        "Aacute",
+        "Acircumflex",
+        "Adieresis",
+        "Agrave",
+        "Aring",
+        "Atilde",
+        "Ccedilla",
+        "Eacute",
+        "Ecircumflex",
+        "Edieresis",
+        "Egrave",
+        "Iacute",
+        "Icircumflex",
+        "Idieresis",
+        "Igrave",
+        "Ntilde",
+        "Oacute",
+        "Ocircumflex",
+        "Odieresis",
+        "Ograve",
+        "Otilde",
+        "Scaron",
+        "Uacute",
+        "Ucircumflex",
+        "Udieresis",
+        "Ugrave",
+        "Yacute",
+        "Ydieresis",
+        "Zcaron",
+        "aacute",
+        "acircumflex",
+        "adieresis",
+        "agrave",
+        "aring",
+        "atilde",
+        "ccedilla",
+        "eacute",
+        "ecircumflex",
+        "edieresis",
+        "egrave",
+        "iacute",
+        "icircumflex",
+        "idieresis",
+        "igrave",
+        "ntilde",
+        "oacute",
+        "ocircumflex",
+        "odieresis",
+        "ograve",
+        "otilde",
+        "scaron",
+        "uacute",
+        "ucircumflex",
+        "udieresis",
+        "ugrave",
+        "yacute",
+        "ydieresis",
+        "zcaron",
+        "exclamsmall",
+        "Hungarumlautsmall",
+        "dollaroldstyle",
+        "dollarsuperior",
+        "ampersandsmall",
+        "Acutesmall",
+        "parenleftsuperior",
+        "parenrightsuperior",
+        "266 ff",
+        "onedotenleader",
+        "zerooldstyle",
+        "oneoldstyle",
+        "twooldstyle",
+        "threeoldstyle",
+        "fouroldstyle",
+        "fiveoldstyle",
+        "sixoldstyle",
+        "sevenoldstyle",
+        "eightoldstyle",
+        "nineoldstyle",
+        "commasuperior",
+        "threequartersemdash",
+        "periodsuperior",
+        "questionsmall",
+        "asuperior",
+        "bsuperior",
+        "centsuperior",
+        "dsuperior",
+        "esuperior",
+        "isuperior",
+        "lsuperior",
+        "msuperior",
+        "nsuperior",
+        "osuperior",
+        "rsuperior",
+        "ssuperior",
+        "tsuperior",
+        "ff",
+        "ffi",
+        "ffl",
+        "parenleftinferior",
+        "parenrightinferior",
+        "Circumflexsmall",
+        "hyphensuperior",
+        "Gravesmall",
+        "Asmall",
+        "Bsmall",
+        "Csmall",
+        "Dsmall",
+        "Esmall",
+        "Fsmall",
+        "Gsmall",
+        "Hsmall",
+        "Ismall",
+        "Jsmall",
+        "Ksmall",
+        "Lsmall",
+        "Msmall",
+        "Nsmall",
+        "Osmall",
+        "Psmall",
+        "Qsmall",
+        "Rsmall",
+        "Ssmall",
+        "Tsmall",
+        "Usmall",
+        "Vsmall",
+        "Wsmall",
+        "Xsmall",
+        "Ysmall",
+        "Zsmall",
+        "colonmonetary",
+        "onefitted",
+        "rupiah",
+        "Tildesmall",
+        "exclamdownsmall",
+        "centoldstyle",
+        "Lslashsmall",
+        "Scaronsmall",
+        "Zcaronsmall",
+        "Dieresissmall",
+        "Brevesmall",
+        "Caronsmall",
+        "Dotaccentsmall",
+        "Macronsmall",
+        "figuredash",
+        "hypheninferior",
+        "Ogoneksmall",
+        "Ringsmall",
+        "Cedillasmall",
+        "questiondownsmall",
+        "oneeighth",
+        "threeeighths",
+        "fiveeighths",
+        "seveneighths",
+        "onethird",
+        "twothirds",
+        "zerosuperior",
+        "foursuperior",
+        "fivesuperior",
+        "sixsuperior",
+        "sevensuperior",
+        "eightsuperior",
+        "ninesuperior",
+        "zeroinferior",
+        "oneinferior",
+        "twoinferior",
+        "threeinferior",
+        "fourinferior",
+        "fiveinferior",
+        "sixinferior",
+        "seveninferior",
+        "eightinferior",
+        "nineinferior",
+        "centinferior",
+        "dollarinferior",
+        "periodinferior",
+        "commainferior",
+        "Agravesmall",
+        "Aacutesmall",
+        "Acircumflexsmall",
+        "Atildesmall",
+        "Adieresissmall",
+        "Aringsmall",
+        "AEsmall",
+        "Ccedillasmall",
+        "Egravesmall",
+        "Eacutesmall",
+        "Ecircumflexsmall",
+        "Edieresissmall",
+        "Igravesmall",
+        "Iacutesmall",
+        "Icircumflexsmall",
+        "Idieresissmall",
+        "Ethsmall",
+        "Ntildesmall",
+        "Ogravesmall",
+        "Oacutesmall",
+        "Ocircumflexsmall",
+        "Otildesmall",
+        "Odieresissmall",
+        "OEsmall",
+        "Oslashsmall",
+        "Ugravesmall",
+        "Uacutesmall",
+        "Ucircumflexsmall",
+        "Udieresissmall",
+        "Yacutesmall",
+        "Thornsmall",
+        "Ydieresissmall",
+        "001.000",
+        "001.001",
+        "001.002",
+        "001.003",
+        "Black",
+        "Bold",
+        "Book",
+        "Light",
+        "Medium",
+        "Regular",
+        "Roman",
+        "Semibold"
+      ];
+      var cffStandardEncoding = [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "space",
+        "exclam",
+        "quotedbl",
+        "numbersign",
+        "dollar",
+        "percent",
+        "ampersand",
+        "quoteright",
+        "parenleft",
+        "parenright",
+        "asterisk",
+        "plus",
+        "comma",
+        "hyphen",
+        "period",
+        "slash",
+        "zero",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "colon",
+        "semicolon",
+        "less",
+        "equal",
+        "greater",
+        "question",
+        "at",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T",
+        "U",
+        "V",
+        "W",
+        "X",
+        "Y",
+        "Z",
+        "bracketleft",
+        "backslash",
+        "bracketright",
+        "asciicircum",
+        "underscore",
+        "quoteleft",
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "g",
+        "h",
+        "i",
+        "j",
+        "k",
+        "l",
+        "m",
+        "n",
+        "o",
+        "p",
+        "q",
+        "r",
+        "s",
+        "t",
+        "u",
+        "v",
+        "w",
+        "x",
+        "y",
+        "z",
+        "braceleft",
+        "bar",
+        "braceright",
+        "asciitilde",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "exclamdown",
+        "cent",
+        "sterling",
+        "fraction",
+        "yen",
+        "florin",
+        "section",
+        "currency",
+        "quotesingle",
+        "quotedblleft",
+        "guillemotleft",
+        "guilsinglleft",
+        "guilsinglright",
+        "fi",
+        "fl",
+        "",
+        "endash",
+        "dagger",
+        "daggerdbl",
+        "periodcentered",
+        "",
+        "paragraph",
+        "bullet",
+        "quotesinglbase",
+        "quotedblbase",
+        "quotedblright",
+        "guillemotright",
+        "ellipsis",
+        "perthousand",
+        "",
+        "questiondown",
+        "",
+        "grave",
+        "acute",
+        "circumflex",
+        "tilde",
+        "macron",
+        "breve",
+        "dotaccent",
+        "dieresis",
+        "",
+        "ring",
+        "cedilla",
+        "",
+        "hungarumlaut",
+        "ogonek",
+        "caron",
+        "emdash",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "AE",
+        "",
+        "ordfeminine",
+        "",
+        "",
+        "",
+        "",
+        "Lslash",
+        "Oslash",
+        "OE",
+        "ordmasculine",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "ae",
+        "",
+        "",
+        "",
+        "dotlessi",
+        "",
+        "",
+        "lslash",
+        "oslash",
+        "oe",
+        "germandbls"
+      ];
+      var cffExpertEncoding = [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "space",
+        "exclamsmall",
+        "Hungarumlautsmall",
+        "",
+        "dollaroldstyle",
+        "dollarsuperior",
+        "ampersandsmall",
+        "Acutesmall",
+        "parenleftsuperior",
+        "parenrightsuperior",
+        "twodotenleader",
+        "onedotenleader",
+        "comma",
+        "hyphen",
+        "period",
+        "fraction",
+        "zerooldstyle",
+        "oneoldstyle",
+        "twooldstyle",
+        "threeoldstyle",
+        "fouroldstyle",
+        "fiveoldstyle",
+        "sixoldstyle",
+        "sevenoldstyle",
+        "eightoldstyle",
+        "nineoldstyle",
+        "colon",
+        "semicolon",
+        "commasuperior",
+        "threequartersemdash",
+        "periodsuperior",
+        "questionsmall",
+        "",
+        "asuperior",
+        "bsuperior",
+        "centsuperior",
+        "dsuperior",
+        "esuperior",
+        "",
+        "",
+        "isuperior",
+        "",
+        "",
+        "lsuperior",
+        "msuperior",
+        "nsuperior",
+        "osuperior",
+        "",
+        "",
+        "rsuperior",
+        "ssuperior",
+        "tsuperior",
+        "",
+        "ff",
+        "fi",
+        "fl",
+        "ffi",
+        "ffl",
+        "parenleftinferior",
+        "",
+        "parenrightinferior",
+        "Circumflexsmall",
+        "hyphensuperior",
+        "Gravesmall",
+        "Asmall",
+        "Bsmall",
+        "Csmall",
+        "Dsmall",
+        "Esmall",
+        "Fsmall",
+        "Gsmall",
+        "Hsmall",
+        "Ismall",
+        "Jsmall",
+        "Ksmall",
+        "Lsmall",
+        "Msmall",
+        "Nsmall",
+        "Osmall",
+        "Psmall",
+        "Qsmall",
+        "Rsmall",
+        "Ssmall",
+        "Tsmall",
+        "Usmall",
+        "Vsmall",
+        "Wsmall",
+        "Xsmall",
+        "Ysmall",
+        "Zsmall",
+        "colonmonetary",
+        "onefitted",
+        "rupiah",
+        "Tildesmall",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "exclamdownsmall",
+        "centoldstyle",
+        "Lslashsmall",
+        "",
+        "",
+        "Scaronsmall",
+        "Zcaronsmall",
+        "Dieresissmall",
+        "Brevesmall",
+        "Caronsmall",
+        "",
+        "Dotaccentsmall",
+        "",
+        "",
+        "Macronsmall",
+        "",
+        "",
+        "figuredash",
+        "hypheninferior",
+        "",
+        "",
+        "Ogoneksmall",
+        "Ringsmall",
+        "Cedillasmall",
+        "",
+        "",
+        "",
+        "onequarter",
+        "onehalf",
+        "threequarters",
+        "questiondownsmall",
+        "oneeighth",
+        "threeeighths",
+        "fiveeighths",
+        "seveneighths",
+        "onethird",
+        "twothirds",
+        "",
+        "",
+        "zerosuperior",
+        "onesuperior",
+        "twosuperior",
+        "threesuperior",
+        "foursuperior",
+        "fivesuperior",
+        "sixsuperior",
+        "sevensuperior",
+        "eightsuperior",
+        "ninesuperior",
+        "zeroinferior",
+        "oneinferior",
+        "twoinferior",
+        "threeinferior",
+        "fourinferior",
+        "fiveinferior",
+        "sixinferior",
+        "seveninferior",
+        "eightinferior",
+        "nineinferior",
+        "centinferior",
+        "dollarinferior",
+        "periodinferior",
+        "commainferior",
+        "Agravesmall",
+        "Aacutesmall",
+        "Acircumflexsmall",
+        "Atildesmall",
+        "Adieresissmall",
+        "Aringsmall",
+        "AEsmall",
+        "Ccedillasmall",
+        "Egravesmall",
+        "Eacutesmall",
+        "Ecircumflexsmall",
+        "Edieresissmall",
+        "Igravesmall",
+        "Iacutesmall",
+        "Icircumflexsmall",
+        "Idieresissmall",
+        "Ethsmall",
+        "Ntildesmall",
+        "Ogravesmall",
+        "Oacutesmall",
+        "Ocircumflexsmall",
+        "Otildesmall",
+        "Odieresissmall",
+        "OEsmall",
+        "Oslashsmall",
+        "Ugravesmall",
+        "Uacutesmall",
+        "Ucircumflexsmall",
+        "Udieresissmall",
+        "Yacutesmall",
+        "Thornsmall",
+        "Ydieresissmall"
+      ];
+      var standardNames = [
+        ".notdef",
+        ".null",
+        "nonmarkingreturn",
+        "space",
+        "exclam",
+        "quotedbl",
+        "numbersign",
+        "dollar",
+        "percent",
+        "ampersand",
+        "quotesingle",
+        "parenleft",
+        "parenright",
+        "asterisk",
+        "plus",
+        "comma",
+        "hyphen",
+        "period",
+        "slash",
+        "zero",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "colon",
+        "semicolon",
+        "less",
+        "equal",
+        "greater",
+        "question",
+        "at",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T",
+        "U",
+        "V",
+        "W",
+        "X",
+        "Y",
+        "Z",
+        "bracketleft",
+        "backslash",
+        "bracketright",
+        "asciicircum",
+        "underscore",
+        "grave",
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "g",
+        "h",
+        "i",
+        "j",
+        "k",
+        "l",
+        "m",
+        "n",
+        "o",
+        "p",
+        "q",
+        "r",
+        "s",
+        "t",
+        "u",
+        "v",
+        "w",
+        "x",
+        "y",
+        "z",
+        "braceleft",
+        "bar",
+        "braceright",
+        "asciitilde",
+        "Adieresis",
+        "Aring",
+        "Ccedilla",
+        "Eacute",
+        "Ntilde",
+        "Odieresis",
+        "Udieresis",
+        "aacute",
+        "agrave",
+        "acircumflex",
+        "adieresis",
+        "atilde",
+        "aring",
+        "ccedilla",
+        "eacute",
+        "egrave",
+        "ecircumflex",
+        "edieresis",
+        "iacute",
+        "igrave",
+        "icircumflex",
+        "idieresis",
+        "ntilde",
+        "oacute",
+        "ograve",
+        "ocircumflex",
+        "odieresis",
+        "otilde",
+        "uacute",
+        "ugrave",
+        "ucircumflex",
+        "udieresis",
+        "dagger",
+        "degree",
+        "cent",
+        "sterling",
+        "section",
+        "bullet",
+        "paragraph",
+        "germandbls",
+        "registered",
+        "copyright",
+        "trademark",
+        "acute",
+        "dieresis",
+        "notequal",
+        "AE",
+        "Oslash",
+        "infinity",
+        "plusminus",
+        "lessequal",
+        "greaterequal",
+        "yen",
+        "mu",
+        "partialdiff",
+        "summation",
+        "product",
+        "pi",
+        "integral",
+        "ordfeminine",
+        "ordmasculine",
+        "Omega",
+        "ae",
+        "oslash",
+        "questiondown",
+        "exclamdown",
+        "logicalnot",
+        "radical",
+        "florin",
+        "approxequal",
+        "Delta",
+        "guillemotleft",
+        "guillemotright",
+        "ellipsis",
+        "nonbreakingspace",
+        "Agrave",
+        "Atilde",
+        "Otilde",
+        "OE",
+        "oe",
+        "endash",
+        "emdash",
+        "quotedblleft",
+        "quotedblright",
+        "quoteleft",
+        "quoteright",
+        "divide",
+        "lozenge",
+        "ydieresis",
+        "Ydieresis",
+        "fraction",
+        "currency",
+        "guilsinglleft",
+        "guilsinglright",
+        "fi",
+        "fl",
+        "daggerdbl",
+        "periodcentered",
+        "quotesinglbase",
+        "quotedblbase",
+        "perthousand",
+        "Acircumflex",
+        "Ecircumflex",
+        "Aacute",
+        "Edieresis",
+        "Egrave",
+        "Iacute",
+        "Icircumflex",
+        "Idieresis",
+        "Igrave",
+        "Oacute",
+        "Ocircumflex",
+        "apple",
+        "Ograve",
+        "Uacute",
+        "Ucircumflex",
+        "Ugrave",
+        "dotlessi",
+        "circumflex",
+        "tilde",
+        "macron",
+        "breve",
+        "dotaccent",
+        "ring",
+        "cedilla",
+        "hungarumlaut",
+        "ogonek",
+        "caron",
+        "Lslash",
+        "lslash",
+        "Scaron",
+        "scaron",
+        "Zcaron",
+        "zcaron",
+        "brokenbar",
+        "Eth",
+        "eth",
+        "Yacute",
+        "yacute",
+        "Thorn",
+        "thorn",
+        "minus",
+        "multiply",
+        "onesuperior",
+        "twosuperior",
+        "threesuperior",
+        "onehalf",
+        "onequarter",
+        "threequarters",
+        "franc",
+        "Gbreve",
+        "gbreve",
+        "Idotaccent",
+        "Scedilla",
+        "scedilla",
+        "Cacute",
+        "cacute",
+        "Ccaron",
+        "ccaron",
+        "dcroat"
+      ];
+      function DefaultEncoding(font) {
+        this.font = font;
+      }
+      DefaultEncoding.prototype.charToGlyphIndex = function(c) {
+        var code = c.codePointAt(0);
+        var glyphs = this.font.glyphs;
+        if (glyphs) {
+          for (var i = 0; i < glyphs.length; i += 1) {
+            var glyph = glyphs.get(i);
+            for (var j = 0; j < glyph.unicodes.length; j += 1) {
+              if (glyph.unicodes[j] === code) {
+                return i;
+              }
+            }
+          }
+        }
+        return null;
+      };
+      function CmapEncoding(cmap2) {
+        this.cmap = cmap2;
+      }
+      CmapEncoding.prototype.charToGlyphIndex = function(c) {
+        return this.cmap.glyphIndexMap[c.codePointAt(0)] || 0;
+      };
+      function CffEncoding(encoding, charset) {
+        this.encoding = encoding;
+        this.charset = charset;
+      }
+      CffEncoding.prototype.charToGlyphIndex = function(s) {
+        var code = s.codePointAt(0);
+        var charName = this.encoding[code];
+        return this.charset.indexOf(charName);
+      };
+      function GlyphNames(post2) {
+        switch (post2.version) {
+          case 1:
+            this.names = standardNames.slice();
+            break;
+          case 2:
+            this.names = new Array(post2.numberOfGlyphs);
+            for (var i = 0; i < post2.numberOfGlyphs; i++) {
+              if (post2.glyphNameIndex[i] < standardNames.length) {
+                this.names[i] = standardNames[post2.glyphNameIndex[i]];
+              } else {
+                this.names[i] = post2.names[post2.glyphNameIndex[i] - standardNames.length];
+              }
+            }
+            break;
+          case 2.5:
+            this.names = new Array(post2.numberOfGlyphs);
+            for (var i$1 = 0; i$1 < post2.numberOfGlyphs; i$1++) {
+              this.names[i$1] = standardNames[i$1 + post2.glyphNameIndex[i$1]];
+            }
+            break;
+          case 3:
+            this.names = [];
+            break;
+          default:
+            this.names = [];
+            break;
+        }
+      }
+      GlyphNames.prototype.nameToGlyphIndex = function(name) {
+        return this.names.indexOf(name);
+      };
+      GlyphNames.prototype.glyphIndexToName = function(gid) {
+        return this.names[gid];
+      };
+      function addGlyphNamesAll(font) {
+        var glyph;
+        var glyphIndexMap = font.tables.cmap.glyphIndexMap;
+        var charCodes = Object.keys(glyphIndexMap);
+        for (var i = 0; i < charCodes.length; i += 1) {
+          var c = charCodes[i];
+          var glyphIndex = glyphIndexMap[c];
+          glyph = font.glyphs.get(glyphIndex);
+          glyph.addUnicode(parseInt(c));
+        }
+        for (var i$1 = 0; i$1 < font.glyphs.length; i$1 += 1) {
+          glyph = font.glyphs.get(i$1);
+          if (font.cffEncoding) {
+            if (font.isCIDFont) {
+              glyph.name = "gid" + i$1;
+            } else {
+              glyph.name = font.cffEncoding.charset[i$1];
+            }
+          } else if (font.glyphNames.names) {
+            glyph.name = font.glyphNames.glyphIndexToName(i$1);
+          }
+        }
+      }
+      function addGlyphNamesToUnicodeMap(font) {
+        font._IndexToUnicodeMap = {};
+        var glyphIndexMap = font.tables.cmap.glyphIndexMap;
+        var charCodes = Object.keys(glyphIndexMap);
+        for (var i = 0; i < charCodes.length; i += 1) {
+          var c = charCodes[i];
+          var glyphIndex = glyphIndexMap[c];
+          if (font._IndexToUnicodeMap[glyphIndex] === void 0) {
+            font._IndexToUnicodeMap[glyphIndex] = {
+              unicodes: [parseInt(c)]
+            };
+          } else {
+            font._IndexToUnicodeMap[glyphIndex].unicodes.push(parseInt(c));
+          }
+        }
+      }
+      function addGlyphNames(font, opt) {
+        if (opt.lowMemory) {
+          addGlyphNamesToUnicodeMap(font);
+        } else {
+          addGlyphNamesAll(font);
+        }
+      }
+      function line(ctx, x1, y1, x2, y2) {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+      var draw = { line };
+      function getPathDefinition(glyph, path) {
+        var _path = path || new Path();
+        return {
+          configurable: true,
+          get: function() {
+            if (typeof _path === "function") {
+              _path = _path();
+            }
+            return _path;
+          },
+          set: function(p) {
+            _path = p;
+          }
+        };
+      }
+      function Glyph(options) {
+        this.bindConstructorValues(options);
+      }
+      Glyph.prototype.bindConstructorValues = function(options) {
+        this.index = options.index || 0;
+        this.name = options.name || null;
+        this.unicode = options.unicode || void 0;
+        this.unicodes = options.unicodes || options.unicode !== void 0 ? [options.unicode] : [];
+        if ("xMin" in options) {
+          this.xMin = options.xMin;
+        }
+        if ("yMin" in options) {
+          this.yMin = options.yMin;
+        }
+        if ("xMax" in options) {
+          this.xMax = options.xMax;
+        }
+        if ("yMax" in options) {
+          this.yMax = options.yMax;
+        }
+        if ("advanceWidth" in options) {
+          this.advanceWidth = options.advanceWidth;
+        }
+        Object.defineProperty(this, "path", getPathDefinition(this, options.path));
+      };
+      Glyph.prototype.addUnicode = function(unicode) {
+        if (this.unicodes.length === 0) {
+          this.unicode = unicode;
+        }
+        this.unicodes.push(unicode);
+      };
+      Glyph.prototype.getBoundingBox = function() {
+        return this.path.getBoundingBox();
+      };
+      Glyph.prototype.getPath = function(x, y, fontSize, options, font) {
+        x = x !== void 0 ? x : 0;
+        y = y !== void 0 ? y : 0;
+        fontSize = fontSize !== void 0 ? fontSize : 72;
+        var commands;
+        var hPoints;
+        if (!options) {
+          options = {};
+        }
+        var xScale = options.xScale;
+        var yScale = options.yScale;
+        if (options.hinting && font && font.hinting) {
+          hPoints = this.path && font.hinting.exec(this, fontSize);
+        }
+        if (hPoints) {
+          commands = font.hinting.getCommands(hPoints);
+          x = Math.round(x);
+          y = Math.round(y);
+          xScale = yScale = 1;
+        } else {
+          commands = this.path.commands;
+          var scale = 1 / (this.path.unitsPerEm || 1e3) * fontSize;
+          if (xScale === void 0) {
+            xScale = scale;
+          }
+          if (yScale === void 0) {
+            yScale = scale;
+          }
+        }
+        var p = new Path();
+        for (var i = 0; i < commands.length; i += 1) {
+          var cmd = commands[i];
+          if (cmd.type === "M") {
+            p.moveTo(x + cmd.x * xScale, y + -cmd.y * yScale);
+          } else if (cmd.type === "L") {
+            p.lineTo(x + cmd.x * xScale, y + -cmd.y * yScale);
+          } else if (cmd.type === "Q") {
+            p.quadraticCurveTo(
+              x + cmd.x1 * xScale,
+              y + -cmd.y1 * yScale,
+              x + cmd.x * xScale,
+              y + -cmd.y * yScale
+            );
+          } else if (cmd.type === "C") {
+            p.curveTo(
+              x + cmd.x1 * xScale,
+              y + -cmd.y1 * yScale,
+              x + cmd.x2 * xScale,
+              y + -cmd.y2 * yScale,
+              x + cmd.x * xScale,
+              y + -cmd.y * yScale
+            );
+          } else if (cmd.type === "Z") {
+            p.closePath();
+          }
+        }
+        return p;
+      };
+      Glyph.prototype.getContours = function() {
+        if (this.points === void 0) {
+          return [];
+        }
+        var contours = [];
+        var currentContour = [];
+        for (var i = 0; i < this.points.length; i += 1) {
+          var pt = this.points[i];
+          currentContour.push(pt);
+          if (pt.lastPointOfContour) {
+            contours.push(currentContour);
+            currentContour = [];
+          }
+        }
+        check.argument(currentContour.length === 0, "There are still points left in the current contour.");
+        return contours;
+      };
+      Glyph.prototype.getMetrics = function() {
+        var commands = this.path.commands;
+        var xCoords = [];
+        var yCoords = [];
+        for (var i = 0; i < commands.length; i += 1) {
+          var cmd = commands[i];
+          if (cmd.type !== "Z") {
+            xCoords.push(cmd.x);
+            yCoords.push(cmd.y);
+          }
+          if (cmd.type === "Q" || cmd.type === "C") {
+            xCoords.push(cmd.x1);
+            yCoords.push(cmd.y1);
+          }
+          if (cmd.type === "C") {
+            xCoords.push(cmd.x2);
+            yCoords.push(cmd.y2);
+          }
+        }
+        var metrics = {
+          xMin: Math.min.apply(null, xCoords),
+          yMin: Math.min.apply(null, yCoords),
+          xMax: Math.max.apply(null, xCoords),
+          yMax: Math.max.apply(null, yCoords),
+          leftSideBearing: this.leftSideBearing
+        };
+        if (!isFinite(metrics.xMin)) {
+          metrics.xMin = 0;
+        }
+        if (!isFinite(metrics.xMax)) {
+          metrics.xMax = this.advanceWidth;
+        }
+        if (!isFinite(metrics.yMin)) {
+          metrics.yMin = 0;
+        }
+        if (!isFinite(metrics.yMax)) {
+          metrics.yMax = 0;
+        }
+        metrics.rightSideBearing = this.advanceWidth - metrics.leftSideBearing - (metrics.xMax - metrics.xMin);
+        return metrics;
+      };
+      Glyph.prototype.draw = function(ctx, x, y, fontSize, options) {
+        this.getPath(x, y, fontSize, options).draw(ctx);
+      };
+      Glyph.prototype.drawPoints = function(ctx, x, y, fontSize) {
+        function drawCircles(l, x2, y2, scale2) {
+          ctx.beginPath();
+          for (var j = 0; j < l.length; j += 1) {
+            ctx.moveTo(x2 + l[j].x * scale2, y2 + l[j].y * scale2);
+            ctx.arc(x2 + l[j].x * scale2, y2 + l[j].y * scale2, 2, 0, Math.PI * 2, false);
+          }
+          ctx.closePath();
+          ctx.fill();
+        }
+        x = x !== void 0 ? x : 0;
+        y = y !== void 0 ? y : 0;
+        fontSize = fontSize !== void 0 ? fontSize : 24;
+        var scale = 1 / this.path.unitsPerEm * fontSize;
+        var blueCircles = [];
+        var redCircles = [];
+        var path = this.path;
+        for (var i = 0; i < path.commands.length; i += 1) {
+          var cmd = path.commands[i];
+          if (cmd.x !== void 0) {
+            blueCircles.push({ x: cmd.x, y: -cmd.y });
+          }
+          if (cmd.x1 !== void 0) {
+            redCircles.push({ x: cmd.x1, y: -cmd.y1 });
+          }
+          if (cmd.x2 !== void 0) {
+            redCircles.push({ x: cmd.x2, y: -cmd.y2 });
+          }
+        }
+        ctx.fillStyle = "blue";
+        drawCircles(blueCircles, x, y, scale);
+        ctx.fillStyle = "red";
+        drawCircles(redCircles, x, y, scale);
+      };
+      Glyph.prototype.drawMetrics = function(ctx, x, y, fontSize) {
+        var scale;
+        x = x !== void 0 ? x : 0;
+        y = y !== void 0 ? y : 0;
+        fontSize = fontSize !== void 0 ? fontSize : 24;
+        scale = 1 / this.path.unitsPerEm * fontSize;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "black";
+        draw.line(ctx, x, -1e4, x, 1e4);
+        draw.line(ctx, -1e4, y, 1e4, y);
+        var xMin = this.xMin || 0;
+        var yMin = this.yMin || 0;
+        var xMax = this.xMax || 0;
+        var yMax = this.yMax || 0;
+        var advanceWidth = this.advanceWidth || 0;
+        ctx.strokeStyle = "blue";
+        draw.line(ctx, x + xMin * scale, -1e4, x + xMin * scale, 1e4);
+        draw.line(ctx, x + xMax * scale, -1e4, x + xMax * scale, 1e4);
+        draw.line(ctx, -1e4, y + -yMin * scale, 1e4, y + -yMin * scale);
+        draw.line(ctx, -1e4, y + -yMax * scale, 1e4, y + -yMax * scale);
+        ctx.strokeStyle = "green";
+        draw.line(ctx, x + advanceWidth * scale, -1e4, x + advanceWidth * scale, 1e4);
+      };
+      function defineDependentProperty(glyph, externalName, internalName) {
+        Object.defineProperty(glyph, externalName, {
+          get: function() {
+            glyph.path;
+            return glyph[internalName];
+          },
+          set: function(newValue) {
+            glyph[internalName] = newValue;
+          },
+          enumerable: true,
+          configurable: true
+        });
+      }
+      function GlyphSet(font, glyphs) {
+        this.font = font;
+        this.glyphs = {};
+        if (Array.isArray(glyphs)) {
+          for (var i = 0; i < glyphs.length; i++) {
+            var glyph = glyphs[i];
+            glyph.path.unitsPerEm = font.unitsPerEm;
+            this.glyphs[i] = glyph;
+          }
+        }
+        this.length = glyphs && glyphs.length || 0;
+      }
+      GlyphSet.prototype.get = function(index) {
+        if (this.glyphs[index] === void 0) {
+          this.font._push(index);
+          if (typeof this.glyphs[index] === "function") {
+            this.glyphs[index] = this.glyphs[index]();
+          }
+          var glyph = this.glyphs[index];
+          var unicodeObj = this.font._IndexToUnicodeMap[index];
+          if (unicodeObj) {
+            for (var j = 0; j < unicodeObj.unicodes.length; j++) {
+              glyph.addUnicode(unicodeObj.unicodes[j]);
+            }
+          }
+          if (this.font.cffEncoding) {
+            if (this.font.isCIDFont) {
+              glyph.name = "gid" + index;
+            } else {
+              glyph.name = this.font.cffEncoding.charset[index];
+            }
+          } else if (this.font.glyphNames.names) {
+            glyph.name = this.font.glyphNames.glyphIndexToName(index);
+          }
+          this.glyphs[index].advanceWidth = this.font._hmtxTableData[index].advanceWidth;
+          this.glyphs[index].leftSideBearing = this.font._hmtxTableData[index].leftSideBearing;
+        } else {
+          if (typeof this.glyphs[index] === "function") {
+            this.glyphs[index] = this.glyphs[index]();
+          }
+        }
+        return this.glyphs[index];
+      };
+      GlyphSet.prototype.push = function(index, loader) {
+        this.glyphs[index] = loader;
+        this.length++;
+      };
+      function glyphLoader(font, index) {
+        return new Glyph({ index, font });
+      }
+      function ttfGlyphLoader(font, index, parseGlyph2, data, position, buildPath2) {
+        return function() {
+          var glyph = new Glyph({ index, font });
+          glyph.path = function() {
+            parseGlyph2(glyph, data, position);
+            var path = buildPath2(font.glyphs, glyph);
+            path.unitsPerEm = font.unitsPerEm;
+            return path;
+          };
+          defineDependentProperty(glyph, "xMin", "_xMin");
+          defineDependentProperty(glyph, "xMax", "_xMax");
+          defineDependentProperty(glyph, "yMin", "_yMin");
+          defineDependentProperty(glyph, "yMax", "_yMax");
+          return glyph;
+        };
+      }
+      function cffGlyphLoader(font, index, parseCFFCharstring2, charstring) {
+        return function() {
+          var glyph = new Glyph({ index, font });
+          glyph.path = function() {
+            var path = parseCFFCharstring2(font, glyph, charstring);
+            path.unitsPerEm = font.unitsPerEm;
+            return path;
+          };
+          return glyph;
+        };
+      }
+      var glyphset = { GlyphSet, glyphLoader, ttfGlyphLoader, cffGlyphLoader };
+      function equals(a, b) {
+        if (a === b) {
+          return true;
+        } else if (Array.isArray(a) && Array.isArray(b)) {
+          if (a.length !== b.length) {
+            return false;
+          }
+          for (var i = 0; i < a.length; i += 1) {
+            if (!equals(a[i], b[i])) {
+              return false;
+            }
+          }
+          return true;
+        } else {
+          return false;
+        }
+      }
+      function calcCFFSubroutineBias(subrs) {
+        var bias;
+        if (subrs.length < 1240) {
+          bias = 107;
+        } else if (subrs.length < 33900) {
+          bias = 1131;
+        } else {
+          bias = 32768;
+        }
+        return bias;
+      }
+      function parseCFFIndex(data, start, conversionFn) {
+        var offsets = [];
+        var objects = [];
+        var count = parse2.getCard16(data, start);
+        var objectOffset;
+        var endOffset;
+        if (count !== 0) {
+          var offsetSize = parse2.getByte(data, start + 2);
+          objectOffset = start + (count + 1) * offsetSize + 2;
+          var pos = start + 3;
+          for (var i = 0; i < count + 1; i += 1) {
+            offsets.push(parse2.getOffset(data, pos, offsetSize));
+            pos += offsetSize;
+          }
+          endOffset = objectOffset + offsets[count];
+        } else {
+          endOffset = start + 2;
+        }
+        for (var i$1 = 0; i$1 < offsets.length - 1; i$1 += 1) {
+          var value = parse2.getBytes(data, objectOffset + offsets[i$1], objectOffset + offsets[i$1 + 1]);
+          if (conversionFn) {
+            value = conversionFn(value);
+          }
+          objects.push(value);
+        }
+        return { objects, startOffset: start, endOffset };
+      }
+      function parseCFFIndexLowMemory(data, start) {
+        var offsets = [];
+        var count = parse2.getCard16(data, start);
+        var objectOffset;
+        var endOffset;
+        if (count !== 0) {
+          var offsetSize = parse2.getByte(data, start + 2);
+          objectOffset = start + (count + 1) * offsetSize + 2;
+          var pos = start + 3;
+          for (var i = 0; i < count + 1; i += 1) {
+            offsets.push(parse2.getOffset(data, pos, offsetSize));
+            pos += offsetSize;
+          }
+          endOffset = objectOffset + offsets[count];
+        } else {
+          endOffset = start + 2;
+        }
+        return { offsets, startOffset: start, endOffset };
+      }
+      function getCffIndexObject(i, offsets, data, start, conversionFn) {
+        var count = parse2.getCard16(data, start);
+        var objectOffset = 0;
+        if (count !== 0) {
+          var offsetSize = parse2.getByte(data, start + 2);
+          objectOffset = start + (count + 1) * offsetSize + 2;
+        }
+        var value = parse2.getBytes(data, objectOffset + offsets[i], objectOffset + offsets[i + 1]);
+        if (conversionFn) {
+          value = conversionFn(value);
+        }
+        return value;
+      }
+      function parseFloatOperand(parser) {
+        var s = "";
+        var eof = 15;
+        var lookup = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "E", "E-", null, "-"];
+        while (true) {
+          var b = parser.parseByte();
+          var n1 = b >> 4;
+          var n2 = b & 15;
+          if (n1 === eof) {
+            break;
+          }
+          s += lookup[n1];
+          if (n2 === eof) {
+            break;
+          }
+          s += lookup[n2];
+        }
+        return parseFloat(s);
+      }
+      function parseOperand(parser, b0) {
+        var b1;
+        var b2;
+        var b3;
+        var b4;
+        if (b0 === 28) {
+          b1 = parser.parseByte();
+          b2 = parser.parseByte();
+          return b1 << 8 | b2;
+        }
+        if (b0 === 29) {
+          b1 = parser.parseByte();
+          b2 = parser.parseByte();
+          b3 = parser.parseByte();
+          b4 = parser.parseByte();
+          return b1 << 24 | b2 << 16 | b3 << 8 | b4;
+        }
+        if (b0 === 30) {
+          return parseFloatOperand(parser);
+        }
+        if (b0 >= 32 && b0 <= 246) {
+          return b0 - 139;
+        }
+        if (b0 >= 247 && b0 <= 250) {
+          b1 = parser.parseByte();
+          return (b0 - 247) * 256 + b1 + 108;
+        }
+        if (b0 >= 251 && b0 <= 254) {
+          b1 = parser.parseByte();
+          return -(b0 - 251) * 256 - b1 - 108;
+        }
+        throw new Error("Invalid b0 " + b0);
+      }
+      function entriesToObject(entries) {
+        var o = {};
+        for (var i = 0; i < entries.length; i += 1) {
+          var key = entries[i][0];
+          var values = entries[i][1];
+          var value = void 0;
+          if (values.length === 1) {
+            value = values[0];
+          } else {
+            value = values;
+          }
+          if (o.hasOwnProperty(key) && !isNaN(o[key])) {
+            throw new Error("Object " + o + " already has key " + key);
+          }
+          o[key] = value;
+        }
+        return o;
+      }
+      function parseCFFDict(data, start, size) {
+        start = start !== void 0 ? start : 0;
+        var parser = new parse2.Parser(data, start);
+        var entries = [];
+        var operands = [];
+        size = size !== void 0 ? size : data.length;
+        while (parser.relativeOffset < size) {
+          var op = parser.parseByte();
+          if (op <= 21) {
+            if (op === 12) {
+              op = 1200 + parser.parseByte();
+            }
+            entries.push([op, operands]);
+            operands = [];
+          } else {
+            operands.push(parseOperand(parser, op));
+          }
+        }
+        return entriesToObject(entries);
+      }
+      function getCFFString(strings, index) {
+        if (index <= 390) {
+          index = cffStandardStrings[index];
+        } else {
+          index = strings[index - 391];
+        }
+        return index;
+      }
+      function interpretDict(dict, meta2, strings) {
+        var newDict = {};
+        var value;
+        for (var i = 0; i < meta2.length; i += 1) {
+          var m = meta2[i];
+          if (Array.isArray(m.type)) {
+            var values = [];
+            values.length = m.type.length;
+            for (var j = 0; j < m.type.length; j++) {
+              value = dict[m.op] !== void 0 ? dict[m.op][j] : void 0;
+              if (value === void 0) {
+                value = m.value !== void 0 && m.value[j] !== void 0 ? m.value[j] : null;
+              }
+              if (m.type[j] === "SID") {
+                value = getCFFString(strings, value);
+              }
+              values[j] = value;
+            }
+            newDict[m.name] = values;
+          } else {
+            value = dict[m.op];
+            if (value === void 0) {
+              value = m.value !== void 0 ? m.value : null;
+            }
+            if (m.type === "SID") {
+              value = getCFFString(strings, value);
+            }
+            newDict[m.name] = value;
+          }
+        }
+        return newDict;
+      }
+      function parseCFFHeader(data, start) {
+        var header = {};
+        header.formatMajor = parse2.getCard8(data, start);
+        header.formatMinor = parse2.getCard8(data, start + 1);
+        header.size = parse2.getCard8(data, start + 2);
+        header.offsetSize = parse2.getCard8(data, start + 3);
+        header.startOffset = start;
+        header.endOffset = start + 4;
+        return header;
+      }
+      var TOP_DICT_META = [
+        { name: "version", op: 0, type: "SID" },
+        { name: "notice", op: 1, type: "SID" },
+        { name: "copyright", op: 1200, type: "SID" },
+        { name: "fullName", op: 2, type: "SID" },
+        { name: "familyName", op: 3, type: "SID" },
+        { name: "weight", op: 4, type: "SID" },
+        { name: "isFixedPitch", op: 1201, type: "number", value: 0 },
+        { name: "italicAngle", op: 1202, type: "number", value: 0 },
+        { name: "underlinePosition", op: 1203, type: "number", value: -100 },
+        { name: "underlineThickness", op: 1204, type: "number", value: 50 },
+        { name: "paintType", op: 1205, type: "number", value: 0 },
+        { name: "charstringType", op: 1206, type: "number", value: 2 },
+        {
+          name: "fontMatrix",
+          op: 1207,
+          type: ["real", "real", "real", "real", "real", "real"],
+          value: [1e-3, 0, 0, 1e-3, 0, 0]
+        },
+        { name: "uniqueId", op: 13, type: "number" },
+        { name: "fontBBox", op: 5, type: ["number", "number", "number", "number"], value: [0, 0, 0, 0] },
+        { name: "strokeWidth", op: 1208, type: "number", value: 0 },
+        { name: "xuid", op: 14, type: [], value: null },
+        { name: "charset", op: 15, type: "offset", value: 0 },
+        { name: "encoding", op: 16, type: "offset", value: 0 },
+        { name: "charStrings", op: 17, type: "offset", value: 0 },
+        { name: "private", op: 18, type: ["number", "offset"], value: [0, 0] },
+        { name: "ros", op: 1230, type: ["SID", "SID", "number"] },
+        { name: "cidFontVersion", op: 1231, type: "number", value: 0 },
+        { name: "cidFontRevision", op: 1232, type: "number", value: 0 },
+        { name: "cidFontType", op: 1233, type: "number", value: 0 },
+        { name: "cidCount", op: 1234, type: "number", value: 8720 },
+        { name: "uidBase", op: 1235, type: "number" },
+        { name: "fdArray", op: 1236, type: "offset" },
+        { name: "fdSelect", op: 1237, type: "offset" },
+        { name: "fontName", op: 1238, type: "SID" }
+      ];
+      var PRIVATE_DICT_META = [
+        { name: "subrs", op: 19, type: "offset", value: 0 },
+        { name: "defaultWidthX", op: 20, type: "number", value: 0 },
+        { name: "nominalWidthX", op: 21, type: "number", value: 0 }
+      ];
+      function parseCFFTopDict(data, strings) {
+        var dict = parseCFFDict(data, 0, data.byteLength);
+        return interpretDict(dict, TOP_DICT_META, strings);
+      }
+      function parseCFFPrivateDict(data, start, size, strings) {
+        var dict = parseCFFDict(data, start, size);
+        return interpretDict(dict, PRIVATE_DICT_META, strings);
+      }
+      function gatherCFFTopDicts(data, start, cffIndex, strings) {
+        var topDictArray = [];
+        for (var iTopDict = 0; iTopDict < cffIndex.length; iTopDict += 1) {
+          var topDictData = new DataView(new Uint8Array(cffIndex[iTopDict]).buffer);
+          var topDict = parseCFFTopDict(topDictData, strings);
+          topDict._subrs = [];
+          topDict._subrsBias = 0;
+          topDict._defaultWidthX = 0;
+          topDict._nominalWidthX = 0;
+          var privateSize = topDict.private[0];
+          var privateOffset = topDict.private[1];
+          if (privateSize !== 0 && privateOffset !== 0) {
+            var privateDict = parseCFFPrivateDict(data, privateOffset + start, privateSize, strings);
+            topDict._defaultWidthX = privateDict.defaultWidthX;
+            topDict._nominalWidthX = privateDict.nominalWidthX;
+            if (privateDict.subrs !== 0) {
+              var subrOffset = privateOffset + privateDict.subrs;
+              var subrIndex = parseCFFIndex(data, subrOffset + start);
+              topDict._subrs = subrIndex.objects;
+              topDict._subrsBias = calcCFFSubroutineBias(topDict._subrs);
+            }
+            topDict._privateDict = privateDict;
+          }
+          topDictArray.push(topDict);
+        }
+        return topDictArray;
+      }
+      function parseCFFCharset(data, start, nGlyphs, strings) {
+        var sid;
+        var count;
+        var parser = new parse2.Parser(data, start);
+        nGlyphs -= 1;
+        var charset = [".notdef"];
+        var format = parser.parseCard8();
+        if (format === 0) {
+          for (var i = 0; i < nGlyphs; i += 1) {
+            sid = parser.parseSID();
+            charset.push(getCFFString(strings, sid));
+          }
+        } else if (format === 1) {
+          while (charset.length <= nGlyphs) {
+            sid = parser.parseSID();
+            count = parser.parseCard8();
+            for (var i$1 = 0; i$1 <= count; i$1 += 1) {
+              charset.push(getCFFString(strings, sid));
+              sid += 1;
+            }
+          }
+        } else if (format === 2) {
+          while (charset.length <= nGlyphs) {
+            sid = parser.parseSID();
+            count = parser.parseCard16();
+            for (var i$2 = 0; i$2 <= count; i$2 += 1) {
+              charset.push(getCFFString(strings, sid));
+              sid += 1;
+            }
+          }
+        } else {
+          throw new Error("Unknown charset format " + format);
+        }
+        return charset;
+      }
+      function parseCFFEncoding(data, start, charset) {
+        var code;
+        var enc = {};
+        var parser = new parse2.Parser(data, start);
+        var format = parser.parseCard8();
+        if (format === 0) {
+          var nCodes = parser.parseCard8();
+          for (var i = 0; i < nCodes; i += 1) {
+            code = parser.parseCard8();
+            enc[code] = i;
+          }
+        } else if (format === 1) {
+          var nRanges = parser.parseCard8();
+          code = 1;
+          for (var i$1 = 0; i$1 < nRanges; i$1 += 1) {
+            var first = parser.parseCard8();
+            var nLeft = parser.parseCard8();
+            for (var j = first; j <= first + nLeft; j += 1) {
+              enc[j] = code;
+              code += 1;
+            }
+          }
+        } else {
+          throw new Error("Unknown encoding format " + format);
+        }
+        return new CffEncoding(enc, charset);
+      }
+      function parseCFFCharstring(font, glyph, code) {
+        var c1x;
+        var c1y;
+        var c2x;
+        var c2y;
+        var p = new Path();
+        var stack = [];
+        var nStems = 0;
+        var haveWidth = false;
+        var open = false;
+        var x = 0;
+        var y = 0;
+        var subrs;
+        var subrsBias;
+        var defaultWidthX;
+        var nominalWidthX;
+        if (font.isCIDFont) {
+          var fdIndex = font.tables.cff.topDict._fdSelect[glyph.index];
+          var fdDict = font.tables.cff.topDict._fdArray[fdIndex];
+          subrs = fdDict._subrs;
+          subrsBias = fdDict._subrsBias;
+          defaultWidthX = fdDict._defaultWidthX;
+          nominalWidthX = fdDict._nominalWidthX;
+        } else {
+          subrs = font.tables.cff.topDict._subrs;
+          subrsBias = font.tables.cff.topDict._subrsBias;
+          defaultWidthX = font.tables.cff.topDict._defaultWidthX;
+          nominalWidthX = font.tables.cff.topDict._nominalWidthX;
+        }
+        var width = defaultWidthX;
+        function newContour(x2, y2) {
+          if (open) {
+            p.closePath();
+          }
+          p.moveTo(x2, y2);
+          open = true;
+        }
+        function parseStems() {
+          var hasWidthArg;
+          hasWidthArg = stack.length % 2 !== 0;
+          if (hasWidthArg && !haveWidth) {
+            width = stack.shift() + nominalWidthX;
+          }
+          nStems += stack.length >> 1;
+          stack.length = 0;
+          haveWidth = true;
+        }
+        function parse3(code2) {
+          var b1;
+          var b2;
+          var b3;
+          var b4;
+          var codeIndex;
+          var subrCode;
+          var jpx;
+          var jpy;
+          var c3x;
+          var c3y;
+          var c4x;
+          var c4y;
+          var i = 0;
+          while (i < code2.length) {
+            var v = code2[i];
+            i += 1;
+            switch (v) {
+              case 1:
+                parseStems();
+                break;
+              case 3:
+                parseStems();
+                break;
+              case 4:
+                if (stack.length > 1 && !haveWidth) {
+                  width = stack.shift() + nominalWidthX;
+                  haveWidth = true;
+                }
+                y += stack.pop();
+                newContour(x, y);
+                break;
+              case 5:
+                while (stack.length > 0) {
+                  x += stack.shift();
+                  y += stack.shift();
+                  p.lineTo(x, y);
+                }
+                break;
+              case 6:
+                while (stack.length > 0) {
+                  x += stack.shift();
+                  p.lineTo(x, y);
+                  if (stack.length === 0) {
+                    break;
+                  }
+                  y += stack.shift();
+                  p.lineTo(x, y);
+                }
+                break;
+              case 7:
+                while (stack.length > 0) {
+                  y += stack.shift();
+                  p.lineTo(x, y);
+                  if (stack.length === 0) {
+                    break;
+                  }
+                  x += stack.shift();
+                  p.lineTo(x, y);
+                }
+                break;
+              case 8:
+                while (stack.length > 0) {
+                  c1x = x + stack.shift();
+                  c1y = y + stack.shift();
+                  c2x = c1x + stack.shift();
+                  c2y = c1y + stack.shift();
+                  x = c2x + stack.shift();
+                  y = c2y + stack.shift();
+                  p.curveTo(c1x, c1y, c2x, c2y, x, y);
+                }
+                break;
+              case 10:
+                codeIndex = stack.pop() + subrsBias;
+                subrCode = subrs[codeIndex];
+                if (subrCode) {
+                  parse3(subrCode);
+                }
+                break;
+              case 11:
+                return;
+              case 12:
+                v = code2[i];
+                i += 1;
+                switch (v) {
+                  case 35:
+                    c1x = x + stack.shift();
+                    c1y = y + stack.shift();
+                    c2x = c1x + stack.shift();
+                    c2y = c1y + stack.shift();
+                    jpx = c2x + stack.shift();
+                    jpy = c2y + stack.shift();
+                    c3x = jpx + stack.shift();
+                    c3y = jpy + stack.shift();
+                    c4x = c3x + stack.shift();
+                    c4y = c3y + stack.shift();
+                    x = c4x + stack.shift();
+                    y = c4y + stack.shift();
+                    stack.shift();
+                    p.curveTo(c1x, c1y, c2x, c2y, jpx, jpy);
+                    p.curveTo(c3x, c3y, c4x, c4y, x, y);
+                    break;
+                  case 34:
+                    c1x = x + stack.shift();
+                    c1y = y;
+                    c2x = c1x + stack.shift();
+                    c2y = c1y + stack.shift();
+                    jpx = c2x + stack.shift();
+                    jpy = c2y;
+                    c3x = jpx + stack.shift();
+                    c3y = c2y;
+                    c4x = c3x + stack.shift();
+                    c4y = y;
+                    x = c4x + stack.shift();
+                    p.curveTo(c1x, c1y, c2x, c2y, jpx, jpy);
+                    p.curveTo(c3x, c3y, c4x, c4y, x, y);
+                    break;
+                  case 36:
+                    c1x = x + stack.shift();
+                    c1y = y + stack.shift();
+                    c2x = c1x + stack.shift();
+                    c2y = c1y + stack.shift();
+                    jpx = c2x + stack.shift();
+                    jpy = c2y;
+                    c3x = jpx + stack.shift();
+                    c3y = c2y;
+                    c4x = c3x + stack.shift();
+                    c4y = c3y + stack.shift();
+                    x = c4x + stack.shift();
+                    p.curveTo(c1x, c1y, c2x, c2y, jpx, jpy);
+                    p.curveTo(c3x, c3y, c4x, c4y, x, y);
+                    break;
+                  case 37:
+                    c1x = x + stack.shift();
+                    c1y = y + stack.shift();
+                    c2x = c1x + stack.shift();
+                    c2y = c1y + stack.shift();
+                    jpx = c2x + stack.shift();
+                    jpy = c2y + stack.shift();
+                    c3x = jpx + stack.shift();
+                    c3y = jpy + stack.shift();
+                    c4x = c3x + stack.shift();
+                    c4y = c3y + stack.shift();
+                    if (Math.abs(c4x - x) > Math.abs(c4y - y)) {
+                      x = c4x + stack.shift();
+                    } else {
+                      y = c4y + stack.shift();
+                    }
+                    p.curveTo(c1x, c1y, c2x, c2y, jpx, jpy);
+                    p.curveTo(c3x, c3y, c4x, c4y, x, y);
+                    break;
+                  default:
+                    console.log("Glyph " + glyph.index + ": unknown operator " + 1200 + v);
+                    stack.length = 0;
+                }
+                break;
+              case 14:
+                if (stack.length > 0 && !haveWidth) {
+                  width = stack.shift() + nominalWidthX;
+                  haveWidth = true;
+                }
+                if (open) {
+                  p.closePath();
+                  open = false;
+                }
+                break;
+              case 18:
+                parseStems();
+                break;
+              case 19:
+              case 20:
+                parseStems();
+                i += nStems + 7 >> 3;
+                break;
+              case 21:
+                if (stack.length > 2 && !haveWidth) {
+                  width = stack.shift() + nominalWidthX;
+                  haveWidth = true;
+                }
+                y += stack.pop();
+                x += stack.pop();
+                newContour(x, y);
+                break;
+              case 22:
+                if (stack.length > 1 && !haveWidth) {
+                  width = stack.shift() + nominalWidthX;
+                  haveWidth = true;
+                }
+                x += stack.pop();
+                newContour(x, y);
+                break;
+              case 23:
+                parseStems();
+                break;
+              case 24:
+                while (stack.length > 2) {
+                  c1x = x + stack.shift();
+                  c1y = y + stack.shift();
+                  c2x = c1x + stack.shift();
+                  c2y = c1y + stack.shift();
+                  x = c2x + stack.shift();
+                  y = c2y + stack.shift();
+                  p.curveTo(c1x, c1y, c2x, c2y, x, y);
+                }
+                x += stack.shift();
+                y += stack.shift();
+                p.lineTo(x, y);
+                break;
+              case 25:
+                while (stack.length > 6) {
+                  x += stack.shift();
+                  y += stack.shift();
+                  p.lineTo(x, y);
+                }
+                c1x = x + stack.shift();
+                c1y = y + stack.shift();
+                c2x = c1x + stack.shift();
+                c2y = c1y + stack.shift();
+                x = c2x + stack.shift();
+                y = c2y + stack.shift();
+                p.curveTo(c1x, c1y, c2x, c2y, x, y);
+                break;
+              case 26:
+                if (stack.length % 2) {
+                  x += stack.shift();
+                }
+                while (stack.length > 0) {
+                  c1x = x;
+                  c1y = y + stack.shift();
+                  c2x = c1x + stack.shift();
+                  c2y = c1y + stack.shift();
+                  x = c2x;
+                  y = c2y + stack.shift();
+                  p.curveTo(c1x, c1y, c2x, c2y, x, y);
+                }
+                break;
+              case 27:
+                if (stack.length % 2) {
+                  y += stack.shift();
+                }
+                while (stack.length > 0) {
+                  c1x = x + stack.shift();
+                  c1y = y;
+                  c2x = c1x + stack.shift();
+                  c2y = c1y + stack.shift();
+                  x = c2x + stack.shift();
+                  y = c2y;
+                  p.curveTo(c1x, c1y, c2x, c2y, x, y);
+                }
+                break;
+              case 28:
+                b1 = code2[i];
+                b2 = code2[i + 1];
+                stack.push((b1 << 24 | b2 << 16) >> 16);
+                i += 2;
+                break;
+              case 29:
+                codeIndex = stack.pop() + font.gsubrsBias;
+                subrCode = font.gsubrs[codeIndex];
+                if (subrCode) {
+                  parse3(subrCode);
+                }
+                break;
+              case 30:
+                while (stack.length > 0) {
+                  c1x = x;
+                  c1y = y + stack.shift();
+                  c2x = c1x + stack.shift();
+                  c2y = c1y + stack.shift();
+                  x = c2x + stack.shift();
+                  y = c2y + (stack.length === 1 ? stack.shift() : 0);
+                  p.curveTo(c1x, c1y, c2x, c2y, x, y);
+                  if (stack.length === 0) {
+                    break;
+                  }
+                  c1x = x + stack.shift();
+                  c1y = y;
+                  c2x = c1x + stack.shift();
+                  c2y = c1y + stack.shift();
+                  y = c2y + stack.shift();
+                  x = c2x + (stack.length === 1 ? stack.shift() : 0);
+                  p.curveTo(c1x, c1y, c2x, c2y, x, y);
+                }
+                break;
+              case 31:
+                while (stack.length > 0) {
+                  c1x = x + stack.shift();
+                  c1y = y;
+                  c2x = c1x + stack.shift();
+                  c2y = c1y + stack.shift();
+                  y = c2y + stack.shift();
+                  x = c2x + (stack.length === 1 ? stack.shift() : 0);
+                  p.curveTo(c1x, c1y, c2x, c2y, x, y);
+                  if (stack.length === 0) {
+                    break;
+                  }
+                  c1x = x;
+                  c1y = y + stack.shift();
+                  c2x = c1x + stack.shift();
+                  c2y = c1y + stack.shift();
+                  x = c2x + stack.shift();
+                  y = c2y + (stack.length === 1 ? stack.shift() : 0);
+                  p.curveTo(c1x, c1y, c2x, c2y, x, y);
+                }
+                break;
+              default:
+                if (v < 32) {
+                  console.log("Glyph " + glyph.index + ": unknown operator " + v);
+                } else if (v < 247) {
+                  stack.push(v - 139);
+                } else if (v < 251) {
+                  b1 = code2[i];
+                  i += 1;
+                  stack.push((v - 247) * 256 + b1 + 108);
+                } else if (v < 255) {
+                  b1 = code2[i];
+                  i += 1;
+                  stack.push(-(v - 251) * 256 - b1 - 108);
+                } else {
+                  b1 = code2[i];
+                  b2 = code2[i + 1];
+                  b3 = code2[i + 2];
+                  b4 = code2[i + 3];
+                  i += 4;
+                  stack.push((b1 << 24 | b2 << 16 | b3 << 8 | b4) / 65536);
+                }
+            }
+          }
+        }
+        parse3(code);
+        glyph.advanceWidth = width;
+        return p;
+      }
+      function parseCFFFDSelect(data, start, nGlyphs, fdArrayCount) {
+        var fdSelect = [];
+        var fdIndex;
+        var parser = new parse2.Parser(data, start);
+        var format = parser.parseCard8();
+        if (format === 0) {
+          for (var iGid = 0; iGid < nGlyphs; iGid++) {
+            fdIndex = parser.parseCard8();
+            if (fdIndex >= fdArrayCount) {
+              throw new Error("CFF table CID Font FDSelect has bad FD index value " + fdIndex + " (FD count " + fdArrayCount + ")");
+            }
+            fdSelect.push(fdIndex);
+          }
+        } else if (format === 3) {
+          var nRanges = parser.parseCard16();
+          var first = parser.parseCard16();
+          if (first !== 0) {
+            throw new Error("CFF Table CID Font FDSelect format 3 range has bad initial GID " + first);
+          }
+          var next;
+          for (var iRange = 0; iRange < nRanges; iRange++) {
+            fdIndex = parser.parseCard8();
+            next = parser.parseCard16();
+            if (fdIndex >= fdArrayCount) {
+              throw new Error("CFF table CID Font FDSelect has bad FD index value " + fdIndex + " (FD count " + fdArrayCount + ")");
+            }
+            if (next > nGlyphs) {
+              throw new Error("CFF Table CID Font FDSelect format 3 range has bad GID " + next);
+            }
+            for (; first < next; first++) {
+              fdSelect.push(fdIndex);
+            }
+            first = next;
+          }
+          if (next !== nGlyphs) {
+            throw new Error("CFF Table CID Font FDSelect format 3 range has bad final GID " + next);
+          }
+        } else {
+          throw new Error("CFF Table CID Font FDSelect table has unsupported format " + format);
+        }
+        return fdSelect;
+      }
+      function parseCFFTable(data, start, font, opt) {
+        font.tables.cff = {};
+        var header = parseCFFHeader(data, start);
+        var nameIndex = parseCFFIndex(data, header.endOffset, parse2.bytesToString);
+        var topDictIndex = parseCFFIndex(data, nameIndex.endOffset);
+        var stringIndex = parseCFFIndex(data, topDictIndex.endOffset, parse2.bytesToString);
+        var globalSubrIndex = parseCFFIndex(data, stringIndex.endOffset);
+        font.gsubrs = globalSubrIndex.objects;
+        font.gsubrsBias = calcCFFSubroutineBias(font.gsubrs);
+        var topDictArray = gatherCFFTopDicts(data, start, topDictIndex.objects, stringIndex.objects);
+        if (topDictArray.length !== 1) {
+          throw new Error("CFF table has too many fonts in 'FontSet' - count of fonts NameIndex.length = " + topDictArray.length);
+        }
+        var topDict = topDictArray[0];
+        font.tables.cff.topDict = topDict;
+        if (topDict._privateDict) {
+          font.defaultWidthX = topDict._privateDict.defaultWidthX;
+          font.nominalWidthX = topDict._privateDict.nominalWidthX;
+        }
+        if (topDict.ros[0] !== void 0 && topDict.ros[1] !== void 0) {
+          font.isCIDFont = true;
+        }
+        if (font.isCIDFont) {
+          var fdArrayOffset = topDict.fdArray;
+          var fdSelectOffset = topDict.fdSelect;
+          if (fdArrayOffset === 0 || fdSelectOffset === 0) {
+            throw new Error("Font is marked as a CID font, but FDArray and/or FDSelect information is missing");
+          }
+          fdArrayOffset += start;
+          var fdArrayIndex = parseCFFIndex(data, fdArrayOffset);
+          var fdArray = gatherCFFTopDicts(data, start, fdArrayIndex.objects, stringIndex.objects);
+          topDict._fdArray = fdArray;
+          fdSelectOffset += start;
+          topDict._fdSelect = parseCFFFDSelect(data, fdSelectOffset, font.numGlyphs, fdArray.length);
+        }
+        var privateDictOffset = start + topDict.private[1];
+        var privateDict = parseCFFPrivateDict(data, privateDictOffset, topDict.private[0], stringIndex.objects);
+        font.defaultWidthX = privateDict.defaultWidthX;
+        font.nominalWidthX = privateDict.nominalWidthX;
+        if (privateDict.subrs !== 0) {
+          var subrOffset = privateDictOffset + privateDict.subrs;
+          var subrIndex = parseCFFIndex(data, subrOffset);
+          font.subrs = subrIndex.objects;
+          font.subrsBias = calcCFFSubroutineBias(font.subrs);
+        } else {
+          font.subrs = [];
+          font.subrsBias = 0;
+        }
+        var charStringsIndex;
+        if (opt.lowMemory) {
+          charStringsIndex = parseCFFIndexLowMemory(data, start + topDict.charStrings);
+          font.nGlyphs = charStringsIndex.offsets.length;
+        } else {
+          charStringsIndex = parseCFFIndex(data, start + topDict.charStrings);
+          font.nGlyphs = charStringsIndex.objects.length;
+        }
+        var charset = parseCFFCharset(data, start + topDict.charset, font.nGlyphs, stringIndex.objects);
+        if (topDict.encoding === 0) {
+          font.cffEncoding = new CffEncoding(cffStandardEncoding, charset);
+        } else if (topDict.encoding === 1) {
+          font.cffEncoding = new CffEncoding(cffExpertEncoding, charset);
+        } else {
+          font.cffEncoding = parseCFFEncoding(data, start + topDict.encoding, charset);
+        }
+        font.encoding = font.encoding || font.cffEncoding;
+        font.glyphs = new glyphset.GlyphSet(font);
+        if (opt.lowMemory) {
+          font._push = function(i2) {
+            var charString2 = getCffIndexObject(i2, charStringsIndex.offsets, data, start + topDict.charStrings);
+            font.glyphs.push(i2, glyphset.cffGlyphLoader(font, i2, parseCFFCharstring, charString2));
+          };
+        } else {
+          for (var i = 0; i < font.nGlyphs; i += 1) {
+            var charString = charStringsIndex.objects[i];
+            font.glyphs.push(i, glyphset.cffGlyphLoader(font, i, parseCFFCharstring, charString));
+          }
+        }
+      }
+      function encodeString(s, strings) {
+        var sid;
+        var i = cffStandardStrings.indexOf(s);
+        if (i >= 0) {
+          sid = i;
+        }
+        i = strings.indexOf(s);
+        if (i >= 0) {
+          sid = i + cffStandardStrings.length;
+        } else {
+          sid = cffStandardStrings.length + strings.length;
+          strings.push(s);
+        }
+        return sid;
+      }
+      function makeHeader() {
+        return new table.Record("Header", [
+          { name: "major", type: "Card8", value: 1 },
+          { name: "minor", type: "Card8", value: 0 },
+          { name: "hdrSize", type: "Card8", value: 4 },
+          { name: "major", type: "Card8", value: 1 }
+        ]);
+      }
+      function makeNameIndex(fontNames) {
+        var t = new table.Record("Name INDEX", [
+          { name: "names", type: "INDEX", value: [] }
+        ]);
+        t.names = [];
+        for (var i = 0; i < fontNames.length; i += 1) {
+          t.names.push({ name: "name_" + i, type: "NAME", value: fontNames[i] });
+        }
+        return t;
+      }
+      function makeDict(meta2, attrs, strings) {
+        var m = {};
+        for (var i = 0; i < meta2.length; i += 1) {
+          var entry = meta2[i];
+          var value = attrs[entry.name];
+          if (value !== void 0 && !equals(value, entry.value)) {
+            if (entry.type === "SID") {
+              value = encodeString(value, strings);
+            }
+            m[entry.op] = { name: entry.name, type: entry.type, value };
+          }
+        }
+        return m;
+      }
+      function makeTopDict(attrs, strings) {
+        var t = new table.Record("Top DICT", [
+          { name: "dict", type: "DICT", value: {} }
+        ]);
+        t.dict = makeDict(TOP_DICT_META, attrs, strings);
+        return t;
+      }
+      function makeTopDictIndex(topDict) {
+        var t = new table.Record("Top DICT INDEX", [
+          { name: "topDicts", type: "INDEX", value: [] }
+        ]);
+        t.topDicts = [{ name: "topDict_0", type: "TABLE", value: topDict }];
+        return t;
+      }
+      function makeStringIndex(strings) {
+        var t = new table.Record("String INDEX", [
+          { name: "strings", type: "INDEX", value: [] }
+        ]);
+        t.strings = [];
+        for (var i = 0; i < strings.length; i += 1) {
+          t.strings.push({ name: "string_" + i, type: "STRING", value: strings[i] });
+        }
+        return t;
+      }
+      function makeGlobalSubrIndex() {
+        return new table.Record("Global Subr INDEX", [
+          { name: "subrs", type: "INDEX", value: [] }
+        ]);
+      }
+      function makeCharsets(glyphNames, strings) {
+        var t = new table.Record("Charsets", [
+          { name: "format", type: "Card8", value: 0 }
+        ]);
+        for (var i = 0; i < glyphNames.length; i += 1) {
+          var glyphName = glyphNames[i];
+          var glyphSID = encodeString(glyphName, strings);
+          t.fields.push({ name: "glyph_" + i, type: "SID", value: glyphSID });
+        }
+        return t;
+      }
+      function glyphToOps(glyph) {
+        var ops = [];
+        var path = glyph.path;
+        ops.push({ name: "width", type: "NUMBER", value: glyph.advanceWidth });
+        var x = 0;
+        var y = 0;
+        for (var i = 0; i < path.commands.length; i += 1) {
+          var dx = void 0;
+          var dy = void 0;
+          var cmd = path.commands[i];
+          if (cmd.type === "Q") {
+            var _13 = 1 / 3;
+            var _23 = 2 / 3;
+            cmd = {
+              type: "C",
+              x: cmd.x,
+              y: cmd.y,
+              x1: Math.round(_13 * x + _23 * cmd.x1),
+              y1: Math.round(_13 * y + _23 * cmd.y1),
+              x2: Math.round(_13 * cmd.x + _23 * cmd.x1),
+              y2: Math.round(_13 * cmd.y + _23 * cmd.y1)
+            };
+          }
+          if (cmd.type === "M") {
+            dx = Math.round(cmd.x - x);
+            dy = Math.round(cmd.y - y);
+            ops.push({ name: "dx", type: "NUMBER", value: dx });
+            ops.push({ name: "dy", type: "NUMBER", value: dy });
+            ops.push({ name: "rmoveto", type: "OP", value: 21 });
+            x = Math.round(cmd.x);
+            y = Math.round(cmd.y);
+          } else if (cmd.type === "L") {
+            dx = Math.round(cmd.x - x);
+            dy = Math.round(cmd.y - y);
+            ops.push({ name: "dx", type: "NUMBER", value: dx });
+            ops.push({ name: "dy", type: "NUMBER", value: dy });
+            ops.push({ name: "rlineto", type: "OP", value: 5 });
+            x = Math.round(cmd.x);
+            y = Math.round(cmd.y);
+          } else if (cmd.type === "C") {
+            var dx1 = Math.round(cmd.x1 - x);
+            var dy1 = Math.round(cmd.y1 - y);
+            var dx2 = Math.round(cmd.x2 - cmd.x1);
+            var dy2 = Math.round(cmd.y2 - cmd.y1);
+            dx = Math.round(cmd.x - cmd.x2);
+            dy = Math.round(cmd.y - cmd.y2);
+            ops.push({ name: "dx1", type: "NUMBER", value: dx1 });
+            ops.push({ name: "dy1", type: "NUMBER", value: dy1 });
+            ops.push({ name: "dx2", type: "NUMBER", value: dx2 });
+            ops.push({ name: "dy2", type: "NUMBER", value: dy2 });
+            ops.push({ name: "dx", type: "NUMBER", value: dx });
+            ops.push({ name: "dy", type: "NUMBER", value: dy });
+            ops.push({ name: "rrcurveto", type: "OP", value: 8 });
+            x = Math.round(cmd.x);
+            y = Math.round(cmd.y);
+          }
+        }
+        ops.push({ name: "endchar", type: "OP", value: 14 });
+        return ops;
+      }
+      function makeCharStringsIndex(glyphs) {
+        var t = new table.Record("CharStrings INDEX", [
+          { name: "charStrings", type: "INDEX", value: [] }
+        ]);
+        for (var i = 0; i < glyphs.length; i += 1) {
+          var glyph = glyphs.get(i);
+          var ops = glyphToOps(glyph);
+          t.charStrings.push({ name: glyph.name, type: "CHARSTRING", value: ops });
+        }
+        return t;
+      }
+      function makePrivateDict(attrs, strings) {
+        var t = new table.Record("Private DICT", [
+          { name: "dict", type: "DICT", value: {} }
+        ]);
+        t.dict = makeDict(PRIVATE_DICT_META, attrs, strings);
+        return t;
+      }
+      function makeCFFTable(glyphs, options) {
+        var t = new table.Table("CFF ", [
+          { name: "header", type: "RECORD" },
+          { name: "nameIndex", type: "RECORD" },
+          { name: "topDictIndex", type: "RECORD" },
+          { name: "stringIndex", type: "RECORD" },
+          { name: "globalSubrIndex", type: "RECORD" },
+          { name: "charsets", type: "RECORD" },
+          { name: "charStringsIndex", type: "RECORD" },
+          { name: "privateDict", type: "RECORD" }
+        ]);
+        var fontScale = 1 / options.unitsPerEm;
+        var attrs = {
+          version: options.version,
+          fullName: options.fullName,
+          familyName: options.familyName,
+          weight: options.weightName,
+          fontBBox: options.fontBBox || [0, 0, 0, 0],
+          fontMatrix: [fontScale, 0, 0, fontScale, 0, 0],
+          charset: 999,
+          encoding: 0,
+          charStrings: 999,
+          private: [0, 999]
+        };
+        var privateAttrs = {};
+        var glyphNames = [];
+        var glyph;
+        for (var i = 1; i < glyphs.length; i += 1) {
+          glyph = glyphs.get(i);
+          glyphNames.push(glyph.name);
+        }
+        var strings = [];
+        t.header = makeHeader();
+        t.nameIndex = makeNameIndex([options.postScriptName]);
+        var topDict = makeTopDict(attrs, strings);
+        t.topDictIndex = makeTopDictIndex(topDict);
+        t.globalSubrIndex = makeGlobalSubrIndex();
+        t.charsets = makeCharsets(glyphNames, strings);
+        t.charStringsIndex = makeCharStringsIndex(glyphs);
+        t.privateDict = makePrivateDict(privateAttrs, strings);
+        t.stringIndex = makeStringIndex(strings);
+        var startOffset = t.header.sizeOf() + t.nameIndex.sizeOf() + t.topDictIndex.sizeOf() + t.stringIndex.sizeOf() + t.globalSubrIndex.sizeOf();
+        attrs.charset = startOffset;
+        attrs.encoding = 0;
+        attrs.charStrings = attrs.charset + t.charsets.sizeOf();
+        attrs.private[1] = attrs.charStrings + t.charStringsIndex.sizeOf();
+        topDict = makeTopDict(attrs, strings);
+        t.topDictIndex = makeTopDictIndex(topDict);
+        return t;
+      }
+      var cff = { parse: parseCFFTable, make: makeCFFTable };
+      function parseHeadTable(data, start) {
+        var head2 = {};
+        var p = new parse2.Parser(data, start);
+        head2.version = p.parseVersion();
+        head2.fontRevision = Math.round(p.parseFixed() * 1e3) / 1e3;
+        head2.checkSumAdjustment = p.parseULong();
+        head2.magicNumber = p.parseULong();
+        check.argument(head2.magicNumber === 1594834165, "Font header has wrong magic number.");
+        head2.flags = p.parseUShort();
+        head2.unitsPerEm = p.parseUShort();
+        head2.created = p.parseLongDateTime();
+        head2.modified = p.parseLongDateTime();
+        head2.xMin = p.parseShort();
+        head2.yMin = p.parseShort();
+        head2.xMax = p.parseShort();
+        head2.yMax = p.parseShort();
+        head2.macStyle = p.parseUShort();
+        head2.lowestRecPPEM = p.parseUShort();
+        head2.fontDirectionHint = p.parseShort();
+        head2.indexToLocFormat = p.parseShort();
+        head2.glyphDataFormat = p.parseShort();
+        return head2;
+      }
+      function makeHeadTable(options) {
+        var timestamp = Math.round(new Date().getTime() / 1e3) + 2082844800;
+        var createdTimestamp = timestamp;
+        if (options.createdTimestamp) {
+          createdTimestamp = options.createdTimestamp + 2082844800;
+        }
+        return new table.Table("head", [
+          { name: "version", type: "FIXED", value: 65536 },
+          { name: "fontRevision", type: "FIXED", value: 65536 },
+          { name: "checkSumAdjustment", type: "ULONG", value: 0 },
+          { name: "magicNumber", type: "ULONG", value: 1594834165 },
+          { name: "flags", type: "USHORT", value: 0 },
+          { name: "unitsPerEm", type: "USHORT", value: 1e3 },
+          { name: "created", type: "LONGDATETIME", value: createdTimestamp },
+          { name: "modified", type: "LONGDATETIME", value: timestamp },
+          { name: "xMin", type: "SHORT", value: 0 },
+          { name: "yMin", type: "SHORT", value: 0 },
+          { name: "xMax", type: "SHORT", value: 0 },
+          { name: "yMax", type: "SHORT", value: 0 },
+          { name: "macStyle", type: "USHORT", value: 0 },
+          { name: "lowestRecPPEM", type: "USHORT", value: 0 },
+          { name: "fontDirectionHint", type: "SHORT", value: 2 },
+          { name: "indexToLocFormat", type: "SHORT", value: 0 },
+          { name: "glyphDataFormat", type: "SHORT", value: 0 }
+        ], options);
+      }
+      var head = { parse: parseHeadTable, make: makeHeadTable };
+      function parseHheaTable(data, start) {
+        var hhea2 = {};
+        var p = new parse2.Parser(data, start);
+        hhea2.version = p.parseVersion();
+        hhea2.ascender = p.parseShort();
+        hhea2.descender = p.parseShort();
+        hhea2.lineGap = p.parseShort();
+        hhea2.advanceWidthMax = p.parseUShort();
+        hhea2.minLeftSideBearing = p.parseShort();
+        hhea2.minRightSideBearing = p.parseShort();
+        hhea2.xMaxExtent = p.parseShort();
+        hhea2.caretSlopeRise = p.parseShort();
+        hhea2.caretSlopeRun = p.parseShort();
+        hhea2.caretOffset = p.parseShort();
+        p.relativeOffset += 8;
+        hhea2.metricDataFormat = p.parseShort();
+        hhea2.numberOfHMetrics = p.parseUShort();
+        return hhea2;
+      }
+      function makeHheaTable(options) {
+        return new table.Table("hhea", [
+          { name: "version", type: "FIXED", value: 65536 },
+          { name: "ascender", type: "FWORD", value: 0 },
+          { name: "descender", type: "FWORD", value: 0 },
+          { name: "lineGap", type: "FWORD", value: 0 },
+          { name: "advanceWidthMax", type: "UFWORD", value: 0 },
+          { name: "minLeftSideBearing", type: "FWORD", value: 0 },
+          { name: "minRightSideBearing", type: "FWORD", value: 0 },
+          { name: "xMaxExtent", type: "FWORD", value: 0 },
+          { name: "caretSlopeRise", type: "SHORT", value: 1 },
+          { name: "caretSlopeRun", type: "SHORT", value: 0 },
+          { name: "caretOffset", type: "SHORT", value: 0 },
+          { name: "reserved1", type: "SHORT", value: 0 },
+          { name: "reserved2", type: "SHORT", value: 0 },
+          { name: "reserved3", type: "SHORT", value: 0 },
+          { name: "reserved4", type: "SHORT", value: 0 },
+          { name: "metricDataFormat", type: "SHORT", value: 0 },
+          { name: "numberOfHMetrics", type: "USHORT", value: 0 }
+        ], options);
+      }
+      var hhea = { parse: parseHheaTable, make: makeHheaTable };
+      function parseHmtxTableAll(data, start, numMetrics, numGlyphs, glyphs) {
+        var advanceWidth;
+        var leftSideBearing;
+        var p = new parse2.Parser(data, start);
+        for (var i = 0; i < numGlyphs; i += 1) {
+          if (i < numMetrics) {
+            advanceWidth = p.parseUShort();
+            leftSideBearing = p.parseShort();
+          }
+          var glyph = glyphs.get(i);
+          glyph.advanceWidth = advanceWidth;
+          glyph.leftSideBearing = leftSideBearing;
+        }
+      }
+      function parseHmtxTableOnLowMemory(font, data, start, numMetrics, numGlyphs) {
+        font._hmtxTableData = {};
+        var advanceWidth;
+        var leftSideBearing;
+        var p = new parse2.Parser(data, start);
+        for (var i = 0; i < numGlyphs; i += 1) {
+          if (i < numMetrics) {
+            advanceWidth = p.parseUShort();
+            leftSideBearing = p.parseShort();
+          }
+          font._hmtxTableData[i] = {
+            advanceWidth,
+            leftSideBearing
+          };
+        }
+      }
+      function parseHmtxTable(font, data, start, numMetrics, numGlyphs, glyphs, opt) {
+        if (opt.lowMemory) {
+          parseHmtxTableOnLowMemory(font, data, start, numMetrics, numGlyphs);
+        } else {
+          parseHmtxTableAll(data, start, numMetrics, numGlyphs, glyphs);
+        }
+      }
+      function makeHmtxTable(glyphs) {
+        var t = new table.Table("hmtx", []);
+        for (var i = 0; i < glyphs.length; i += 1) {
+          var glyph = glyphs.get(i);
+          var advanceWidth = glyph.advanceWidth || 0;
+          var leftSideBearing = glyph.leftSideBearing || 0;
+          t.fields.push({ name: "advanceWidth_" + i, type: "USHORT", value: advanceWidth });
+          t.fields.push({ name: "leftSideBearing_" + i, type: "SHORT", value: leftSideBearing });
+        }
+        return t;
+      }
+      var hmtx = { parse: parseHmtxTable, make: makeHmtxTable };
+      function makeLtagTable(tags) {
+        var result = new table.Table("ltag", [
+          { name: "version", type: "ULONG", value: 1 },
+          { name: "flags", type: "ULONG", value: 0 },
+          { name: "numTags", type: "ULONG", value: tags.length }
+        ]);
+        var stringPool = "";
+        var stringPoolOffset = 12 + tags.length * 4;
+        for (var i = 0; i < tags.length; ++i) {
+          var pos = stringPool.indexOf(tags[i]);
+          if (pos < 0) {
+            pos = stringPool.length;
+            stringPool += tags[i];
+          }
+          result.fields.push({ name: "offset " + i, type: "USHORT", value: stringPoolOffset + pos });
+          result.fields.push({ name: "length " + i, type: "USHORT", value: tags[i].length });
+        }
+        result.fields.push({ name: "stringPool", type: "CHARARRAY", value: stringPool });
+        return result;
+      }
+      function parseLtagTable(data, start) {
+        var p = new parse2.Parser(data, start);
+        var tableVersion = p.parseULong();
+        check.argument(tableVersion === 1, "Unsupported ltag table version.");
+        p.skip("uLong", 1);
+        var numTags = p.parseULong();
+        var tags = [];
+        for (var i = 0; i < numTags; i++) {
+          var tag = "";
+          var offset = start + p.parseUShort();
+          var length = p.parseUShort();
+          for (var j = offset; j < offset + length; ++j) {
+            tag += String.fromCharCode(data.getInt8(j));
+          }
+          tags.push(tag);
+        }
+        return tags;
+      }
+      var ltag = { make: makeLtagTable, parse: parseLtagTable };
+      function parseMaxpTable(data, start) {
+        var maxp2 = {};
+        var p = new parse2.Parser(data, start);
+        maxp2.version = p.parseVersion();
+        maxp2.numGlyphs = p.parseUShort();
+        if (maxp2.version === 1) {
+          maxp2.maxPoints = p.parseUShort();
+          maxp2.maxContours = p.parseUShort();
+          maxp2.maxCompositePoints = p.parseUShort();
+          maxp2.maxCompositeContours = p.parseUShort();
+          maxp2.maxZones = p.parseUShort();
+          maxp2.maxTwilightPoints = p.parseUShort();
+          maxp2.maxStorage = p.parseUShort();
+          maxp2.maxFunctionDefs = p.parseUShort();
+          maxp2.maxInstructionDefs = p.parseUShort();
+          maxp2.maxStackElements = p.parseUShort();
+          maxp2.maxSizeOfInstructions = p.parseUShort();
+          maxp2.maxComponentElements = p.parseUShort();
+          maxp2.maxComponentDepth = p.parseUShort();
+        }
+        return maxp2;
+      }
+      function makeMaxpTable(numGlyphs) {
+        return new table.Table("maxp", [
+          { name: "version", type: "FIXED", value: 20480 },
+          { name: "numGlyphs", type: "USHORT", value: numGlyphs }
+        ]);
+      }
+      var maxp = { parse: parseMaxpTable, make: makeMaxpTable };
+      var nameTableNames = [
+        "copyright",
+        // 0
+        "fontFamily",
+        // 1
+        "fontSubfamily",
+        // 2
+        "uniqueID",
+        // 3
+        "fullName",
+        // 4
+        "version",
+        // 5
+        "postScriptName",
+        // 6
+        "trademark",
+        // 7
+        "manufacturer",
+        // 8
+        "designer",
+        // 9
+        "description",
+        // 10
+        "manufacturerURL",
+        // 11
+        "designerURL",
+        // 12
+        "license",
+        // 13
+        "licenseURL",
+        // 14
+        "reserved",
+        // 15
+        "preferredFamily",
+        // 16
+        "preferredSubfamily",
+        // 17
+        "compatibleFullName",
+        // 18
+        "sampleText",
+        // 19
+        "postScriptFindFontName",
+        // 20
+        "wwsFamily",
+        // 21
+        "wwsSubfamily"
+        // 22
+      ];
+      var macLanguages = {
+        0: "en",
+        1: "fr",
+        2: "de",
+        3: "it",
+        4: "nl",
+        5: "sv",
+        6: "es",
+        7: "da",
+        8: "pt",
+        9: "no",
+        10: "he",
+        11: "ja",
+        12: "ar",
+        13: "fi",
+        14: "el",
+        15: "is",
+        16: "mt",
+        17: "tr",
+        18: "hr",
+        19: "zh-Hant",
+        20: "ur",
+        21: "hi",
+        22: "th",
+        23: "ko",
+        24: "lt",
+        25: "pl",
+        26: "hu",
+        27: "es",
+        28: "lv",
+        29: "se",
+        30: "fo",
+        31: "fa",
+        32: "ru",
+        33: "zh",
+        34: "nl-BE",
+        35: "ga",
+        36: "sq",
+        37: "ro",
+        38: "cz",
+        39: "sk",
+        40: "si",
+        41: "yi",
+        42: "sr",
+        43: "mk",
+        44: "bg",
+        45: "uk",
+        46: "be",
+        47: "uz",
+        48: "kk",
+        49: "az-Cyrl",
+        50: "az-Arab",
+        51: "hy",
+        52: "ka",
+        53: "mo",
+        54: "ky",
+        55: "tg",
+        56: "tk",
+        57: "mn-CN",
+        58: "mn",
+        59: "ps",
+        60: "ks",
+        61: "ku",
+        62: "sd",
+        63: "bo",
+        64: "ne",
+        65: "sa",
+        66: "mr",
+        67: "bn",
+        68: "as",
+        69: "gu",
+        70: "pa",
+        71: "or",
+        72: "ml",
+        73: "kn",
+        74: "ta",
+        75: "te",
+        76: "si",
+        77: "my",
+        78: "km",
+        79: "lo",
+        80: "vi",
+        81: "id",
+        82: "tl",
+        83: "ms",
+        84: "ms-Arab",
+        85: "am",
+        86: "ti",
+        87: "om",
+        88: "so",
+        89: "sw",
+        90: "rw",
+        91: "rn",
+        92: "ny",
+        93: "mg",
+        94: "eo",
+        128: "cy",
+        129: "eu",
+        130: "ca",
+        131: "la",
+        132: "qu",
+        133: "gn",
+        134: "ay",
+        135: "tt",
+        136: "ug",
+        137: "dz",
+        138: "jv",
+        139: "su",
+        140: "gl",
+        141: "af",
+        142: "br",
+        143: "iu",
+        144: "gd",
+        145: "gv",
+        146: "ga",
+        147: "to",
+        148: "el-polyton",
+        149: "kl",
+        150: "az",
+        151: "nn"
+      };
+      var macLanguageToScript = {
+        0: 0,
+        // langEnglish → smRoman
+        1: 0,
+        // langFrench → smRoman
+        2: 0,
+        // langGerman → smRoman
+        3: 0,
+        // langItalian → smRoman
+        4: 0,
+        // langDutch → smRoman
+        5: 0,
+        // langSwedish → smRoman
+        6: 0,
+        // langSpanish → smRoman
+        7: 0,
+        // langDanish → smRoman
+        8: 0,
+        // langPortuguese → smRoman
+        9: 0,
+        // langNorwegian → smRoman
+        10: 5,
+        // langHebrew → smHebrew
+        11: 1,
+        // langJapanese → smJapanese
+        12: 4,
+        // langArabic → smArabic
+        13: 0,
+        // langFinnish → smRoman
+        14: 6,
+        // langGreek → smGreek
+        15: 0,
+        // langIcelandic → smRoman (modified)
+        16: 0,
+        // langMaltese → smRoman
+        17: 0,
+        // langTurkish → smRoman (modified)
+        18: 0,
+        // langCroatian → smRoman (modified)
+        19: 2,
+        // langTradChinese → smTradChinese
+        20: 4,
+        // langUrdu → smArabic
+        21: 9,
+        // langHindi → smDevanagari
+        22: 21,
+        // langThai → smThai
+        23: 3,
+        // langKorean → smKorean
+        24: 29,
+        // langLithuanian → smCentralEuroRoman
+        25: 29,
+        // langPolish → smCentralEuroRoman
+        26: 29,
+        // langHungarian → smCentralEuroRoman
+        27: 29,
+        // langEstonian → smCentralEuroRoman
+        28: 29,
+        // langLatvian → smCentralEuroRoman
+        29: 0,
+        // langSami → smRoman
+        30: 0,
+        // langFaroese → smRoman (modified)
+        31: 4,
+        // langFarsi → smArabic (modified)
+        32: 7,
+        // langRussian → smCyrillic
+        33: 25,
+        // langSimpChinese → smSimpChinese
+        34: 0,
+        // langFlemish → smRoman
+        35: 0,
+        // langIrishGaelic → smRoman (modified)
+        36: 0,
+        // langAlbanian → smRoman
+        37: 0,
+        // langRomanian → smRoman (modified)
+        38: 29,
+        // langCzech → smCentralEuroRoman
+        39: 29,
+        // langSlovak → smCentralEuroRoman
+        40: 0,
+        // langSlovenian → smRoman (modified)
+        41: 5,
+        // langYiddish → smHebrew
+        42: 7,
+        // langSerbian → smCyrillic
+        43: 7,
+        // langMacedonian → smCyrillic
+        44: 7,
+        // langBulgarian → smCyrillic
+        45: 7,
+        // langUkrainian → smCyrillic (modified)
+        46: 7,
+        // langByelorussian → smCyrillic
+        47: 7,
+        // langUzbek → smCyrillic
+        48: 7,
+        // langKazakh → smCyrillic
+        49: 7,
+        // langAzerbaijani → smCyrillic
+        50: 4,
+        // langAzerbaijanAr → smArabic
+        51: 24,
+        // langArmenian → smArmenian
+        52: 23,
+        // langGeorgian → smGeorgian
+        53: 7,
+        // langMoldavian → smCyrillic
+        54: 7,
+        // langKirghiz → smCyrillic
+        55: 7,
+        // langTajiki → smCyrillic
+        56: 7,
+        // langTurkmen → smCyrillic
+        57: 27,
+        // langMongolian → smMongolian
+        58: 7,
+        // langMongolianCyr → smCyrillic
+        59: 4,
+        // langPashto → smArabic
+        60: 4,
+        // langKurdish → smArabic
+        61: 4,
+        // langKashmiri → smArabic
+        62: 4,
+        // langSindhi → smArabic
+        63: 26,
+        // langTibetan → smTibetan
+        64: 9,
+        // langNepali → smDevanagari
+        65: 9,
+        // langSanskrit → smDevanagari
+        66: 9,
+        // langMarathi → smDevanagari
+        67: 13,
+        // langBengali → smBengali
+        68: 13,
+        // langAssamese → smBengali
+        69: 11,
+        // langGujarati → smGujarati
+        70: 10,
+        // langPunjabi → smGurmukhi
+        71: 12,
+        // langOriya → smOriya
+        72: 17,
+        // langMalayalam → smMalayalam
+        73: 16,
+        // langKannada → smKannada
+        74: 14,
+        // langTamil → smTamil
+        75: 15,
+        // langTelugu → smTelugu
+        76: 18,
+        // langSinhalese → smSinhalese
+        77: 19,
+        // langBurmese → smBurmese
+        78: 20,
+        // langKhmer → smKhmer
+        79: 22,
+        // langLao → smLao
+        80: 30,
+        // langVietnamese → smVietnamese
+        81: 0,
+        // langIndonesian → smRoman
+        82: 0,
+        // langTagalog → smRoman
+        83: 0,
+        // langMalayRoman → smRoman
+        84: 4,
+        // langMalayArabic → smArabic
+        85: 28,
+        // langAmharic → smEthiopic
+        86: 28,
+        // langTigrinya → smEthiopic
+        87: 28,
+        // langOromo → smEthiopic
+        88: 0,
+        // langSomali → smRoman
+        89: 0,
+        // langSwahili → smRoman
+        90: 0,
+        // langKinyarwanda → smRoman
+        91: 0,
+        // langRundi → smRoman
+        92: 0,
+        // langNyanja → smRoman
+        93: 0,
+        // langMalagasy → smRoman
+        94: 0,
+        // langEsperanto → smRoman
+        128: 0,
+        // langWelsh → smRoman (modified)
+        129: 0,
+        // langBasque → smRoman
+        130: 0,
+        // langCatalan → smRoman
+        131: 0,
+        // langLatin → smRoman
+        132: 0,
+        // langQuechua → smRoman
+        133: 0,
+        // langGuarani → smRoman
+        134: 0,
+        // langAymara → smRoman
+        135: 7,
+        // langTatar → smCyrillic
+        136: 4,
+        // langUighur → smArabic
+        137: 26,
+        // langDzongkha → smTibetan
+        138: 0,
+        // langJavaneseRom → smRoman
+        139: 0,
+        // langSundaneseRom → smRoman
+        140: 0,
+        // langGalician → smRoman
+        141: 0,
+        // langAfrikaans → smRoman
+        142: 0,
+        // langBreton → smRoman (modified)
+        143: 28,
+        // langInuktitut → smEthiopic (modified)
+        144: 0,
+        // langScottishGaelic → smRoman (modified)
+        145: 0,
+        // langManxGaelic → smRoman (modified)
+        146: 0,
+        // langIrishGaelicScript → smRoman (modified)
+        147: 0,
+        // langTongan → smRoman
+        148: 6,
+        // langGreekAncient → smRoman
+        149: 0,
+        // langGreenlandic → smRoman
+        150: 0,
+        // langAzerbaijanRoman → smRoman
+        151: 0
+        // langNynorsk → smRoman
+      };
+      var windowsLanguages = {
+        1078: "af",
+        1052: "sq",
+        1156: "gsw",
+        1118: "am",
+        5121: "ar-DZ",
+        15361: "ar-BH",
+        3073: "ar",
+        2049: "ar-IQ",
+        11265: "ar-JO",
+        13313: "ar-KW",
+        12289: "ar-LB",
+        4097: "ar-LY",
+        6145: "ary",
+        8193: "ar-OM",
+        16385: "ar-QA",
+        1025: "ar-SA",
+        10241: "ar-SY",
+        7169: "aeb",
+        14337: "ar-AE",
+        9217: "ar-YE",
+        1067: "hy",
+        1101: "as",
+        2092: "az-Cyrl",
+        1068: "az",
+        1133: "ba",
+        1069: "eu",
+        1059: "be",
+        2117: "bn",
+        1093: "bn-IN",
+        8218: "bs-Cyrl",
+        5146: "bs",
+        1150: "br",
+        1026: "bg",
+        1027: "ca",
+        3076: "zh-HK",
+        5124: "zh-MO",
+        2052: "zh",
+        4100: "zh-SG",
+        1028: "zh-TW",
+        1155: "co",
+        1050: "hr",
+        4122: "hr-BA",
+        1029: "cs",
+        1030: "da",
+        1164: "prs",
+        1125: "dv",
+        2067: "nl-BE",
+        1043: "nl",
+        3081: "en-AU",
+        10249: "en-BZ",
+        4105: "en-CA",
+        9225: "en-029",
+        16393: "en-IN",
+        6153: "en-IE",
+        8201: "en-JM",
+        17417: "en-MY",
+        5129: "en-NZ",
+        13321: "en-PH",
+        18441: "en-SG",
+        7177: "en-ZA",
+        11273: "en-TT",
+        2057: "en-GB",
+        1033: "en",
+        12297: "en-ZW",
+        1061: "et",
+        1080: "fo",
+        1124: "fil",
+        1035: "fi",
+        2060: "fr-BE",
+        3084: "fr-CA",
+        1036: "fr",
+        5132: "fr-LU",
+        6156: "fr-MC",
+        4108: "fr-CH",
+        1122: "fy",
+        1110: "gl",
+        1079: "ka",
+        3079: "de-AT",
+        1031: "de",
+        5127: "de-LI",
+        4103: "de-LU",
+        2055: "de-CH",
+        1032: "el",
+        1135: "kl",
+        1095: "gu",
+        1128: "ha",
+        1037: "he",
+        1081: "hi",
+        1038: "hu",
+        1039: "is",
+        1136: "ig",
+        1057: "id",
+        1117: "iu",
+        2141: "iu-Latn",
+        2108: "ga",
+        1076: "xh",
+        1077: "zu",
+        1040: "it",
+        2064: "it-CH",
+        1041: "ja",
+        1099: "kn",
+        1087: "kk",
+        1107: "km",
+        1158: "quc",
+        1159: "rw",
+        1089: "sw",
+        1111: "kok",
+        1042: "ko",
+        1088: "ky",
+        1108: "lo",
+        1062: "lv",
+        1063: "lt",
+        2094: "dsb",
+        1134: "lb",
+        1071: "mk",
+        2110: "ms-BN",
+        1086: "ms",
+        1100: "ml",
+        1082: "mt",
+        1153: "mi",
+        1146: "arn",
+        1102: "mr",
+        1148: "moh",
+        1104: "mn",
+        2128: "mn-CN",
+        1121: "ne",
+        1044: "nb",
+        2068: "nn",
+        1154: "oc",
+        1096: "or",
+        1123: "ps",
+        1045: "pl",
+        1046: "pt",
+        2070: "pt-PT",
+        1094: "pa",
+        1131: "qu-BO",
+        2155: "qu-EC",
+        3179: "qu",
+        1048: "ro",
+        1047: "rm",
+        1049: "ru",
+        9275: "smn",
+        4155: "smj-NO",
+        5179: "smj",
+        3131: "se-FI",
+        1083: "se",
+        2107: "se-SE",
+        8251: "sms",
+        6203: "sma-NO",
+        7227: "sms",
+        1103: "sa",
+        7194: "sr-Cyrl-BA",
+        3098: "sr",
+        6170: "sr-Latn-BA",
+        2074: "sr-Latn",
+        1132: "nso",
+        1074: "tn",
+        1115: "si",
+        1051: "sk",
+        1060: "sl",
+        11274: "es-AR",
+        16394: "es-BO",
+        13322: "es-CL",
+        9226: "es-CO",
+        5130: "es-CR",
+        7178: "es-DO",
+        12298: "es-EC",
+        17418: "es-SV",
+        4106: "es-GT",
+        18442: "es-HN",
+        2058: "es-MX",
+        19466: "es-NI",
+        6154: "es-PA",
+        15370: "es-PY",
+        10250: "es-PE",
+        20490: "es-PR",
+        // Microsoft has defined two different language codes for
+        // “Spanish with modern sorting” and “Spanish with traditional
+        // sorting”. This makes sense for collation APIs, and it would be
+        // possible to express this in BCP 47 language tags via Unicode
+        // extensions (eg., es-u-co-trad is Spanish with traditional
+        // sorting). However, for storing names in fonts, the distinction
+        // does not make sense, so we give “es” in both cases.
+        3082: "es",
+        1034: "es",
+        21514: "es-US",
+        14346: "es-UY",
+        8202: "es-VE",
+        2077: "sv-FI",
+        1053: "sv",
+        1114: "syr",
+        1064: "tg",
+        2143: "tzm",
+        1097: "ta",
+        1092: "tt",
+        1098: "te",
+        1054: "th",
+        1105: "bo",
+        1055: "tr",
+        1090: "tk",
+        1152: "ug",
+        1058: "uk",
+        1070: "hsb",
+        1056: "ur",
+        2115: "uz-Cyrl",
+        1091: "uz",
+        1066: "vi",
+        1106: "cy",
+        1160: "wo",
+        1157: "sah",
+        1144: "ii",
+        1130: "yo"
+      };
+      function getLanguageCode(platformID, languageID, ltag2) {
+        switch (platformID) {
+          case 0:
+            if (languageID === 65535) {
+              return "und";
+            } else if (ltag2) {
+              return ltag2[languageID];
+            }
+            break;
+          case 1:
+            return macLanguages[languageID];
+          case 3:
+            return windowsLanguages[languageID];
+        }
+        return void 0;
+      }
+      var utf16 = "utf-16";
+      var macScriptEncodings = {
+        0: "macintosh",
+        // smRoman
+        1: "x-mac-japanese",
+        // smJapanese
+        2: "x-mac-chinesetrad",
+        // smTradChinese
+        3: "x-mac-korean",
+        // smKorean
+        6: "x-mac-greek",
+        // smGreek
+        7: "x-mac-cyrillic",
+        // smCyrillic
+        9: "x-mac-devanagai",
+        // smDevanagari
+        10: "x-mac-gurmukhi",
+        // smGurmukhi
+        11: "x-mac-gujarati",
+        // smGujarati
+        12: "x-mac-oriya",
+        // smOriya
+        13: "x-mac-bengali",
+        // smBengali
+        14: "x-mac-tamil",
+        // smTamil
+        15: "x-mac-telugu",
+        // smTelugu
+        16: "x-mac-kannada",
+        // smKannada
+        17: "x-mac-malayalam",
+        // smMalayalam
+        18: "x-mac-sinhalese",
+        // smSinhalese
+        19: "x-mac-burmese",
+        // smBurmese
+        20: "x-mac-khmer",
+        // smKhmer
+        21: "x-mac-thai",
+        // smThai
+        22: "x-mac-lao",
+        // smLao
+        23: "x-mac-georgian",
+        // smGeorgian
+        24: "x-mac-armenian",
+        // smArmenian
+        25: "x-mac-chinesesimp",
+        // smSimpChinese
+        26: "x-mac-tibetan",
+        // smTibetan
+        27: "x-mac-mongolian",
+        // smMongolian
+        28: "x-mac-ethiopic",
+        // smEthiopic
+        29: "x-mac-ce",
+        // smCentralEuroRoman
+        30: "x-mac-vietnamese",
+        // smVietnamese
+        31: "x-mac-extarabic"
+        // smExtArabic
+      };
+      var macLanguageEncodings = {
+        15: "x-mac-icelandic",
+        // langIcelandic
+        17: "x-mac-turkish",
+        // langTurkish
+        18: "x-mac-croatian",
+        // langCroatian
+        24: "x-mac-ce",
+        // langLithuanian
+        25: "x-mac-ce",
+        // langPolish
+        26: "x-mac-ce",
+        // langHungarian
+        27: "x-mac-ce",
+        // langEstonian
+        28: "x-mac-ce",
+        // langLatvian
+        30: "x-mac-icelandic",
+        // langFaroese
+        37: "x-mac-romanian",
+        // langRomanian
+        38: "x-mac-ce",
+        // langCzech
+        39: "x-mac-ce",
+        // langSlovak
+        40: "x-mac-ce",
+        // langSlovenian
+        143: "x-mac-inuit",
+        // langInuktitut
+        146: "x-mac-gaelic"
+        // langIrishGaelicScript
+      };
+      function getEncoding(platformID, encodingID, languageID) {
+        switch (platformID) {
+          case 0:
+            return utf16;
+          case 1:
+            return macLanguageEncodings[languageID] || macScriptEncodings[encodingID];
+          case 3:
+            if (encodingID === 1 || encodingID === 10) {
+              return utf16;
+            }
+            break;
+        }
+        return void 0;
+      }
+      function parseNameTable(data, start, ltag2) {
+        var name = {};
+        var p = new parse2.Parser(data, start);
+        var format = p.parseUShort();
+        var count = p.parseUShort();
+        var stringOffset = p.offset + p.parseUShort();
+        for (var i = 0; i < count; i++) {
+          var platformID = p.parseUShort();
+          var encodingID = p.parseUShort();
+          var languageID = p.parseUShort();
+          var nameID = p.parseUShort();
+          var property = nameTableNames[nameID] || nameID;
+          var byteLength = p.parseUShort();
+          var offset = p.parseUShort();
+          var language = getLanguageCode(platformID, languageID, ltag2);
+          var encoding = getEncoding(platformID, encodingID, languageID);
+          if (encoding !== void 0 && language !== void 0) {
+            var text = void 0;
+            if (encoding === utf16) {
+              text = decode.UTF16(data, stringOffset + offset, byteLength);
+            } else {
+              text = decode.MACSTRING(data, stringOffset + offset, byteLength, encoding);
+            }
+            if (text) {
+              var translations = name[property];
+              if (translations === void 0) {
+                translations = name[property] = {};
+              }
+              translations[language] = text;
+            }
+          }
+        }
+        var langTagCount = 0;
+        if (format === 1) {
+          langTagCount = p.parseUShort();
+        }
+        return name;
+      }
+      function reverseDict(dict) {
+        var result = {};
+        for (var key in dict) {
+          result[dict[key]] = parseInt(key);
+        }
+        return result;
+      }
+      function makeNameRecord(platformID, encodingID, languageID, nameID, length, offset) {
+        return new table.Record("NameRecord", [
+          { name: "platformID", type: "USHORT", value: platformID },
+          { name: "encodingID", type: "USHORT", value: encodingID },
+          { name: "languageID", type: "USHORT", value: languageID },
+          { name: "nameID", type: "USHORT", value: nameID },
+          { name: "length", type: "USHORT", value: length },
+          { name: "offset", type: "USHORT", value: offset }
+        ]);
+      }
+      function findSubArray(needle, haystack) {
+        var needleLength = needle.length;
+        var limit = haystack.length - needleLength + 1;
+        loop:
+          for (var pos = 0; pos < limit; pos++) {
+            for (; pos < limit; pos++) {
+              for (var k = 0; k < needleLength; k++) {
+                if (haystack[pos + k] !== needle[k]) {
+                  continue loop;
+                }
+              }
+              return pos;
+            }
+          }
+        return -1;
+      }
+      function addStringToPool(s, pool) {
+        var offset = findSubArray(s, pool);
+        if (offset < 0) {
+          offset = pool.length;
+          var i = 0;
+          var len = s.length;
+          for (; i < len; ++i) {
+            pool.push(s[i]);
+          }
+        }
+        return offset;
+      }
+      function makeNameTable(names, ltag2) {
+        var nameID;
+        var nameIDs = [];
+        var namesWithNumericKeys = {};
+        var nameTableIds = reverseDict(nameTableNames);
+        for (var key in names) {
+          var id = nameTableIds[key];
+          if (id === void 0) {
+            id = key;
+          }
+          nameID = parseInt(id);
+          if (isNaN(nameID)) {
+            throw new Error('Name table entry "' + key + '" does not exist, see nameTableNames for complete list.');
+          }
+          namesWithNumericKeys[nameID] = names[key];
+          nameIDs.push(nameID);
+        }
+        var macLanguageIds = reverseDict(macLanguages);
+        var windowsLanguageIds = reverseDict(windowsLanguages);
+        var nameRecords = [];
+        var stringPool = [];
+        for (var i = 0; i < nameIDs.length; i++) {
+          nameID = nameIDs[i];
+          var translations = namesWithNumericKeys[nameID];
+          for (var lang in translations) {
+            var text = translations[lang];
+            var macPlatform = 1;
+            var macLanguage = macLanguageIds[lang];
+            var macScript = macLanguageToScript[macLanguage];
+            var macEncoding = getEncoding(macPlatform, macScript, macLanguage);
+            var macName = encode.MACSTRING(text, macEncoding);
+            if (macName === void 0) {
+              macPlatform = 0;
+              macLanguage = ltag2.indexOf(lang);
+              if (macLanguage < 0) {
+                macLanguage = ltag2.length;
+                ltag2.push(lang);
+              }
+              macScript = 4;
+              macName = encode.UTF16(text);
+            }
+            var macNameOffset = addStringToPool(macName, stringPool);
+            nameRecords.push(makeNameRecord(
+              macPlatform,
+              macScript,
+              macLanguage,
+              nameID,
+              macName.length,
+              macNameOffset
+            ));
+            var winLanguage = windowsLanguageIds[lang];
+            if (winLanguage !== void 0) {
+              var winName = encode.UTF16(text);
+              var winNameOffset = addStringToPool(winName, stringPool);
+              nameRecords.push(makeNameRecord(
+                3,
+                1,
+                winLanguage,
+                nameID,
+                winName.length,
+                winNameOffset
+              ));
+            }
+          }
+        }
+        nameRecords.sort(function(a, b) {
+          return a.platformID - b.platformID || a.encodingID - b.encodingID || a.languageID - b.languageID || a.nameID - b.nameID;
+        });
+        var t = new table.Table("name", [
+          { name: "format", type: "USHORT", value: 0 },
+          { name: "count", type: "USHORT", value: nameRecords.length },
+          { name: "stringOffset", type: "USHORT", value: 6 + nameRecords.length * 12 }
+        ]);
+        for (var r = 0; r < nameRecords.length; r++) {
+          t.fields.push({ name: "record_" + r, type: "RECORD", value: nameRecords[r] });
+        }
+        t.fields.push({ name: "strings", type: "LITERAL", value: stringPool });
+        return t;
+      }
+      var _name = { parse: parseNameTable, make: makeNameTable };
+      var unicodeRanges = [
+        { begin: 0, end: 127 },
+        // Basic Latin
+        { begin: 128, end: 255 },
+        // Latin-1 Supplement
+        { begin: 256, end: 383 },
+        // Latin Extended-A
+        { begin: 384, end: 591 },
+        // Latin Extended-B
+        { begin: 592, end: 687 },
+        // IPA Extensions
+        { begin: 688, end: 767 },
+        // Spacing Modifier Letters
+        { begin: 768, end: 879 },
+        // Combining Diacritical Marks
+        { begin: 880, end: 1023 },
+        // Greek and Coptic
+        { begin: 11392, end: 11519 },
+        // Coptic
+        { begin: 1024, end: 1279 },
+        // Cyrillic
+        { begin: 1328, end: 1423 },
+        // Armenian
+        { begin: 1424, end: 1535 },
+        // Hebrew
+        { begin: 42240, end: 42559 },
+        // Vai
+        { begin: 1536, end: 1791 },
+        // Arabic
+        { begin: 1984, end: 2047 },
+        // NKo
+        { begin: 2304, end: 2431 },
+        // Devanagari
+        { begin: 2432, end: 2559 },
+        // Bengali
+        { begin: 2560, end: 2687 },
+        // Gurmukhi
+        { begin: 2688, end: 2815 },
+        // Gujarati
+        { begin: 2816, end: 2943 },
+        // Oriya
+        { begin: 2944, end: 3071 },
+        // Tamil
+        { begin: 3072, end: 3199 },
+        // Telugu
+        { begin: 3200, end: 3327 },
+        // Kannada
+        { begin: 3328, end: 3455 },
+        // Malayalam
+        { begin: 3584, end: 3711 },
+        // Thai
+        { begin: 3712, end: 3839 },
+        // Lao
+        { begin: 4256, end: 4351 },
+        // Georgian
+        { begin: 6912, end: 7039 },
+        // Balinese
+        { begin: 4352, end: 4607 },
+        // Hangul Jamo
+        { begin: 7680, end: 7935 },
+        // Latin Extended Additional
+        { begin: 7936, end: 8191 },
+        // Greek Extended
+        { begin: 8192, end: 8303 },
+        // General Punctuation
+        { begin: 8304, end: 8351 },
+        // Superscripts And Subscripts
+        { begin: 8352, end: 8399 },
+        // Currency Symbol
+        { begin: 8400, end: 8447 },
+        // Combining Diacritical Marks For Symbols
+        { begin: 8448, end: 8527 },
+        // Letterlike Symbols
+        { begin: 8528, end: 8591 },
+        // Number Forms
+        { begin: 8592, end: 8703 },
+        // Arrows
+        { begin: 8704, end: 8959 },
+        // Mathematical Operators
+        { begin: 8960, end: 9215 },
+        // Miscellaneous Technical
+        { begin: 9216, end: 9279 },
+        // Control Pictures
+        { begin: 9280, end: 9311 },
+        // Optical Character Recognition
+        { begin: 9312, end: 9471 },
+        // Enclosed Alphanumerics
+        { begin: 9472, end: 9599 },
+        // Box Drawing
+        { begin: 9600, end: 9631 },
+        // Block Elements
+        { begin: 9632, end: 9727 },
+        // Geometric Shapes
+        { begin: 9728, end: 9983 },
+        // Miscellaneous Symbols
+        { begin: 9984, end: 10175 },
+        // Dingbats
+        { begin: 12288, end: 12351 },
+        // CJK Symbols And Punctuation
+        { begin: 12352, end: 12447 },
+        // Hiragana
+        { begin: 12448, end: 12543 },
+        // Katakana
+        { begin: 12544, end: 12591 },
+        // Bopomofo
+        { begin: 12592, end: 12687 },
+        // Hangul Compatibility Jamo
+        { begin: 43072, end: 43135 },
+        // Phags-pa
+        { begin: 12800, end: 13055 },
+        // Enclosed CJK Letters And Months
+        { begin: 13056, end: 13311 },
+        // CJK Compatibility
+        { begin: 44032, end: 55215 },
+        // Hangul Syllables
+        { begin: 55296, end: 57343 },
+        // Non-Plane 0 *
+        { begin: 67840, end: 67871 },
+        // Phoenicia
+        { begin: 19968, end: 40959 },
+        // CJK Unified Ideographs
+        { begin: 57344, end: 63743 },
+        // Private Use Area (plane 0)
+        { begin: 12736, end: 12783 },
+        // CJK Strokes
+        { begin: 64256, end: 64335 },
+        // Alphabetic Presentation Forms
+        { begin: 64336, end: 65023 },
+        // Arabic Presentation Forms-A
+        { begin: 65056, end: 65071 },
+        // Combining Half Marks
+        { begin: 65040, end: 65055 },
+        // Vertical Forms
+        { begin: 65104, end: 65135 },
+        // Small Form Variants
+        { begin: 65136, end: 65279 },
+        // Arabic Presentation Forms-B
+        { begin: 65280, end: 65519 },
+        // Halfwidth And Fullwidth Forms
+        { begin: 65520, end: 65535 },
+        // Specials
+        { begin: 3840, end: 4095 },
+        // Tibetan
+        { begin: 1792, end: 1871 },
+        // Syriac
+        { begin: 1920, end: 1983 },
+        // Thaana
+        { begin: 3456, end: 3583 },
+        // Sinhala
+        { begin: 4096, end: 4255 },
+        // Myanmar
+        { begin: 4608, end: 4991 },
+        // Ethiopic
+        { begin: 5024, end: 5119 },
+        // Cherokee
+        { begin: 5120, end: 5759 },
+        // Unified Canadian Aboriginal Syllabics
+        { begin: 5760, end: 5791 },
+        // Ogham
+        { begin: 5792, end: 5887 },
+        // Runic
+        { begin: 6016, end: 6143 },
+        // Khmer
+        { begin: 6144, end: 6319 },
+        // Mongolian
+        { begin: 10240, end: 10495 },
+        // Braille Patterns
+        { begin: 40960, end: 42127 },
+        // Yi Syllables
+        { begin: 5888, end: 5919 },
+        // Tagalog
+        { begin: 66304, end: 66351 },
+        // Old Italic
+        { begin: 66352, end: 66383 },
+        // Gothic
+        { begin: 66560, end: 66639 },
+        // Deseret
+        { begin: 118784, end: 119039 },
+        // Byzantine Musical Symbols
+        { begin: 119808, end: 120831 },
+        // Mathematical Alphanumeric Symbols
+        { begin: 1044480, end: 1048573 },
+        // Private Use (plane 15)
+        { begin: 65024, end: 65039 },
+        // Variation Selectors
+        { begin: 917504, end: 917631 },
+        // Tags
+        { begin: 6400, end: 6479 },
+        // Limbu
+        { begin: 6480, end: 6527 },
+        // Tai Le
+        { begin: 6528, end: 6623 },
+        // New Tai Lue
+        { begin: 6656, end: 6687 },
+        // Buginese
+        { begin: 11264, end: 11359 },
+        // Glagolitic
+        { begin: 11568, end: 11647 },
+        // Tifinagh
+        { begin: 19904, end: 19967 },
+        // Yijing Hexagram Symbols
+        { begin: 43008, end: 43055 },
+        // Syloti Nagri
+        { begin: 65536, end: 65663 },
+        // Linear B Syllabary
+        { begin: 65856, end: 65935 },
+        // Ancient Greek Numbers
+        { begin: 66432, end: 66463 },
+        // Ugaritic
+        { begin: 66464, end: 66527 },
+        // Old Persian
+        { begin: 66640, end: 66687 },
+        // Shavian
+        { begin: 66688, end: 66735 },
+        // Osmanya
+        { begin: 67584, end: 67647 },
+        // Cypriot Syllabary
+        { begin: 68096, end: 68191 },
+        // Kharoshthi
+        { begin: 119552, end: 119647 },
+        // Tai Xuan Jing Symbols
+        { begin: 73728, end: 74751 },
+        // Cuneiform
+        { begin: 119648, end: 119679 },
+        // Counting Rod Numerals
+        { begin: 7040, end: 7103 },
+        // Sundanese
+        { begin: 7168, end: 7247 },
+        // Lepcha
+        { begin: 7248, end: 7295 },
+        // Ol Chiki
+        { begin: 43136, end: 43231 },
+        // Saurashtra
+        { begin: 43264, end: 43311 },
+        // Kayah Li
+        { begin: 43312, end: 43359 },
+        // Rejang
+        { begin: 43520, end: 43615 },
+        // Cham
+        { begin: 65936, end: 65999 },
+        // Ancient Symbols
+        { begin: 66e3, end: 66047 },
+        // Phaistos Disc
+        { begin: 66208, end: 66271 },
+        // Carian
+        { begin: 127024, end: 127135 }
+        // Domino Tiles
+      ];
+      function getUnicodeRange(unicode) {
+        for (var i = 0; i < unicodeRanges.length; i += 1) {
+          var range = unicodeRanges[i];
+          if (unicode >= range.begin && unicode < range.end) {
+            return i;
+          }
+        }
+        return -1;
+      }
+      function parseOS2Table(data, start) {
+        var os22 = {};
+        var p = new parse2.Parser(data, start);
+        os22.version = p.parseUShort();
+        os22.xAvgCharWidth = p.parseShort();
+        os22.usWeightClass = p.parseUShort();
+        os22.usWidthClass = p.parseUShort();
+        os22.fsType = p.parseUShort();
+        os22.ySubscriptXSize = p.parseShort();
+        os22.ySubscriptYSize = p.parseShort();
+        os22.ySubscriptXOffset = p.parseShort();
+        os22.ySubscriptYOffset = p.parseShort();
+        os22.ySuperscriptXSize = p.parseShort();
+        os22.ySuperscriptYSize = p.parseShort();
+        os22.ySuperscriptXOffset = p.parseShort();
+        os22.ySuperscriptYOffset = p.parseShort();
+        os22.yStrikeoutSize = p.parseShort();
+        os22.yStrikeoutPosition = p.parseShort();
+        os22.sFamilyClass = p.parseShort();
+        os22.panose = [];
+        for (var i = 0; i < 10; i++) {
+          os22.panose[i] = p.parseByte();
+        }
+        os22.ulUnicodeRange1 = p.parseULong();
+        os22.ulUnicodeRange2 = p.parseULong();
+        os22.ulUnicodeRange3 = p.parseULong();
+        os22.ulUnicodeRange4 = p.parseULong();
+        os22.achVendID = String.fromCharCode(p.parseByte(), p.parseByte(), p.parseByte(), p.parseByte());
+        os22.fsSelection = p.parseUShort();
+        os22.usFirstCharIndex = p.parseUShort();
+        os22.usLastCharIndex = p.parseUShort();
+        os22.sTypoAscender = p.parseShort();
+        os22.sTypoDescender = p.parseShort();
+        os22.sTypoLineGap = p.parseShort();
+        os22.usWinAscent = p.parseUShort();
+        os22.usWinDescent = p.parseUShort();
+        if (os22.version >= 1) {
+          os22.ulCodePageRange1 = p.parseULong();
+          os22.ulCodePageRange2 = p.parseULong();
+        }
+        if (os22.version >= 2) {
+          os22.sxHeight = p.parseShort();
+          os22.sCapHeight = p.parseShort();
+          os22.usDefaultChar = p.parseUShort();
+          os22.usBreakChar = p.parseUShort();
+          os22.usMaxContent = p.parseUShort();
+        }
+        return os22;
+      }
+      function makeOS2Table(options) {
+        return new table.Table("OS/2", [
+          { name: "version", type: "USHORT", value: 3 },
+          { name: "xAvgCharWidth", type: "SHORT", value: 0 },
+          { name: "usWeightClass", type: "USHORT", value: 0 },
+          { name: "usWidthClass", type: "USHORT", value: 0 },
+          { name: "fsType", type: "USHORT", value: 0 },
+          { name: "ySubscriptXSize", type: "SHORT", value: 650 },
+          { name: "ySubscriptYSize", type: "SHORT", value: 699 },
+          { name: "ySubscriptXOffset", type: "SHORT", value: 0 },
+          { name: "ySubscriptYOffset", type: "SHORT", value: 140 },
+          { name: "ySuperscriptXSize", type: "SHORT", value: 650 },
+          { name: "ySuperscriptYSize", type: "SHORT", value: 699 },
+          { name: "ySuperscriptXOffset", type: "SHORT", value: 0 },
+          { name: "ySuperscriptYOffset", type: "SHORT", value: 479 },
+          { name: "yStrikeoutSize", type: "SHORT", value: 49 },
+          { name: "yStrikeoutPosition", type: "SHORT", value: 258 },
+          { name: "sFamilyClass", type: "SHORT", value: 0 },
+          { name: "bFamilyType", type: "BYTE", value: 0 },
+          { name: "bSerifStyle", type: "BYTE", value: 0 },
+          { name: "bWeight", type: "BYTE", value: 0 },
+          { name: "bProportion", type: "BYTE", value: 0 },
+          { name: "bContrast", type: "BYTE", value: 0 },
+          { name: "bStrokeVariation", type: "BYTE", value: 0 },
+          { name: "bArmStyle", type: "BYTE", value: 0 },
+          { name: "bLetterform", type: "BYTE", value: 0 },
+          { name: "bMidline", type: "BYTE", value: 0 },
+          { name: "bXHeight", type: "BYTE", value: 0 },
+          { name: "ulUnicodeRange1", type: "ULONG", value: 0 },
+          { name: "ulUnicodeRange2", type: "ULONG", value: 0 },
+          { name: "ulUnicodeRange3", type: "ULONG", value: 0 },
+          { name: "ulUnicodeRange4", type: "ULONG", value: 0 },
+          { name: "achVendID", type: "CHARARRAY", value: "XXXX" },
+          { name: "fsSelection", type: "USHORT", value: 0 },
+          { name: "usFirstCharIndex", type: "USHORT", value: 0 },
+          { name: "usLastCharIndex", type: "USHORT", value: 0 },
+          { name: "sTypoAscender", type: "SHORT", value: 0 },
+          { name: "sTypoDescender", type: "SHORT", value: 0 },
+          { name: "sTypoLineGap", type: "SHORT", value: 0 },
+          { name: "usWinAscent", type: "USHORT", value: 0 },
+          { name: "usWinDescent", type: "USHORT", value: 0 },
+          { name: "ulCodePageRange1", type: "ULONG", value: 0 },
+          { name: "ulCodePageRange2", type: "ULONG", value: 0 },
+          { name: "sxHeight", type: "SHORT", value: 0 },
+          { name: "sCapHeight", type: "SHORT", value: 0 },
+          { name: "usDefaultChar", type: "USHORT", value: 0 },
+          { name: "usBreakChar", type: "USHORT", value: 0 },
+          { name: "usMaxContext", type: "USHORT", value: 0 }
+        ], options);
+      }
+      var os2 = { parse: parseOS2Table, make: makeOS2Table, unicodeRanges, getUnicodeRange };
+      function parsePostTable(data, start) {
+        var post2 = {};
+        var p = new parse2.Parser(data, start);
+        post2.version = p.parseVersion();
+        post2.italicAngle = p.parseFixed();
+        post2.underlinePosition = p.parseShort();
+        post2.underlineThickness = p.parseShort();
+        post2.isFixedPitch = p.parseULong();
+        post2.minMemType42 = p.parseULong();
+        post2.maxMemType42 = p.parseULong();
+        post2.minMemType1 = p.parseULong();
+        post2.maxMemType1 = p.parseULong();
+        switch (post2.version) {
+          case 1:
+            post2.names = standardNames.slice();
+            break;
+          case 2:
+            post2.numberOfGlyphs = p.parseUShort();
+            post2.glyphNameIndex = new Array(post2.numberOfGlyphs);
+            for (var i = 0; i < post2.numberOfGlyphs; i++) {
+              post2.glyphNameIndex[i] = p.parseUShort();
+            }
+            post2.names = [];
+            for (var i$1 = 0; i$1 < post2.numberOfGlyphs; i$1++) {
+              if (post2.glyphNameIndex[i$1] >= standardNames.length) {
+                var nameLength = p.parseChar();
+                post2.names.push(p.parseString(nameLength));
+              }
+            }
+            break;
+          case 2.5:
+            post2.numberOfGlyphs = p.parseUShort();
+            post2.offset = new Array(post2.numberOfGlyphs);
+            for (var i$2 = 0; i$2 < post2.numberOfGlyphs; i$2++) {
+              post2.offset[i$2] = p.parseChar();
+            }
+            break;
+        }
+        return post2;
+      }
+      function makePostTable() {
+        return new table.Table("post", [
+          { name: "version", type: "FIXED", value: 196608 },
+          { name: "italicAngle", type: "FIXED", value: 0 },
+          { name: "underlinePosition", type: "FWORD", value: 0 },
+          { name: "underlineThickness", type: "FWORD", value: 0 },
+          { name: "isFixedPitch", type: "ULONG", value: 0 },
+          { name: "minMemType42", type: "ULONG", value: 0 },
+          { name: "maxMemType42", type: "ULONG", value: 0 },
+          { name: "minMemType1", type: "ULONG", value: 0 },
+          { name: "maxMemType1", type: "ULONG", value: 0 }
+        ]);
+      }
+      var post = { parse: parsePostTable, make: makePostTable };
+      var subtableParsers = new Array(9);
+      subtableParsers[1] = function parseLookup1() {
+        var start = this.offset + this.relativeOffset;
+        var substFormat = this.parseUShort();
+        if (substFormat === 1) {
+          return {
+            substFormat: 1,
+            coverage: this.parsePointer(Parser.coverage),
+            deltaGlyphId: this.parseUShort()
+          };
+        } else if (substFormat === 2) {
+          return {
+            substFormat: 2,
+            coverage: this.parsePointer(Parser.coverage),
+            substitute: this.parseOffset16List()
+          };
+        }
+        check.assert(false, "0x" + start.toString(16) + ": lookup type 1 format must be 1 or 2.");
+      };
+      subtableParsers[2] = function parseLookup2() {
+        var substFormat = this.parseUShort();
+        check.argument(substFormat === 1, "GSUB Multiple Substitution Subtable identifier-format must be 1");
+        return {
+          substFormat,
+          coverage: this.parsePointer(Parser.coverage),
+          sequences: this.parseListOfLists()
+        };
+      };
+      subtableParsers[3] = function parseLookup3() {
+        var substFormat = this.parseUShort();
+        check.argument(substFormat === 1, "GSUB Alternate Substitution Subtable identifier-format must be 1");
+        return {
+          substFormat,
+          coverage: this.parsePointer(Parser.coverage),
+          alternateSets: this.parseListOfLists()
+        };
+      };
+      subtableParsers[4] = function parseLookup4() {
+        var substFormat = this.parseUShort();
+        check.argument(substFormat === 1, "GSUB ligature table identifier-format must be 1");
+        return {
+          substFormat,
+          coverage: this.parsePointer(Parser.coverage),
+          ligatureSets: this.parseListOfLists(function() {
+            return {
+              ligGlyph: this.parseUShort(),
+              components: this.parseUShortList(this.parseUShort() - 1)
+            };
+          })
+        };
+      };
+      var lookupRecordDesc = {
+        sequenceIndex: Parser.uShort,
+        lookupListIndex: Parser.uShort
+      };
+      subtableParsers[5] = function parseLookup5() {
+        var start = this.offset + this.relativeOffset;
+        var substFormat = this.parseUShort();
+        if (substFormat === 1) {
+          return {
+            substFormat,
+            coverage: this.parsePointer(Parser.coverage),
+            ruleSets: this.parseListOfLists(function() {
+              var glyphCount2 = this.parseUShort();
+              var substCount2 = this.parseUShort();
+              return {
+                input: this.parseUShortList(glyphCount2 - 1),
+                lookupRecords: this.parseRecordList(substCount2, lookupRecordDesc)
+              };
+            })
+          };
+        } else if (substFormat === 2) {
+          return {
+            substFormat,
+            coverage: this.parsePointer(Parser.coverage),
+            classDef: this.parsePointer(Parser.classDef),
+            classSets: this.parseListOfLists(function() {
+              var glyphCount2 = this.parseUShort();
+              var substCount2 = this.parseUShort();
+              return {
+                classes: this.parseUShortList(glyphCount2 - 1),
+                lookupRecords: this.parseRecordList(substCount2, lookupRecordDesc)
+              };
+            })
+          };
+        } else if (substFormat === 3) {
+          var glyphCount = this.parseUShort();
+          var substCount = this.parseUShort();
+          return {
+            substFormat,
+            coverages: this.parseList(glyphCount, Parser.pointer(Parser.coverage)),
+            lookupRecords: this.parseRecordList(substCount, lookupRecordDesc)
+          };
+        }
+        check.assert(false, "0x" + start.toString(16) + ": lookup type 5 format must be 1, 2 or 3.");
+      };
+      subtableParsers[6] = function parseLookup6() {
+        var start = this.offset + this.relativeOffset;
+        var substFormat = this.parseUShort();
+        if (substFormat === 1) {
+          return {
+            substFormat: 1,
+            coverage: this.parsePointer(Parser.coverage),
+            chainRuleSets: this.parseListOfLists(function() {
+              return {
+                backtrack: this.parseUShortList(),
+                input: this.parseUShortList(this.parseShort() - 1),
+                lookahead: this.parseUShortList(),
+                lookupRecords: this.parseRecordList(lookupRecordDesc)
+              };
+            })
+          };
+        } else if (substFormat === 2) {
+          return {
+            substFormat: 2,
+            coverage: this.parsePointer(Parser.coverage),
+            backtrackClassDef: this.parsePointer(Parser.classDef),
+            inputClassDef: this.parsePointer(Parser.classDef),
+            lookaheadClassDef: this.parsePointer(Parser.classDef),
+            chainClassSet: this.parseListOfLists(function() {
+              return {
+                backtrack: this.parseUShortList(),
+                input: this.parseUShortList(this.parseShort() - 1),
+                lookahead: this.parseUShortList(),
+                lookupRecords: this.parseRecordList(lookupRecordDesc)
+              };
+            })
+          };
+        } else if (substFormat === 3) {
+          return {
+            substFormat: 3,
+            backtrackCoverage: this.parseList(Parser.pointer(Parser.coverage)),
+            inputCoverage: this.parseList(Parser.pointer(Parser.coverage)),
+            lookaheadCoverage: this.parseList(Parser.pointer(Parser.coverage)),
+            lookupRecords: this.parseRecordList(lookupRecordDesc)
+          };
+        }
+        check.assert(false, "0x" + start.toString(16) + ": lookup type 6 format must be 1, 2 or 3.");
+      };
+      subtableParsers[7] = function parseLookup7() {
+        var substFormat = this.parseUShort();
+        check.argument(substFormat === 1, "GSUB Extension Substitution subtable identifier-format must be 1");
+        var extensionLookupType = this.parseUShort();
+        var extensionParser = new Parser(this.data, this.offset + this.parseULong());
+        return {
+          substFormat: 1,
+          lookupType: extensionLookupType,
+          extension: subtableParsers[extensionLookupType].call(extensionParser)
+        };
+      };
+      subtableParsers[8] = function parseLookup8() {
+        var substFormat = this.parseUShort();
+        check.argument(substFormat === 1, "GSUB Reverse Chaining Contextual Single Substitution Subtable identifier-format must be 1");
+        return {
+          substFormat,
+          coverage: this.parsePointer(Parser.coverage),
+          backtrackCoverage: this.parseList(Parser.pointer(Parser.coverage)),
+          lookaheadCoverage: this.parseList(Parser.pointer(Parser.coverage)),
+          substitutes: this.parseUShortList()
+        };
+      };
+      function parseGsubTable(data, start) {
+        start = start || 0;
+        var p = new Parser(data, start);
+        var tableVersion = p.parseVersion(1);
+        check.argument(tableVersion === 1 || tableVersion === 1.1, "Unsupported GSUB table version.");
+        if (tableVersion === 1) {
+          return {
+            version: tableVersion,
+            scripts: p.parseScriptList(),
+            features: p.parseFeatureList(),
+            lookups: p.parseLookupList(subtableParsers)
+          };
+        } else {
+          return {
+            version: tableVersion,
+            scripts: p.parseScriptList(),
+            features: p.parseFeatureList(),
+            lookups: p.parseLookupList(subtableParsers),
+            variations: p.parseFeatureVariationsList()
+          };
+        }
+      }
+      var subtableMakers = new Array(9);
+      subtableMakers[1] = function makeLookup1(subtable) {
+        if (subtable.substFormat === 1) {
+          return new table.Table("substitutionTable", [
+            { name: "substFormat", type: "USHORT", value: 1 },
+            { name: "coverage", type: "TABLE", value: new table.Coverage(subtable.coverage) },
+            { name: "deltaGlyphID", type: "USHORT", value: subtable.deltaGlyphId }
+          ]);
+        } else {
+          return new table.Table("substitutionTable", [
+            { name: "substFormat", type: "USHORT", value: 2 },
+            { name: "coverage", type: "TABLE", value: new table.Coverage(subtable.coverage) }
+          ].concat(table.ushortList("substitute", subtable.substitute)));
+        }
+      };
+      subtableMakers[2] = function makeLookup2(subtable) {
+        check.assert(subtable.substFormat === 1, "Lookup type 2 substFormat must be 1.");
+        return new table.Table("substitutionTable", [
+          { name: "substFormat", type: "USHORT", value: 1 },
+          { name: "coverage", type: "TABLE", value: new table.Coverage(subtable.coverage) }
+        ].concat(table.tableList("seqSet", subtable.sequences, function(sequenceSet) {
+          return new table.Table("sequenceSetTable", table.ushortList("sequence", sequenceSet));
+        })));
+      };
+      subtableMakers[3] = function makeLookup3(subtable) {
+        check.assert(subtable.substFormat === 1, "Lookup type 3 substFormat must be 1.");
+        return new table.Table("substitutionTable", [
+          { name: "substFormat", type: "USHORT", value: 1 },
+          { name: "coverage", type: "TABLE", value: new table.Coverage(subtable.coverage) }
+        ].concat(table.tableList("altSet", subtable.alternateSets, function(alternateSet) {
+          return new table.Table("alternateSetTable", table.ushortList("alternate", alternateSet));
+        })));
+      };
+      subtableMakers[4] = function makeLookup4(subtable) {
+        check.assert(subtable.substFormat === 1, "Lookup type 4 substFormat must be 1.");
+        return new table.Table("substitutionTable", [
+          { name: "substFormat", type: "USHORT", value: 1 },
+          { name: "coverage", type: "TABLE", value: new table.Coverage(subtable.coverage) }
+        ].concat(table.tableList("ligSet", subtable.ligatureSets, function(ligatureSet) {
+          return new table.Table("ligatureSetTable", table.tableList("ligature", ligatureSet, function(ligature) {
+            return new table.Table(
+              "ligatureTable",
+              [{ name: "ligGlyph", type: "USHORT", value: ligature.ligGlyph }].concat(table.ushortList("component", ligature.components, ligature.components.length + 1))
+            );
+          }));
+        })));
+      };
+      subtableMakers[6] = function makeLookup6(subtable) {
+        if (subtable.substFormat === 1) {
+          var returnTable = new table.Table("chainContextTable", [
+            { name: "substFormat", type: "USHORT", value: subtable.substFormat },
+            { name: "coverage", type: "TABLE", value: new table.Coverage(subtable.coverage) }
+          ].concat(table.tableList("chainRuleSet", subtable.chainRuleSets, function(chainRuleSet) {
+            return new table.Table("chainRuleSetTable", table.tableList("chainRule", chainRuleSet, function(chainRule) {
+              var tableData2 = table.ushortList("backtrackGlyph", chainRule.backtrack, chainRule.backtrack.length).concat(table.ushortList("inputGlyph", chainRule.input, chainRule.input.length + 1)).concat(table.ushortList("lookaheadGlyph", chainRule.lookahead, chainRule.lookahead.length)).concat(table.ushortList("substitution", [], chainRule.lookupRecords.length));
+              chainRule.lookupRecords.forEach(function(record, i) {
+                tableData2 = tableData2.concat({ name: "sequenceIndex" + i, type: "USHORT", value: record.sequenceIndex }).concat({ name: "lookupListIndex" + i, type: "USHORT", value: record.lookupListIndex });
+              });
+              return new table.Table("chainRuleTable", tableData2);
+            }));
+          })));
+          return returnTable;
+        } else if (subtable.substFormat === 2) {
+          check.assert(false, "lookup type 6 format 2 is not yet supported.");
+        } else if (subtable.substFormat === 3) {
+          var tableData = [
+            { name: "substFormat", type: "USHORT", value: subtable.substFormat }
+          ];
+          tableData.push({ name: "backtrackGlyphCount", type: "USHORT", value: subtable.backtrackCoverage.length });
+          subtable.backtrackCoverage.forEach(function(coverage, i) {
+            tableData.push({ name: "backtrackCoverage" + i, type: "TABLE", value: new table.Coverage(coverage) });
+          });
+          tableData.push({ name: "inputGlyphCount", type: "USHORT", value: subtable.inputCoverage.length });
+          subtable.inputCoverage.forEach(function(coverage, i) {
+            tableData.push({ name: "inputCoverage" + i, type: "TABLE", value: new table.Coverage(coverage) });
+          });
+          tableData.push({ name: "lookaheadGlyphCount", type: "USHORT", value: subtable.lookaheadCoverage.length });
+          subtable.lookaheadCoverage.forEach(function(coverage, i) {
+            tableData.push({ name: "lookaheadCoverage" + i, type: "TABLE", value: new table.Coverage(coverage) });
+          });
+          tableData.push({ name: "substitutionCount", type: "USHORT", value: subtable.lookupRecords.length });
+          subtable.lookupRecords.forEach(function(record, i) {
+            tableData = tableData.concat({ name: "sequenceIndex" + i, type: "USHORT", value: record.sequenceIndex }).concat({ name: "lookupListIndex" + i, type: "USHORT", value: record.lookupListIndex });
+          });
+          var returnTable$1 = new table.Table("chainContextTable", tableData);
+          return returnTable$1;
+        }
+        check.assert(false, "lookup type 6 format must be 1, 2 or 3.");
+      };
+      function makeGsubTable(gsub2) {
+        return new table.Table("GSUB", [
+          { name: "version", type: "ULONG", value: 65536 },
+          { name: "scripts", type: "TABLE", value: new table.ScriptList(gsub2.scripts) },
+          { name: "features", type: "TABLE", value: new table.FeatureList(gsub2.features) },
+          { name: "lookups", type: "TABLE", value: new table.LookupList(gsub2.lookups, subtableMakers) }
+        ]);
+      }
+      var gsub = { parse: parseGsubTable, make: makeGsubTable };
+      function parseMetaTable(data, start) {
+        var p = new parse2.Parser(data, start);
+        var tableVersion = p.parseULong();
+        check.argument(tableVersion === 1, "Unsupported META table version.");
+        p.parseULong();
+        p.parseULong();
+        var numDataMaps = p.parseULong();
+        var tags = {};
+        for (var i = 0; i < numDataMaps; i++) {
+          var tag = p.parseTag();
+          var dataOffset = p.parseULong();
+          var dataLength = p.parseULong();
+          var text = decode.UTF8(data, start + dataOffset, dataLength);
+          tags[tag] = text;
+        }
+        return tags;
+      }
+      function makeMetaTable(tags) {
+        var numTags = Object.keys(tags).length;
+        var stringPool = "";
+        var stringPoolOffset = 16 + numTags * 12;
+        var result = new table.Table("meta", [
+          { name: "version", type: "ULONG", value: 1 },
+          { name: "flags", type: "ULONG", value: 0 },
+          { name: "offset", type: "ULONG", value: stringPoolOffset },
+          { name: "numTags", type: "ULONG", value: numTags }
+        ]);
+        for (var tag in tags) {
+          var pos = stringPool.length;
+          stringPool += tags[tag];
+          result.fields.push({ name: "tag " + tag, type: "TAG", value: tag });
+          result.fields.push({ name: "offset " + tag, type: "ULONG", value: stringPoolOffset + pos });
+          result.fields.push({ name: "length " + tag, type: "ULONG", value: tags[tag].length });
+        }
+        result.fields.push({ name: "stringPool", type: "CHARARRAY", value: stringPool });
+        return result;
+      }
+      var meta = { parse: parseMetaTable, make: makeMetaTable };
+      function log2(v) {
+        return Math.log(v) / Math.log(2) | 0;
+      }
+      function computeCheckSum(bytes) {
+        while (bytes.length % 4 !== 0) {
+          bytes.push(0);
+        }
+        var sum = 0;
+        for (var i = 0; i < bytes.length; i += 4) {
+          sum += (bytes[i] << 24) + (bytes[i + 1] << 16) + (bytes[i + 2] << 8) + bytes[i + 3];
+        }
+        sum %= Math.pow(2, 32);
+        return sum;
+      }
+      function makeTableRecord(tag, checkSum, offset, length) {
+        return new table.Record("Table Record", [
+          { name: "tag", type: "TAG", value: tag !== void 0 ? tag : "" },
+          { name: "checkSum", type: "ULONG", value: checkSum !== void 0 ? checkSum : 0 },
+          { name: "offset", type: "ULONG", value: offset !== void 0 ? offset : 0 },
+          { name: "length", type: "ULONG", value: length !== void 0 ? length : 0 }
+        ]);
+      }
+      function makeSfntTable(tables) {
+        var sfnt2 = new table.Table("sfnt", [
+          { name: "version", type: "TAG", value: "OTTO" },
+          { name: "numTables", type: "USHORT", value: 0 },
+          { name: "searchRange", type: "USHORT", value: 0 },
+          { name: "entrySelector", type: "USHORT", value: 0 },
+          { name: "rangeShift", type: "USHORT", value: 0 }
+        ]);
+        sfnt2.tables = tables;
+        sfnt2.numTables = tables.length;
+        var highestPowerOf2 = Math.pow(2, log2(sfnt2.numTables));
+        sfnt2.searchRange = 16 * highestPowerOf2;
+        sfnt2.entrySelector = log2(highestPowerOf2);
+        sfnt2.rangeShift = sfnt2.numTables * 16 - sfnt2.searchRange;
+        var recordFields = [];
+        var tableFields = [];
+        var offset = sfnt2.sizeOf() + makeTableRecord().sizeOf() * sfnt2.numTables;
+        while (offset % 4 !== 0) {
+          offset += 1;
+          tableFields.push({ name: "padding", type: "BYTE", value: 0 });
+        }
+        for (var i = 0; i < tables.length; i += 1) {
+          var t = tables[i];
+          check.argument(t.tableName.length === 4, "Table name" + t.tableName + " is invalid.");
+          var tableLength = t.sizeOf();
+          var tableRecord = makeTableRecord(t.tableName, computeCheckSum(t.encode()), offset, tableLength);
+          recordFields.push({ name: tableRecord.tag + " Table Record", type: "RECORD", value: tableRecord });
+          tableFields.push({ name: t.tableName + " table", type: "RECORD", value: t });
+          offset += tableLength;
+          check.argument(!isNaN(offset), "Something went wrong calculating the offset.");
+          while (offset % 4 !== 0) {
+            offset += 1;
+            tableFields.push({ name: "padding", type: "BYTE", value: 0 });
+          }
+        }
+        recordFields.sort(function(r1, r2) {
+          if (r1.value.tag > r2.value.tag) {
+            return 1;
+          } else {
+            return -1;
+          }
+        });
+        sfnt2.fields = sfnt2.fields.concat(recordFields);
+        sfnt2.fields = sfnt2.fields.concat(tableFields);
+        return sfnt2;
+      }
+      function metricsForChar(font, chars, notFoundMetrics) {
+        for (var i = 0; i < chars.length; i += 1) {
+          var glyphIndex = font.charToGlyphIndex(chars[i]);
+          if (glyphIndex > 0) {
+            var glyph = font.glyphs.get(glyphIndex);
+            return glyph.getMetrics();
+          }
+        }
+        return notFoundMetrics;
+      }
+      function average(vs) {
+        var sum = 0;
+        for (var i = 0; i < vs.length; i += 1) {
+          sum += vs[i];
+        }
+        return sum / vs.length;
+      }
+      function fontToSfntTable(font) {
+        var xMins = [];
+        var yMins = [];
+        var xMaxs = [];
+        var yMaxs = [];
+        var advanceWidths = [];
+        var leftSideBearings = [];
+        var rightSideBearings = [];
+        var firstCharIndex;
+        var lastCharIndex = 0;
+        var ulUnicodeRange1 = 0;
+        var ulUnicodeRange2 = 0;
+        var ulUnicodeRange3 = 0;
+        var ulUnicodeRange4 = 0;
+        for (var i = 0; i < font.glyphs.length; i += 1) {
+          var glyph = font.glyphs.get(i);
+          var unicode = glyph.unicode | 0;
+          if (isNaN(glyph.advanceWidth)) {
+            throw new Error("Glyph " + glyph.name + " (" + i + "): advanceWidth is not a number.");
+          }
+          if (firstCharIndex > unicode || firstCharIndex === void 0) {
+            if (unicode > 0) {
+              firstCharIndex = unicode;
+            }
+          }
+          if (lastCharIndex < unicode) {
+            lastCharIndex = unicode;
+          }
+          var position = os2.getUnicodeRange(unicode);
+          if (position < 32) {
+            ulUnicodeRange1 |= 1 << position;
+          } else if (position < 64) {
+            ulUnicodeRange2 |= 1 << position - 32;
+          } else if (position < 96) {
+            ulUnicodeRange3 |= 1 << position - 64;
+          } else if (position < 123) {
+            ulUnicodeRange4 |= 1 << position - 96;
+          } else {
+            throw new Error("Unicode ranges bits > 123 are reserved for internal usage");
+          }
+          if (glyph.name === ".notdef") {
+            continue;
+          }
+          var metrics = glyph.getMetrics();
+          xMins.push(metrics.xMin);
+          yMins.push(metrics.yMin);
+          xMaxs.push(metrics.xMax);
+          yMaxs.push(metrics.yMax);
+          leftSideBearings.push(metrics.leftSideBearing);
+          rightSideBearings.push(metrics.rightSideBearing);
+          advanceWidths.push(glyph.advanceWidth);
+        }
+        var globals = {
+          xMin: Math.min.apply(null, xMins),
+          yMin: Math.min.apply(null, yMins),
+          xMax: Math.max.apply(null, xMaxs),
+          yMax: Math.max.apply(null, yMaxs),
+          advanceWidthMax: Math.max.apply(null, advanceWidths),
+          advanceWidthAvg: average(advanceWidths),
+          minLeftSideBearing: Math.min.apply(null, leftSideBearings),
+          maxLeftSideBearing: Math.max.apply(null, leftSideBearings),
+          minRightSideBearing: Math.min.apply(null, rightSideBearings)
+        };
+        globals.ascender = font.ascender;
+        globals.descender = font.descender;
+        var headTable = head.make({
+          flags: 3,
+          // 00000011 (baseline for font at y=0; left sidebearing point at x=0)
+          unitsPerEm: font.unitsPerEm,
+          xMin: globals.xMin,
+          yMin: globals.yMin,
+          xMax: globals.xMax,
+          yMax: globals.yMax,
+          lowestRecPPEM: 3,
+          createdTimestamp: font.createdTimestamp
+        });
+        var hheaTable = hhea.make({
+          ascender: globals.ascender,
+          descender: globals.descender,
+          advanceWidthMax: globals.advanceWidthMax,
+          minLeftSideBearing: globals.minLeftSideBearing,
+          minRightSideBearing: globals.minRightSideBearing,
+          xMaxExtent: globals.maxLeftSideBearing + (globals.xMax - globals.xMin),
+          numberOfHMetrics: font.glyphs.length
+        });
+        var maxpTable = maxp.make(font.glyphs.length);
+        var os2Table = os2.make(Object.assign({
+          xAvgCharWidth: Math.round(globals.advanceWidthAvg),
+          usFirstCharIndex: firstCharIndex,
+          usLastCharIndex: lastCharIndex,
+          ulUnicodeRange1,
+          ulUnicodeRange2,
+          ulUnicodeRange3,
+          ulUnicodeRange4,
+          // See http://typophile.com/node/13081 for more info on vertical metrics.
+          // We get metrics for typical characters (such as "x" for xHeight).
+          // We provide some fallback characters if characters are unavailable: their
+          // ordering was chosen experimentally.
+          sTypoAscender: globals.ascender,
+          sTypoDescender: globals.descender,
+          sTypoLineGap: 0,
+          usWinAscent: globals.yMax,
+          usWinDescent: Math.abs(globals.yMin),
+          ulCodePageRange1: 1,
+          // FIXME: hard-code Latin 1 support for now
+          sxHeight: metricsForChar(font, "xyvw", { yMax: Math.round(globals.ascender / 2) }).yMax,
+          sCapHeight: metricsForChar(font, "HIKLEFJMNTZBDPRAGOQSUVWXY", globals).yMax,
+          usDefaultChar: font.hasChar(" ") ? 32 : 0,
+          // Use space as the default character, if available.
+          usBreakChar: font.hasChar(" ") ? 32 : 0
+          // Use space as the break character, if available.
+        }, font.tables.os2));
+        var hmtxTable = hmtx.make(font.glyphs);
+        var cmapTable = cmap.make(font.glyphs);
+        var englishFamilyName = font.getEnglishName("fontFamily");
+        var englishStyleName = font.getEnglishName("fontSubfamily");
+        var englishFullName = englishFamilyName + " " + englishStyleName;
+        var postScriptName = font.getEnglishName("postScriptName");
+        if (!postScriptName) {
+          postScriptName = englishFamilyName.replace(/\s/g, "") + "-" + englishStyleName;
+        }
+        var names = {};
+        for (var n in font.names) {
+          names[n] = font.names[n];
+        }
+        if (!names.uniqueID) {
+          names.uniqueID = { en: font.getEnglishName("manufacturer") + ":" + englishFullName };
+        }
+        if (!names.postScriptName) {
+          names.postScriptName = { en: postScriptName };
+        }
+        if (!names.preferredFamily) {
+          names.preferredFamily = font.names.fontFamily;
+        }
+        if (!names.preferredSubfamily) {
+          names.preferredSubfamily = font.names.fontSubfamily;
+        }
+        var languageTags = [];
+        var nameTable = _name.make(names, languageTags);
+        var ltagTable = languageTags.length > 0 ? ltag.make(languageTags) : void 0;
+        var postTable = post.make();
+        var cffTable = cff.make(font.glyphs, {
+          version: font.getEnglishName("version"),
+          fullName: englishFullName,
+          familyName: englishFamilyName,
+          weightName: englishStyleName,
+          postScriptName,
+          unitsPerEm: font.unitsPerEm,
+          fontBBox: [0, globals.yMin, globals.ascender, globals.advanceWidthMax]
+        });
+        var metaTable = font.metas && Object.keys(font.metas).length > 0 ? meta.make(font.metas) : void 0;
+        var tables = [headTable, hheaTable, maxpTable, os2Table, nameTable, cmapTable, postTable, cffTable, hmtxTable];
+        if (ltagTable) {
+          tables.push(ltagTable);
+        }
+        if (font.tables.gsub) {
+          tables.push(gsub.make(font.tables.gsub));
+        }
+        if (metaTable) {
+          tables.push(metaTable);
+        }
+        var sfntTable = makeSfntTable(tables);
+        var bytes = sfntTable.encode();
+        var checkSum = computeCheckSum(bytes);
+        var tableFields = sfntTable.fields;
+        var checkSumAdjusted = false;
+        for (var i$1 = 0; i$1 < tableFields.length; i$1 += 1) {
+          if (tableFields[i$1].name === "head table") {
+            tableFields[i$1].value.checkSumAdjustment = 2981146554 - checkSum;
+            checkSumAdjusted = true;
+            break;
+          }
+        }
+        if (!checkSumAdjusted) {
+          throw new Error("Could not find head table with checkSum to adjust.");
+        }
+        return sfntTable;
+      }
+      var sfnt = { make: makeSfntTable, fontToTable: fontToSfntTable, computeCheckSum };
+      function searchTag(arr, tag) {
+        var imin = 0;
+        var imax = arr.length - 1;
+        while (imin <= imax) {
+          var imid = imin + imax >>> 1;
+          var val = arr[imid].tag;
+          if (val === tag) {
+            return imid;
+          } else if (val < tag) {
+            imin = imid + 1;
+          } else {
+            imax = imid - 1;
+          }
+        }
+        return -imin - 1;
+      }
+      function binSearch(arr, value) {
+        var imin = 0;
+        var imax = arr.length - 1;
+        while (imin <= imax) {
+          var imid = imin + imax >>> 1;
+          var val = arr[imid];
+          if (val === value) {
+            return imid;
+          } else if (val < value) {
+            imin = imid + 1;
+          } else {
+            imax = imid - 1;
+          }
+        }
+        return -imin - 1;
+      }
+      function searchRange(ranges, value) {
+        var range;
+        var imin = 0;
+        var imax = ranges.length - 1;
+        while (imin <= imax) {
+          var imid = imin + imax >>> 1;
+          range = ranges[imid];
+          var start = range.start;
+          if (start === value) {
+            return range;
+          } else if (start < value) {
+            imin = imid + 1;
+          } else {
+            imax = imid - 1;
+          }
+        }
+        if (imin > 0) {
+          range = ranges[imin - 1];
+          if (value > range.end) {
+            return 0;
+          }
+          return range;
+        }
+      }
+      function Layout(font, tableName) {
+        this.font = font;
+        this.tableName = tableName;
+      }
+      Layout.prototype = {
+        /**
+         * Binary search an object by "tag" property
+         * @instance
+         * @function searchTag
+         * @memberof opentype.Layout
+         * @param  {Array} arr
+         * @param  {string} tag
+         * @return {number}
+         */
+        searchTag,
+        /**
+         * Binary search in a list of numbers
+         * @instance
+         * @function binSearch
+         * @memberof opentype.Layout
+         * @param  {Array} arr
+         * @param  {number} value
+         * @return {number}
+         */
+        binSearch,
+        /**
+         * Get or create the Layout table (GSUB, GPOS etc).
+         * @param  {boolean} create - Whether to create a new one.
+         * @return {Object} The GSUB or GPOS table.
+         */
+        getTable: function(create) {
+          var layout = this.font.tables[this.tableName];
+          if (!layout && create) {
+            layout = this.font.tables[this.tableName] = this.createDefaultTable();
+          }
+          return layout;
+        },
+        /**
+         * Returns all scripts in the substitution table.
+         * @instance
+         * @return {Array}
+         */
+        getScriptNames: function() {
+          var layout = this.getTable();
+          if (!layout) {
+            return [];
+          }
+          return layout.scripts.map(function(script) {
+            return script.tag;
+          });
+        },
+        /**
+         * Returns the best bet for a script name.
+         * Returns 'DFLT' if it exists.
+         * If not, returns 'latn' if it exists.
+         * If neither exist, returns undefined.
+         */
+        getDefaultScriptName: function() {
+          var layout = this.getTable();
+          if (!layout) {
+            return;
+          }
+          var hasLatn = false;
+          for (var i = 0; i < layout.scripts.length; i++) {
+            var name = layout.scripts[i].tag;
+            if (name === "DFLT") {
+              return name;
+            }
+            if (name === "latn") {
+              hasLatn = true;
+            }
+          }
+          if (hasLatn) {
+            return "latn";
+          }
+        },
+        /**
+         * Returns all LangSysRecords in the given script.
+         * @instance
+         * @param {string} [script='DFLT']
+         * @param {boolean} create - forces the creation of this script table if it doesn't exist.
+         * @return {Object} An object with tag and script properties.
+         */
+        getScriptTable: function(script, create) {
+          var layout = this.getTable(create);
+          if (layout) {
+            script = script || "DFLT";
+            var scripts = layout.scripts;
+            var pos = searchTag(layout.scripts, script);
+            if (pos >= 0) {
+              return scripts[pos].script;
+            } else if (create) {
+              var scr = {
+                tag: script,
+                script: {
+                  defaultLangSys: { reserved: 0, reqFeatureIndex: 65535, featureIndexes: [] },
+                  langSysRecords: []
+                }
+              };
+              scripts.splice(-1 - pos, 0, scr);
+              return scr.script;
+            }
+          }
+        },
+        /**
+         * Returns a language system table
+         * @instance
+         * @param {string} [script='DFLT']
+         * @param {string} [language='dlft']
+         * @param {boolean} create - forces the creation of this langSysTable if it doesn't exist.
+         * @return {Object}
+         */
+        getLangSysTable: function(script, language, create) {
+          var scriptTable = this.getScriptTable(script, create);
+          if (scriptTable) {
+            if (!language || language === "dflt" || language === "DFLT") {
+              return scriptTable.defaultLangSys;
+            }
+            var pos = searchTag(scriptTable.langSysRecords, language);
+            if (pos >= 0) {
+              return scriptTable.langSysRecords[pos].langSys;
+            } else if (create) {
+              var langSysRecord = {
+                tag: language,
+                langSys: { reserved: 0, reqFeatureIndex: 65535, featureIndexes: [] }
+              };
+              scriptTable.langSysRecords.splice(-1 - pos, 0, langSysRecord);
+              return langSysRecord.langSys;
+            }
+          }
+        },
+        /**
+         * Get a specific feature table.
+         * @instance
+         * @param {string} [script='DFLT']
+         * @param {string} [language='dlft']
+         * @param {string} feature - One of the codes listed at https://www.microsoft.com/typography/OTSPEC/featurelist.htm
+         * @param {boolean} create - forces the creation of the feature table if it doesn't exist.
+         * @return {Object}
+         */
+        getFeatureTable: function(script, language, feature, create) {
+          var langSysTable2 = this.getLangSysTable(script, language, create);
+          if (langSysTable2) {
+            var featureRecord;
+            var featIndexes = langSysTable2.featureIndexes;
+            var allFeatures = this.font.tables[this.tableName].features;
+            for (var i = 0; i < featIndexes.length; i++) {
+              featureRecord = allFeatures[featIndexes[i]];
+              if (featureRecord.tag === feature) {
+                return featureRecord.feature;
+              }
+            }
+            if (create) {
+              var index = allFeatures.length;
+              check.assert(index === 0 || feature >= allFeatures[index - 1].tag, "Features must be added in alphabetical order.");
+              featureRecord = {
+                tag: feature,
+                feature: { params: 0, lookupListIndexes: [] }
+              };
+              allFeatures.push(featureRecord);
+              featIndexes.push(index);
+              return featureRecord.feature;
+            }
+          }
+        },
+        /**
+         * Get the lookup tables of a given type for a script/language/feature.
+         * @instance
+         * @param {string} [script='DFLT']
+         * @param {string} [language='dlft']
+         * @param {string} feature - 4-letter feature code
+         * @param {number} lookupType - 1 to 9
+         * @param {boolean} create - forces the creation of the lookup table if it doesn't exist, with no subtables.
+         * @return {Object[]}
+         */
+        getLookupTables: function(script, language, feature, lookupType, create) {
+          var featureTable = this.getFeatureTable(script, language, feature, create);
+          var tables = [];
+          if (featureTable) {
+            var lookupTable;
+            var lookupListIndexes = featureTable.lookupListIndexes;
+            var allLookups = this.font.tables[this.tableName].lookups;
+            for (var i = 0; i < lookupListIndexes.length; i++) {
+              lookupTable = allLookups[lookupListIndexes[i]];
+              if (lookupTable.lookupType === lookupType) {
+                tables.push(lookupTable);
+              }
+            }
+            if (tables.length === 0 && create) {
+              lookupTable = {
+                lookupType,
+                lookupFlag: 0,
+                subtables: [],
+                markFilteringSet: void 0
+              };
+              var index = allLookups.length;
+              allLookups.push(lookupTable);
+              lookupListIndexes.push(index);
+              return [lookupTable];
+            }
+          }
+          return tables;
+        },
+        /**
+         * Find a glyph in a class definition table
+         * https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#class-definition-table
+         * @param {object} classDefTable - an OpenType Layout class definition table
+         * @param {number} glyphIndex - the index of the glyph to find
+         * @returns {number} -1 if not found
+         */
+        getGlyphClass: function(classDefTable, glyphIndex) {
+          switch (classDefTable.format) {
+            case 1:
+              if (classDefTable.startGlyph <= glyphIndex && glyphIndex < classDefTable.startGlyph + classDefTable.classes.length) {
+                return classDefTable.classes[glyphIndex - classDefTable.startGlyph];
+              }
+              return 0;
+            case 2:
+              var range = searchRange(classDefTable.ranges, glyphIndex);
+              return range ? range.classId : 0;
+          }
+        },
+        /**
+         * Find a glyph in a coverage table
+         * https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#coverage-table
+         * @param {object} coverageTable - an OpenType Layout coverage table
+         * @param {number} glyphIndex - the index of the glyph to find
+         * @returns {number} -1 if not found
+         */
+        getCoverageIndex: function(coverageTable, glyphIndex) {
+          switch (coverageTable.format) {
+            case 1:
+              var index = binSearch(coverageTable.glyphs, glyphIndex);
+              return index >= 0 ? index : -1;
+            case 2:
+              var range = searchRange(coverageTable.ranges, glyphIndex);
+              return range ? range.index + glyphIndex - range.start : -1;
+          }
+        },
+        /**
+         * Returns the list of glyph indexes of a coverage table.
+         * Format 1: the list is stored raw
+         * Format 2: compact list as range records.
+         * @instance
+         * @param  {Object} coverageTable
+         * @return {Array}
+         */
+        expandCoverage: function(coverageTable) {
+          if (coverageTable.format === 1) {
+            return coverageTable.glyphs;
+          } else {
+            var glyphs = [];
+            var ranges = coverageTable.ranges;
+            for (var i = 0; i < ranges.length; i++) {
+              var range = ranges[i];
+              var start = range.start;
+              var end = range.end;
+              for (var j = start; j <= end; j++) {
+                glyphs.push(j);
+              }
+            }
+            return glyphs;
+          }
+        }
+      };
+      function Position(font) {
+        Layout.call(this, font, "gpos");
+      }
+      Position.prototype = Layout.prototype;
+      Position.prototype.init = function() {
+        var script = this.getDefaultScriptName();
+        this.defaultKerningTables = this.getKerningTables(script);
+      };
+      Position.prototype.getKerningValue = function(kerningLookups, leftIndex, rightIndex) {
+        for (var i = 0; i < kerningLookups.length; i++) {
+          var subtables = kerningLookups[i].subtables;
+          for (var j = 0; j < subtables.length; j++) {
+            var subtable = subtables[j];
+            var covIndex = this.getCoverageIndex(subtable.coverage, leftIndex);
+            if (covIndex < 0) {
+              continue;
+            }
+            switch (subtable.posFormat) {
+              case 1:
+                var pairSet = subtable.pairSets[covIndex];
+                for (var k = 0; k < pairSet.length; k++) {
+                  var pair = pairSet[k];
+                  if (pair.secondGlyph === rightIndex) {
+                    return pair.value1 && pair.value1.xAdvance || 0;
+                  }
+                }
+                break;
+              case 2:
+                var class1 = this.getGlyphClass(subtable.classDef1, leftIndex);
+                var class2 = this.getGlyphClass(subtable.classDef2, rightIndex);
+                var pair$1 = subtable.classRecords[class1][class2];
+                return pair$1.value1 && pair$1.value1.xAdvance || 0;
+            }
+          }
+        }
+        return 0;
+      };
+      Position.prototype.getKerningTables = function(script, language) {
+        if (this.font.tables.gpos) {
+          return this.getLookupTables(script, language, "kern", 2);
+        }
+      };
+      function Substitution(font) {
+        Layout.call(this, font, "gsub");
+      }
+      function arraysEqual(ar1, ar2) {
+        var n = ar1.length;
+        if (n !== ar2.length) {
+          return false;
+        }
+        for (var i = 0; i < n; i++) {
+          if (ar1[i] !== ar2[i]) {
+            return false;
+          }
+        }
+        return true;
+      }
+      function getSubstFormat(lookupTable, format, defaultSubtable) {
+        var subtables = lookupTable.subtables;
+        for (var i = 0; i < subtables.length; i++) {
+          var subtable = subtables[i];
+          if (subtable.substFormat === format) {
+            return subtable;
+          }
+        }
+        if (defaultSubtable) {
+          subtables.push(defaultSubtable);
+          return defaultSubtable;
+        }
+        return void 0;
+      }
+      Substitution.prototype = Layout.prototype;
+      Substitution.prototype.createDefaultTable = function() {
+        return {
+          version: 1,
+          scripts: [{
+            tag: "DFLT",
+            script: {
+              defaultLangSys: { reserved: 0, reqFeatureIndex: 65535, featureIndexes: [] },
+              langSysRecords: []
+            }
+          }],
+          features: [],
+          lookups: []
+        };
+      };
+      Substitution.prototype.getSingle = function(feature, script, language) {
+        var substitutions = [];
+        var lookupTables = this.getLookupTables(script, language, feature, 1);
+        for (var idx = 0; idx < lookupTables.length; idx++) {
+          var subtables = lookupTables[idx].subtables;
+          for (var i = 0; i < subtables.length; i++) {
+            var subtable = subtables[i];
+            var glyphs = this.expandCoverage(subtable.coverage);
+            var j = void 0;
+            if (subtable.substFormat === 1) {
+              var delta = subtable.deltaGlyphId;
+              for (j = 0; j < glyphs.length; j++) {
+                var glyph = glyphs[j];
+                substitutions.push({ sub: glyph, by: glyph + delta });
+              }
+            } else {
+              var substitute = subtable.substitute;
+              for (j = 0; j < glyphs.length; j++) {
+                substitutions.push({ sub: glyphs[j], by: substitute[j] });
+              }
+            }
+          }
+        }
+        return substitutions;
+      };
+      Substitution.prototype.getMultiple = function(feature, script, language) {
+        var substitutions = [];
+        var lookupTables = this.getLookupTables(script, language, feature, 2);
+        for (var idx = 0; idx < lookupTables.length; idx++) {
+          var subtables = lookupTables[idx].subtables;
+          for (var i = 0; i < subtables.length; i++) {
+            var subtable = subtables[i];
+            var glyphs = this.expandCoverage(subtable.coverage);
+            var j = void 0;
+            for (j = 0; j < glyphs.length; j++) {
+              var glyph = glyphs[j];
+              var replacements = subtable.sequences[j];
+              substitutions.push({ sub: glyph, by: replacements });
+            }
+          }
+        }
+        return substitutions;
+      };
+      Substitution.prototype.getAlternates = function(feature, script, language) {
+        var alternates = [];
+        var lookupTables = this.getLookupTables(script, language, feature, 3);
+        for (var idx = 0; idx < lookupTables.length; idx++) {
+          var subtables = lookupTables[idx].subtables;
+          for (var i = 0; i < subtables.length; i++) {
+            var subtable = subtables[i];
+            var glyphs = this.expandCoverage(subtable.coverage);
+            var alternateSets = subtable.alternateSets;
+            for (var j = 0; j < glyphs.length; j++) {
+              alternates.push({ sub: glyphs[j], by: alternateSets[j] });
+            }
+          }
+        }
+        return alternates;
+      };
+      Substitution.prototype.getLigatures = function(feature, script, language) {
+        var ligatures = [];
+        var lookupTables = this.getLookupTables(script, language, feature, 4);
+        for (var idx = 0; idx < lookupTables.length; idx++) {
+          var subtables = lookupTables[idx].subtables;
+          for (var i = 0; i < subtables.length; i++) {
+            var subtable = subtables[i];
+            var glyphs = this.expandCoverage(subtable.coverage);
+            var ligatureSets = subtable.ligatureSets;
+            for (var j = 0; j < glyphs.length; j++) {
+              var startGlyph = glyphs[j];
+              var ligSet = ligatureSets[j];
+              for (var k = 0; k < ligSet.length; k++) {
+                var lig = ligSet[k];
+                ligatures.push({
+                  sub: [startGlyph].concat(lig.components),
+                  by: lig.ligGlyph
+                });
+              }
+            }
+          }
+        }
+        return ligatures;
+      };
+      Substitution.prototype.addSingle = function(feature, substitution, script, language) {
+        var lookupTable = this.getLookupTables(script, language, feature, 1, true)[0];
+        var subtable = getSubstFormat(lookupTable, 2, {
+          // lookup type 1 subtable, format 2, coverage format 1
+          substFormat: 2,
+          coverage: { format: 1, glyphs: [] },
+          substitute: []
+        });
+        check.assert(subtable.coverage.format === 1, "Single: unable to modify coverage table format " + subtable.coverage.format);
+        var coverageGlyph = substitution.sub;
+        var pos = this.binSearch(subtable.coverage.glyphs, coverageGlyph);
+        if (pos < 0) {
+          pos = -1 - pos;
+          subtable.coverage.glyphs.splice(pos, 0, coverageGlyph);
+          subtable.substitute.splice(pos, 0, 0);
+        }
+        subtable.substitute[pos] = substitution.by;
+      };
+      Substitution.prototype.addMultiple = function(feature, substitution, script, language) {
+        check.assert(substitution.by instanceof Array && substitution.by.length > 1, 'Multiple: "by" must be an array of two or more ids');
+        var lookupTable = this.getLookupTables(script, language, feature, 2, true)[0];
+        var subtable = getSubstFormat(lookupTable, 1, {
+          // lookup type 2 subtable, format 1, coverage format 1
+          substFormat: 1,
+          coverage: { format: 1, glyphs: [] },
+          sequences: []
+        });
+        check.assert(subtable.coverage.format === 1, "Multiple: unable to modify coverage table format " + subtable.coverage.format);
+        var coverageGlyph = substitution.sub;
+        var pos = this.binSearch(subtable.coverage.glyphs, coverageGlyph);
+        if (pos < 0) {
+          pos = -1 - pos;
+          subtable.coverage.glyphs.splice(pos, 0, coverageGlyph);
+          subtable.sequences.splice(pos, 0, 0);
+        }
+        subtable.sequences[pos] = substitution.by;
+      };
+      Substitution.prototype.addAlternate = function(feature, substitution, script, language) {
+        var lookupTable = this.getLookupTables(script, language, feature, 3, true)[0];
+        var subtable = getSubstFormat(lookupTable, 1, {
+          // lookup type 3 subtable, format 1, coverage format 1
+          substFormat: 1,
+          coverage: { format: 1, glyphs: [] },
+          alternateSets: []
+        });
+        check.assert(subtable.coverage.format === 1, "Alternate: unable to modify coverage table format " + subtable.coverage.format);
+        var coverageGlyph = substitution.sub;
+        var pos = this.binSearch(subtable.coverage.glyphs, coverageGlyph);
+        if (pos < 0) {
+          pos = -1 - pos;
+          subtable.coverage.glyphs.splice(pos, 0, coverageGlyph);
+          subtable.alternateSets.splice(pos, 0, 0);
+        }
+        subtable.alternateSets[pos] = substitution.by;
+      };
+      Substitution.prototype.addLigature = function(feature, ligature, script, language) {
+        var lookupTable = this.getLookupTables(script, language, feature, 4, true)[0];
+        var subtable = lookupTable.subtables[0];
+        if (!subtable) {
+          subtable = {
+            // lookup type 4 subtable, format 1, coverage format 1
+            substFormat: 1,
+            coverage: { format: 1, glyphs: [] },
+            ligatureSets: []
+          };
+          lookupTable.subtables[0] = subtable;
+        }
+        check.assert(subtable.coverage.format === 1, "Ligature: unable to modify coverage table format " + subtable.coverage.format);
+        var coverageGlyph = ligature.sub[0];
+        var ligComponents = ligature.sub.slice(1);
+        var ligatureTable = {
+          ligGlyph: ligature.by,
+          components: ligComponents
+        };
+        var pos = this.binSearch(subtable.coverage.glyphs, coverageGlyph);
+        if (pos >= 0) {
+          var ligatureSet = subtable.ligatureSets[pos];
+          for (var i = 0; i < ligatureSet.length; i++) {
+            if (arraysEqual(ligatureSet[i].components, ligComponents)) {
+              return;
+            }
+          }
+          ligatureSet.push(ligatureTable);
+        } else {
+          pos = -1 - pos;
+          subtable.coverage.glyphs.splice(pos, 0, coverageGlyph);
+          subtable.ligatureSets.splice(pos, 0, [ligatureTable]);
+        }
+      };
+      Substitution.prototype.getFeature = function(feature, script, language) {
+        if (/ss\d\d/.test(feature)) {
+          return this.getSingle(feature, script, language);
+        }
+        switch (feature) {
+          case "aalt":
+          case "salt":
+            return this.getSingle(feature, script, language).concat(this.getAlternates(feature, script, language));
+          case "dlig":
+          case "liga":
+          case "rlig":
+            return this.getLigatures(feature, script, language);
+          case "ccmp":
+            return this.getMultiple(feature, script, language).concat(this.getLigatures(feature, script, language));
+          case "stch":
+            return this.getMultiple(feature, script, language);
+        }
+        return void 0;
+      };
+      Substitution.prototype.add = function(feature, sub, script, language) {
+        if (/ss\d\d/.test(feature)) {
+          return this.addSingle(feature, sub, script, language);
+        }
+        switch (feature) {
+          case "aalt":
+          case "salt":
+            if (typeof sub.by === "number") {
+              return this.addSingle(feature, sub, script, language);
+            }
+            return this.addAlternate(feature, sub, script, language);
+          case "dlig":
+          case "liga":
+          case "rlig":
+            return this.addLigature(feature, sub, script, language);
+          case "ccmp":
+            if (sub.by instanceof Array) {
+              return this.addMultiple(feature, sub, script, language);
+            }
+            return this.addLigature(feature, sub, script, language);
+        }
+        return void 0;
+      };
+      function isBrowser() {
+        return typeof window !== "undefined";
+      }
+      function nodeBufferToArrayBuffer(buffer) {
+        var ab = new ArrayBuffer(buffer.length);
+        var view = new Uint8Array(ab);
+        for (var i = 0; i < buffer.length; ++i) {
+          view[i] = buffer[i];
+        }
+        return ab;
+      }
+      function arrayBufferToNodeBuffer(ab) {
+        var buffer = new Buffer(ab.byteLength);
+        var view = new Uint8Array(ab);
+        for (var i = 0; i < buffer.length; ++i) {
+          buffer[i] = view[i];
+        }
+        return buffer;
+      }
+      function checkArgument(expression, message) {
+        if (!expression) {
+          throw message;
+        }
+      }
+      function parseGlyphCoordinate(p, flag, previousValue, shortVectorBitMask, sameBitMask) {
+        var v;
+        if ((flag & shortVectorBitMask) > 0) {
+          v = p.parseByte();
+          if ((flag & sameBitMask) === 0) {
+            v = -v;
+          }
+          v = previousValue + v;
+        } else {
+          if ((flag & sameBitMask) > 0) {
+            v = previousValue;
+          } else {
+            v = previousValue + p.parseShort();
+          }
+        }
+        return v;
+      }
+      function parseGlyph(glyph, data, start) {
+        var p = new parse2.Parser(data, start);
+        glyph.numberOfContours = p.parseShort();
+        glyph._xMin = p.parseShort();
+        glyph._yMin = p.parseShort();
+        glyph._xMax = p.parseShort();
+        glyph._yMax = p.parseShort();
+        var flags;
+        var flag;
+        if (glyph.numberOfContours > 0) {
+          var endPointIndices = glyph.endPointIndices = [];
+          for (var i = 0; i < glyph.numberOfContours; i += 1) {
+            endPointIndices.push(p.parseUShort());
+          }
+          glyph.instructionLength = p.parseUShort();
+          glyph.instructions = [];
+          for (var i$1 = 0; i$1 < glyph.instructionLength; i$1 += 1) {
+            glyph.instructions.push(p.parseByte());
+          }
+          var numberOfCoordinates = endPointIndices[endPointIndices.length - 1] + 1;
+          flags = [];
+          for (var i$2 = 0; i$2 < numberOfCoordinates; i$2 += 1) {
+            flag = p.parseByte();
+            flags.push(flag);
+            if ((flag & 8) > 0) {
+              var repeatCount = p.parseByte();
+              for (var j = 0; j < repeatCount; j += 1) {
+                flags.push(flag);
+                i$2 += 1;
+              }
+            }
+          }
+          check.argument(flags.length === numberOfCoordinates, "Bad flags.");
+          if (endPointIndices.length > 0) {
+            var points = [];
+            var point;
+            if (numberOfCoordinates > 0) {
+              for (var i$3 = 0; i$3 < numberOfCoordinates; i$3 += 1) {
+                flag = flags[i$3];
+                point = {};
+                point.onCurve = !!(flag & 1);
+                point.lastPointOfContour = endPointIndices.indexOf(i$3) >= 0;
+                points.push(point);
+              }
+              var px = 0;
+              for (var i$4 = 0; i$4 < numberOfCoordinates; i$4 += 1) {
+                flag = flags[i$4];
+                point = points[i$4];
+                point.x = parseGlyphCoordinate(p, flag, px, 2, 16);
+                px = point.x;
+              }
+              var py = 0;
+              for (var i$5 = 0; i$5 < numberOfCoordinates; i$5 += 1) {
+                flag = flags[i$5];
+                point = points[i$5];
+                point.y = parseGlyphCoordinate(p, flag, py, 4, 32);
+                py = point.y;
+              }
+            }
+            glyph.points = points;
+          } else {
+            glyph.points = [];
+          }
+        } else if (glyph.numberOfContours === 0) {
+          glyph.points = [];
+        } else {
+          glyph.isComposite = true;
+          glyph.points = [];
+          glyph.components = [];
+          var moreComponents = true;
+          while (moreComponents) {
+            flags = p.parseUShort();
+            var component = {
+              glyphIndex: p.parseUShort(),
+              xScale: 1,
+              scale01: 0,
+              scale10: 0,
+              yScale: 1,
+              dx: 0,
+              dy: 0
+            };
+            if ((flags & 1) > 0) {
+              if ((flags & 2) > 0) {
+                component.dx = p.parseShort();
+                component.dy = p.parseShort();
+              } else {
+                component.matchedPoints = [p.parseUShort(), p.parseUShort()];
+              }
+            } else {
+              if ((flags & 2) > 0) {
+                component.dx = p.parseChar();
+                component.dy = p.parseChar();
+              } else {
+                component.matchedPoints = [p.parseByte(), p.parseByte()];
+              }
+            }
+            if ((flags & 8) > 0) {
+              component.xScale = component.yScale = p.parseF2Dot14();
+            } else if ((flags & 64) > 0) {
+              component.xScale = p.parseF2Dot14();
+              component.yScale = p.parseF2Dot14();
+            } else if ((flags & 128) > 0) {
+              component.xScale = p.parseF2Dot14();
+              component.scale01 = p.parseF2Dot14();
+              component.scale10 = p.parseF2Dot14();
+              component.yScale = p.parseF2Dot14();
+            }
+            glyph.components.push(component);
+            moreComponents = !!(flags & 32);
+          }
+          if (flags & 256) {
+            glyph.instructionLength = p.parseUShort();
+            glyph.instructions = [];
+            for (var i$6 = 0; i$6 < glyph.instructionLength; i$6 += 1) {
+              glyph.instructions.push(p.parseByte());
+            }
+          }
+        }
+      }
+      function transformPoints(points, transform) {
+        var newPoints = [];
+        for (var i = 0; i < points.length; i += 1) {
+          var pt = points[i];
+          var newPt = {
+            x: transform.xScale * pt.x + transform.scale01 * pt.y + transform.dx,
+            y: transform.scale10 * pt.x + transform.yScale * pt.y + transform.dy,
+            onCurve: pt.onCurve,
+            lastPointOfContour: pt.lastPointOfContour
+          };
+          newPoints.push(newPt);
+        }
+        return newPoints;
+      }
+      function getContours(points) {
+        var contours = [];
+        var currentContour = [];
+        for (var i = 0; i < points.length; i += 1) {
+          var pt = points[i];
+          currentContour.push(pt);
+          if (pt.lastPointOfContour) {
+            contours.push(currentContour);
+            currentContour = [];
+          }
+        }
+        check.argument(currentContour.length === 0, "There are still points left in the current contour.");
+        return contours;
+      }
+      function getPath(points) {
+        var p = new Path();
+        if (!points) {
+          return p;
+        }
+        var contours = getContours(points);
+        for (var contourIndex = 0; contourIndex < contours.length; ++contourIndex) {
+          var contour = contours[contourIndex];
+          var prev = null;
+          var curr = contour[contour.length - 1];
+          var next = contour[0];
+          if (curr.onCurve) {
+            p.moveTo(curr.x, curr.y);
+          } else {
+            if (next.onCurve) {
+              p.moveTo(next.x, next.y);
+            } else {
+              var start = { x: (curr.x + next.x) * 0.5, y: (curr.y + next.y) * 0.5 };
+              p.moveTo(start.x, start.y);
+            }
+          }
+          for (var i = 0; i < contour.length; ++i) {
+            prev = curr;
+            curr = next;
+            next = contour[(i + 1) % contour.length];
+            if (curr.onCurve) {
+              p.lineTo(curr.x, curr.y);
+            } else {
+              var prev2 = prev;
+              var next2 = next;
+              if (!prev.onCurve) {
+                prev2 = { x: (curr.x + prev.x) * 0.5, y: (curr.y + prev.y) * 0.5 };
+              }
+              if (!next.onCurve) {
+                next2 = { x: (curr.x + next.x) * 0.5, y: (curr.y + next.y) * 0.5 };
+              }
+              p.quadraticCurveTo(curr.x, curr.y, next2.x, next2.y);
+            }
+          }
+          p.closePath();
+        }
+        return p;
+      }
+      function buildPath(glyphs, glyph) {
+        if (glyph.isComposite) {
+          for (var j = 0; j < glyph.components.length; j += 1) {
+            var component = glyph.components[j];
+            var componentGlyph = glyphs.get(component.glyphIndex);
+            componentGlyph.getPath();
+            if (componentGlyph.points) {
+              var transformedPoints = void 0;
+              if (component.matchedPoints === void 0) {
+                transformedPoints = transformPoints(componentGlyph.points, component);
+              } else {
+                if (component.matchedPoints[0] > glyph.points.length - 1 || component.matchedPoints[1] > componentGlyph.points.length - 1) {
+                  throw Error("Matched points out of range in " + glyph.name);
+                }
+                var firstPt = glyph.points[component.matchedPoints[0]];
+                var secondPt = componentGlyph.points[component.matchedPoints[1]];
+                var transform = {
+                  xScale: component.xScale,
+                  scale01: component.scale01,
+                  scale10: component.scale10,
+                  yScale: component.yScale,
+                  dx: 0,
+                  dy: 0
+                };
+                secondPt = transformPoints([secondPt], transform)[0];
+                transform.dx = firstPt.x - secondPt.x;
+                transform.dy = firstPt.y - secondPt.y;
+                transformedPoints = transformPoints(componentGlyph.points, transform);
+              }
+              glyph.points = glyph.points.concat(transformedPoints);
+            }
+          }
+        }
+        return getPath(glyph.points);
+      }
+      function parseGlyfTableAll(data, start, loca2, font) {
+        var glyphs = new glyphset.GlyphSet(font);
+        for (var i = 0; i < loca2.length - 1; i += 1) {
+          var offset = loca2[i];
+          var nextOffset = loca2[i + 1];
+          if (offset !== nextOffset) {
+            glyphs.push(i, glyphset.ttfGlyphLoader(font, i, parseGlyph, data, start + offset, buildPath));
+          } else {
+            glyphs.push(i, glyphset.glyphLoader(font, i));
+          }
+        }
+        return glyphs;
+      }
+      function parseGlyfTableOnLowMemory(data, start, loca2, font) {
+        var glyphs = new glyphset.GlyphSet(font);
+        font._push = function(i) {
+          var offset = loca2[i];
+          var nextOffset = loca2[i + 1];
+          if (offset !== nextOffset) {
+            glyphs.push(i, glyphset.ttfGlyphLoader(font, i, parseGlyph, data, start + offset, buildPath));
+          } else {
+            glyphs.push(i, glyphset.glyphLoader(font, i));
+          }
+        };
+        return glyphs;
+      }
+      function parseGlyfTable(data, start, loca2, font, opt) {
+        if (opt.lowMemory) {
+          return parseGlyfTableOnLowMemory(data, start, loca2, font);
+        } else {
+          return parseGlyfTableAll(data, start, loca2, font);
+        }
+      }
+      var glyf = { getPath, parse: parseGlyfTable };
+      var instructionTable;
+      var exec;
+      var execGlyph;
+      var execComponent;
+      function Hinting(font) {
+        this.font = font;
+        this.getCommands = function(hPoints) {
+          return glyf.getPath(hPoints).commands;
+        };
+        this._fpgmState = this._prepState = void 0;
+        this._errorState = 0;
+      }
+      function roundOff(v) {
+        return v;
+      }
+      function roundToGrid(v) {
+        return Math.sign(v) * Math.round(Math.abs(v));
+      }
+      function roundToDoubleGrid(v) {
+        return Math.sign(v) * Math.round(Math.abs(v * 2)) / 2;
+      }
+      function roundToHalfGrid(v) {
+        return Math.sign(v) * (Math.round(Math.abs(v) + 0.5) - 0.5);
+      }
+      function roundUpToGrid(v) {
+        return Math.sign(v) * Math.ceil(Math.abs(v));
+      }
+      function roundDownToGrid(v) {
+        return Math.sign(v) * Math.floor(Math.abs(v));
+      }
+      var roundSuper = function(v) {
+        var period = this.srPeriod;
+        var phase = this.srPhase;
+        var threshold = this.srThreshold;
+        var sign = 1;
+        if (v < 0) {
+          v = -v;
+          sign = -1;
+        }
+        v += threshold - phase;
+        v = Math.trunc(v / period) * period;
+        v += phase;
+        if (v < 0) {
+          return phase * sign;
+        }
+        return v * sign;
+      };
+      var xUnitVector = {
+        x: 1,
+        y: 0,
+        axis: "x",
+        // Gets the projected distance between two points.
+        // o1/o2 ... if true, respective original position is used.
+        distance: function(p1, p2, o1, o2) {
+          return (o1 ? p1.xo : p1.x) - (o2 ? p2.xo : p2.x);
+        },
+        // Moves point p so the moved position has the same relative
+        // position to the moved positions of rp1 and rp2 than the
+        // original positions had.
+        //
+        // See APPENDIX on INTERPOLATE at the bottom of this file.
+        interpolate: function(p, rp1, rp2, pv) {
+          var do1;
+          var do2;
+          var doa1;
+          var doa2;
+          var dm1;
+          var dm2;
+          var dt;
+          if (!pv || pv === this) {
+            do1 = p.xo - rp1.xo;
+            do2 = p.xo - rp2.xo;
+            dm1 = rp1.x - rp1.xo;
+            dm2 = rp2.x - rp2.xo;
+            doa1 = Math.abs(do1);
+            doa2 = Math.abs(do2);
+            dt = doa1 + doa2;
+            if (dt === 0) {
+              p.x = p.xo + (dm1 + dm2) / 2;
+              return;
+            }
+            p.x = p.xo + (dm1 * doa2 + dm2 * doa1) / dt;
+            return;
+          }
+          do1 = pv.distance(p, rp1, true, true);
+          do2 = pv.distance(p, rp2, true, true);
+          dm1 = pv.distance(rp1, rp1, false, true);
+          dm2 = pv.distance(rp2, rp2, false, true);
+          doa1 = Math.abs(do1);
+          doa2 = Math.abs(do2);
+          dt = doa1 + doa2;
+          if (dt === 0) {
+            xUnitVector.setRelative(p, p, (dm1 + dm2) / 2, pv, true);
+            return;
+          }
+          xUnitVector.setRelative(p, p, (dm1 * doa2 + dm2 * doa1) / dt, pv, true);
+        },
+        // Slope of line normal to this
+        normalSlope: Number.NEGATIVE_INFINITY,
+        // Sets the point 'p' relative to point 'rp'
+        // by the distance 'd'.
+        //
+        // See APPENDIX on SETRELATIVE at the bottom of this file.
+        //
+        // p   ... point to set
+        // rp  ... reference point
+        // d   ... distance on projection vector
+        // pv  ... projection vector (undefined = this)
+        // org ... if true, uses the original position of rp as reference.
+        setRelative: function(p, rp, d, pv, org) {
+          if (!pv || pv === this) {
+            p.x = (org ? rp.xo : rp.x) + d;
+            return;
+          }
+          var rpx = org ? rp.xo : rp.x;
+          var rpy = org ? rp.yo : rp.y;
+          var rpdx = rpx + d * pv.x;
+          var rpdy = rpy + d * pv.y;
+          p.x = rpdx + (p.y - rpdy) / pv.normalSlope;
+        },
+        // Slope of vector line.
+        slope: 0,
+        // Touches the point p.
+        touch: function(p) {
+          p.xTouched = true;
+        },
+        // Tests if a point p is touched.
+        touched: function(p) {
+          return p.xTouched;
+        },
+        // Untouches the point p.
+        untouch: function(p) {
+          p.xTouched = false;
+        }
+      };
+      var yUnitVector = {
+        x: 0,
+        y: 1,
+        axis: "y",
+        // Gets the projected distance between two points.
+        // o1/o2 ... if true, respective original position is used.
+        distance: function(p1, p2, o1, o2) {
+          return (o1 ? p1.yo : p1.y) - (o2 ? p2.yo : p2.y);
+        },
+        // Moves point p so the moved position has the same relative
+        // position to the moved positions of rp1 and rp2 than the
+        // original positions had.
+        //
+        // See APPENDIX on INTERPOLATE at the bottom of this file.
+        interpolate: function(p, rp1, rp2, pv) {
+          var do1;
+          var do2;
+          var doa1;
+          var doa2;
+          var dm1;
+          var dm2;
+          var dt;
+          if (!pv || pv === this) {
+            do1 = p.yo - rp1.yo;
+            do2 = p.yo - rp2.yo;
+            dm1 = rp1.y - rp1.yo;
+            dm2 = rp2.y - rp2.yo;
+            doa1 = Math.abs(do1);
+            doa2 = Math.abs(do2);
+            dt = doa1 + doa2;
+            if (dt === 0) {
+              p.y = p.yo + (dm1 + dm2) / 2;
+              return;
+            }
+            p.y = p.yo + (dm1 * doa2 + dm2 * doa1) / dt;
+            return;
+          }
+          do1 = pv.distance(p, rp1, true, true);
+          do2 = pv.distance(p, rp2, true, true);
+          dm1 = pv.distance(rp1, rp1, false, true);
+          dm2 = pv.distance(rp2, rp2, false, true);
+          doa1 = Math.abs(do1);
+          doa2 = Math.abs(do2);
+          dt = doa1 + doa2;
+          if (dt === 0) {
+            yUnitVector.setRelative(p, p, (dm1 + dm2) / 2, pv, true);
+            return;
+          }
+          yUnitVector.setRelative(p, p, (dm1 * doa2 + dm2 * doa1) / dt, pv, true);
+        },
+        // Slope of line normal to this.
+        normalSlope: 0,
+        // Sets the point 'p' relative to point 'rp'
+        // by the distance 'd'
+        //
+        // See APPENDIX on SETRELATIVE at the bottom of this file.
+        //
+        // p   ... point to set
+        // rp  ... reference point
+        // d   ... distance on projection vector
+        // pv  ... projection vector (undefined = this)
+        // org ... if true, uses the original position of rp as reference.
+        setRelative: function(p, rp, d, pv, org) {
+          if (!pv || pv === this) {
+            p.y = (org ? rp.yo : rp.y) + d;
+            return;
+          }
+          var rpx = org ? rp.xo : rp.x;
+          var rpy = org ? rp.yo : rp.y;
+          var rpdx = rpx + d * pv.x;
+          var rpdy = rpy + d * pv.y;
+          p.y = rpdy + pv.normalSlope * (p.x - rpdx);
+        },
+        // Slope of vector line.
+        slope: Number.POSITIVE_INFINITY,
+        // Touches the point p.
+        touch: function(p) {
+          p.yTouched = true;
+        },
+        // Tests if a point p is touched.
+        touched: function(p) {
+          return p.yTouched;
+        },
+        // Untouches the point p.
+        untouch: function(p) {
+          p.yTouched = false;
+        }
+      };
+      Object.freeze(xUnitVector);
+      Object.freeze(yUnitVector);
+      function UnitVector(x, y) {
+        this.x = x;
+        this.y = y;
+        this.axis = void 0;
+        this.slope = y / x;
+        this.normalSlope = -x / y;
+        Object.freeze(this);
+      }
+      UnitVector.prototype.distance = function(p1, p2, o1, o2) {
+        return this.x * xUnitVector.distance(p1, p2, o1, o2) + this.y * yUnitVector.distance(p1, p2, o1, o2);
+      };
+      UnitVector.prototype.interpolate = function(p, rp1, rp2, pv) {
+        var dm1;
+        var dm2;
+        var do1;
+        var do2;
+        var doa1;
+        var doa2;
+        var dt;
+        do1 = pv.distance(p, rp1, true, true);
+        do2 = pv.distance(p, rp2, true, true);
+        dm1 = pv.distance(rp1, rp1, false, true);
+        dm2 = pv.distance(rp2, rp2, false, true);
+        doa1 = Math.abs(do1);
+        doa2 = Math.abs(do2);
+        dt = doa1 + doa2;
+        if (dt === 0) {
+          this.setRelative(p, p, (dm1 + dm2) / 2, pv, true);
+          return;
+        }
+        this.setRelative(p, p, (dm1 * doa2 + dm2 * doa1) / dt, pv, true);
+      };
+      UnitVector.prototype.setRelative = function(p, rp, d, pv, org) {
+        pv = pv || this;
+        var rpx = org ? rp.xo : rp.x;
+        var rpy = org ? rp.yo : rp.y;
+        var rpdx = rpx + d * pv.x;
+        var rpdy = rpy + d * pv.y;
+        var pvns = pv.normalSlope;
+        var fvs = this.slope;
+        var px = p.x;
+        var py = p.y;
+        p.x = (fvs * px - pvns * rpdx + rpdy - py) / (fvs - pvns);
+        p.y = fvs * (p.x - px) + py;
+      };
+      UnitVector.prototype.touch = function(p) {
+        p.xTouched = true;
+        p.yTouched = true;
+      };
+      function getUnitVector(x, y) {
+        var d = Math.sqrt(x * x + y * y);
+        x /= d;
+        y /= d;
+        if (x === 1 && y === 0) {
+          return xUnitVector;
+        } else if (x === 0 && y === 1) {
+          return yUnitVector;
+        } else {
+          return new UnitVector(x, y);
+        }
+      }
+      function HPoint(x, y, lastPointOfContour, onCurve) {
+        this.x = this.xo = Math.round(x * 64) / 64;
+        this.y = this.yo = Math.round(y * 64) / 64;
+        this.lastPointOfContour = lastPointOfContour;
+        this.onCurve = onCurve;
+        this.prevPointOnContour = void 0;
+        this.nextPointOnContour = void 0;
+        this.xTouched = false;
+        this.yTouched = false;
+        Object.preventExtensions(this);
+      }
+      HPoint.prototype.nextTouched = function(v) {
+        var p = this.nextPointOnContour;
+        while (!v.touched(p) && p !== this) {
+          p = p.nextPointOnContour;
+        }
+        return p;
+      };
+      HPoint.prototype.prevTouched = function(v) {
+        var p = this.prevPointOnContour;
+        while (!v.touched(p) && p !== this) {
+          p = p.prevPointOnContour;
+        }
+        return p;
+      };
+      var HPZero = Object.freeze(new HPoint(0, 0));
+      var defaultState = {
+        cvCutIn: 17 / 16,
+        // control value cut in
+        deltaBase: 9,
+        deltaShift: 0.125,
+        loop: 1,
+        // loops some instructions
+        minDis: 1,
+        // minimum distance
+        autoFlip: true
+      };
+      function State(env, prog) {
+        this.env = env;
+        this.stack = [];
+        this.prog = prog;
+        switch (env) {
+          case "glyf":
+            this.zp0 = this.zp1 = this.zp2 = 1;
+            this.rp0 = this.rp1 = this.rp2 = 0;
+          case "prep":
+            this.fv = this.pv = this.dpv = xUnitVector;
+            this.round = roundToGrid;
+        }
+      }
+      Hinting.prototype.exec = function(glyph, ppem) {
+        if (typeof ppem !== "number") {
+          throw new Error("Point size is not a number!");
+        }
+        if (this._errorState > 2) {
+          return;
+        }
+        var font = this.font;
+        var prepState = this._prepState;
+        if (!prepState || prepState.ppem !== ppem) {
+          var fpgmState = this._fpgmState;
+          if (!fpgmState) {
+            State.prototype = defaultState;
+            fpgmState = this._fpgmState = new State("fpgm", font.tables.fpgm);
+            fpgmState.funcs = [];
+            fpgmState.font = font;
+            if (exports2.DEBUG) {
+              console.log("---EXEC FPGM---");
+              fpgmState.step = -1;
+            }
+            try {
+              exec(fpgmState);
+            } catch (e) {
+              console.log("Hinting error in FPGM:" + e);
+              this._errorState = 3;
+              return;
+            }
+          }
+          State.prototype = fpgmState;
+          prepState = this._prepState = new State("prep", font.tables.prep);
+          prepState.ppem = ppem;
+          var oCvt = font.tables.cvt;
+          if (oCvt) {
+            var cvt = prepState.cvt = new Array(oCvt.length);
+            var scale = ppem / font.unitsPerEm;
+            for (var c = 0; c < oCvt.length; c++) {
+              cvt[c] = oCvt[c] * scale;
+            }
+          } else {
+            prepState.cvt = [];
+          }
+          if (exports2.DEBUG) {
+            console.log("---EXEC PREP---");
+            prepState.step = -1;
+          }
+          try {
+            exec(prepState);
+          } catch (e) {
+            if (this._errorState < 2) {
+              console.log("Hinting error in PREP:" + e);
+            }
+            this._errorState = 2;
+          }
+        }
+        if (this._errorState > 1) {
+          return;
+        }
+        try {
+          return execGlyph(glyph, prepState);
+        } catch (e) {
+          if (this._errorState < 1) {
+            console.log("Hinting error:" + e);
+            console.log("Note: further hinting errors are silenced");
+          }
+          this._errorState = 1;
+          return void 0;
+        }
+      };
+      execGlyph = function(glyph, prepState) {
+        var xScale = prepState.ppem / prepState.font.unitsPerEm;
+        var yScale = xScale;
+        var components = glyph.components;
+        var contours;
+        var gZone;
+        var state;
+        State.prototype = prepState;
+        if (!components) {
+          state = new State("glyf", glyph.instructions);
+          if (exports2.DEBUG) {
+            console.log("---EXEC GLYPH---");
+            state.step = -1;
+          }
+          execComponent(glyph, state, xScale, yScale);
+          gZone = state.gZone;
+        } else {
+          var font = prepState.font;
+          gZone = [];
+          contours = [];
+          for (var i = 0; i < components.length; i++) {
+            var c = components[i];
+            var cg = font.glyphs.get(c.glyphIndex);
+            state = new State("glyf", cg.instructions);
+            if (exports2.DEBUG) {
+              console.log("---EXEC COMP " + i + "---");
+              state.step = -1;
+            }
+            execComponent(cg, state, xScale, yScale);
+            var dx = Math.round(c.dx * xScale);
+            var dy = Math.round(c.dy * yScale);
+            var gz = state.gZone;
+            var cc = state.contours;
+            for (var pi = 0; pi < gz.length; pi++) {
+              var p = gz[pi];
+              p.xTouched = p.yTouched = false;
+              p.xo = p.x = p.x + dx;
+              p.yo = p.y = p.y + dy;
+            }
+            var gLen = gZone.length;
+            gZone.push.apply(gZone, gz);
+            for (var j = 0; j < cc.length; j++) {
+              contours.push(cc[j] + gLen);
+            }
+          }
+          if (glyph.instructions && !state.inhibitGridFit) {
+            state = new State("glyf", glyph.instructions);
+            state.gZone = state.z0 = state.z1 = state.z2 = gZone;
+            state.contours = contours;
+            gZone.push(
+              new HPoint(0, 0),
+              new HPoint(Math.round(glyph.advanceWidth * xScale), 0)
+            );
+            if (exports2.DEBUG) {
+              console.log("---EXEC COMPOSITE---");
+              state.step = -1;
+            }
+            exec(state);
+            gZone.length -= 2;
+          }
+        }
+        return gZone;
+      };
+      execComponent = function(glyph, state, xScale, yScale) {
+        var points = glyph.points || [];
+        var pLen = points.length;
+        var gZone = state.gZone = state.z0 = state.z1 = state.z2 = [];
+        var contours = state.contours = [];
+        var cp;
+        for (var i = 0; i < pLen; i++) {
+          cp = points[i];
+          gZone[i] = new HPoint(
+            cp.x * xScale,
+            cp.y * yScale,
+            cp.lastPointOfContour,
+            cp.onCurve
+          );
+        }
+        var sp;
+        var np;
+        for (var i$1 = 0; i$1 < pLen; i$1++) {
+          cp = gZone[i$1];
+          if (!sp) {
+            sp = cp;
+            contours.push(i$1);
+          }
+          if (cp.lastPointOfContour) {
+            cp.nextPointOnContour = sp;
+            sp.prevPointOnContour = cp;
+            sp = void 0;
+          } else {
+            np = gZone[i$1 + 1];
+            cp.nextPointOnContour = np;
+            np.prevPointOnContour = cp;
+          }
+        }
+        if (state.inhibitGridFit) {
+          return;
+        }
+        if (exports2.DEBUG) {
+          console.log("PROCESSING GLYPH", state.stack);
+          for (var i$2 = 0; i$2 < pLen; i$2++) {
+            console.log(i$2, gZone[i$2].x, gZone[i$2].y);
+          }
+        }
+        gZone.push(
+          new HPoint(0, 0),
+          new HPoint(Math.round(glyph.advanceWidth * xScale), 0)
+        );
+        exec(state);
+        gZone.length -= 2;
+        if (exports2.DEBUG) {
+          console.log("FINISHED GLYPH", state.stack);
+          for (var i$3 = 0; i$3 < pLen; i$3++) {
+            console.log(i$3, gZone[i$3].x, gZone[i$3].y);
+          }
+        }
+      };
+      exec = function(state) {
+        var prog = state.prog;
+        if (!prog) {
+          return;
+        }
+        var pLen = prog.length;
+        var ins;
+        for (state.ip = 0; state.ip < pLen; state.ip++) {
+          if (exports2.DEBUG) {
+            state.step++;
+          }
+          ins = instructionTable[prog[state.ip]];
+          if (!ins) {
+            throw new Error(
+              "unknown instruction: 0x" + Number(prog[state.ip]).toString(16)
+            );
+          }
+          ins(state);
+        }
+      };
+      function initTZone(state) {
+        var tZone = state.tZone = new Array(state.gZone.length);
+        for (var i = 0; i < tZone.length; i++) {
+          tZone[i] = new HPoint(0, 0);
+        }
+      }
+      function skip(state, handleElse) {
+        var prog = state.prog;
+        var ip = state.ip;
+        var nesting = 1;
+        var ins;
+        do {
+          ins = prog[++ip];
+          if (ins === 88) {
+            nesting++;
+          } else if (ins === 89) {
+            nesting--;
+          } else if (ins === 64) {
+            ip += prog[ip + 1] + 1;
+          } else if (ins === 65) {
+            ip += 2 * prog[ip + 1] + 1;
+          } else if (ins >= 176 && ins <= 183) {
+            ip += ins - 176 + 1;
+          } else if (ins >= 184 && ins <= 191) {
+            ip += (ins - 184 + 1) * 2;
+          } else if (handleElse && nesting === 1 && ins === 27) {
+            break;
+          }
+        } while (nesting > 0);
+        state.ip = ip;
+      }
+      function SVTCA(v, state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "SVTCA[" + v.axis + "]");
+        }
+        state.fv = state.pv = state.dpv = v;
+      }
+      function SPVTCA(v, state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "SPVTCA[" + v.axis + "]");
+        }
+        state.pv = state.dpv = v;
+      }
+      function SFVTCA(v, state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "SFVTCA[" + v.axis + "]");
+        }
+        state.fv = v;
+      }
+      function SPVTL(a, state) {
+        var stack = state.stack;
+        var p2i = stack.pop();
+        var p1i = stack.pop();
+        var p2 = state.z2[p2i];
+        var p1 = state.z1[p1i];
+        if (exports2.DEBUG) {
+          console.log("SPVTL[" + a + "]", p2i, p1i);
+        }
+        var dx;
+        var dy;
+        if (!a) {
+          dx = p1.x - p2.x;
+          dy = p1.y - p2.y;
+        } else {
+          dx = p2.y - p1.y;
+          dy = p1.x - p2.x;
+        }
+        state.pv = state.dpv = getUnitVector(dx, dy);
+      }
+      function SFVTL(a, state) {
+        var stack = state.stack;
+        var p2i = stack.pop();
+        var p1i = stack.pop();
+        var p2 = state.z2[p2i];
+        var p1 = state.z1[p1i];
+        if (exports2.DEBUG) {
+          console.log("SFVTL[" + a + "]", p2i, p1i);
+        }
+        var dx;
+        var dy;
+        if (!a) {
+          dx = p1.x - p2.x;
+          dy = p1.y - p2.y;
+        } else {
+          dx = p2.y - p1.y;
+          dy = p1.x - p2.x;
+        }
+        state.fv = getUnitVector(dx, dy);
+      }
+      function SPVFS(state) {
+        var stack = state.stack;
+        var y = stack.pop();
+        var x = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SPVFS[]", y, x);
+        }
+        state.pv = state.dpv = getUnitVector(x, y);
+      }
+      function SFVFS(state) {
+        var stack = state.stack;
+        var y = stack.pop();
+        var x = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SPVFS[]", y, x);
+        }
+        state.fv = getUnitVector(x, y);
+      }
+      function GPV(state) {
+        var stack = state.stack;
+        var pv = state.pv;
+        if (exports2.DEBUG) {
+          console.log(state.step, "GPV[]");
+        }
+        stack.push(pv.x * 16384);
+        stack.push(pv.y * 16384);
+      }
+      function GFV(state) {
+        var stack = state.stack;
+        var fv = state.fv;
+        if (exports2.DEBUG) {
+          console.log(state.step, "GFV[]");
+        }
+        stack.push(fv.x * 16384);
+        stack.push(fv.y * 16384);
+      }
+      function SFVTPV(state) {
+        state.fv = state.pv;
+        if (exports2.DEBUG) {
+          console.log(state.step, "SFVTPV[]");
+        }
+      }
+      function ISECT(state) {
+        var stack = state.stack;
+        var pa0i = stack.pop();
+        var pa1i = stack.pop();
+        var pb0i = stack.pop();
+        var pb1i = stack.pop();
+        var pi = stack.pop();
+        var z0 = state.z0;
+        var z1 = state.z1;
+        var pa0 = z0[pa0i];
+        var pa1 = z0[pa1i];
+        var pb0 = z1[pb0i];
+        var pb1 = z1[pb1i];
+        var p = state.z2[pi];
+        if (exports2.DEBUG) {
+          console.log("ISECT[], ", pa0i, pa1i, pb0i, pb1i, pi);
+        }
+        var x1 = pa0.x;
+        var y1 = pa0.y;
+        var x2 = pa1.x;
+        var y2 = pa1.y;
+        var x3 = pb0.x;
+        var y3 = pb0.y;
+        var x4 = pb1.x;
+        var y4 = pb1.y;
+        var div = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+        var f1 = x1 * y2 - y1 * x2;
+        var f2 = x3 * y4 - y3 * x4;
+        p.x = (f1 * (x3 - x4) - f2 * (x1 - x2)) / div;
+        p.y = (f1 * (y3 - y4) - f2 * (y1 - y2)) / div;
+      }
+      function SRP0(state) {
+        state.rp0 = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SRP0[]", state.rp0);
+        }
+      }
+      function SRP1(state) {
+        state.rp1 = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SRP1[]", state.rp1);
+        }
+      }
+      function SRP2(state) {
+        state.rp2 = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SRP2[]", state.rp2);
+        }
+      }
+      function SZP0(state) {
+        var n = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SZP0[]", n);
+        }
+        state.zp0 = n;
+        switch (n) {
+          case 0:
+            if (!state.tZone) {
+              initTZone(state);
+            }
+            state.z0 = state.tZone;
+            break;
+          case 1:
+            state.z0 = state.gZone;
+            break;
+          default:
+            throw new Error("Invalid zone pointer");
+        }
+      }
+      function SZP1(state) {
+        var n = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SZP1[]", n);
+        }
+        state.zp1 = n;
+        switch (n) {
+          case 0:
+            if (!state.tZone) {
+              initTZone(state);
+            }
+            state.z1 = state.tZone;
+            break;
+          case 1:
+            state.z1 = state.gZone;
+            break;
+          default:
+            throw new Error("Invalid zone pointer");
+        }
+      }
+      function SZP2(state) {
+        var n = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SZP2[]", n);
+        }
+        state.zp2 = n;
+        switch (n) {
+          case 0:
+            if (!state.tZone) {
+              initTZone(state);
+            }
+            state.z2 = state.tZone;
+            break;
+          case 1:
+            state.z2 = state.gZone;
+            break;
+          default:
+            throw new Error("Invalid zone pointer");
+        }
+      }
+      function SZPS(state) {
+        var n = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SZPS[]", n);
+        }
+        state.zp0 = state.zp1 = state.zp2 = n;
+        switch (n) {
+          case 0:
+            if (!state.tZone) {
+              initTZone(state);
+            }
+            state.z0 = state.z1 = state.z2 = state.tZone;
+            break;
+          case 1:
+            state.z0 = state.z1 = state.z2 = state.gZone;
+            break;
+          default:
+            throw new Error("Invalid zone pointer");
+        }
+      }
+      function SLOOP(state) {
+        state.loop = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SLOOP[]", state.loop);
+        }
+      }
+      function RTG(state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "RTG[]");
+        }
+        state.round = roundToGrid;
+      }
+      function RTHG(state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "RTHG[]");
+        }
+        state.round = roundToHalfGrid;
+      }
+      function SMD(state) {
+        var d = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SMD[]", d);
+        }
+        state.minDis = d / 64;
+      }
+      function ELSE(state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "ELSE[]");
+        }
+        skip(state, false);
+      }
+      function JMPR(state) {
+        var o = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "JMPR[]", o);
+        }
+        state.ip += o - 1;
+      }
+      function SCVTCI(state) {
+        var n = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SCVTCI[]", n);
+        }
+        state.cvCutIn = n / 64;
+      }
+      function DUP(state) {
+        var stack = state.stack;
+        if (exports2.DEBUG) {
+          console.log(state.step, "DUP[]");
+        }
+        stack.push(stack[stack.length - 1]);
+      }
+      function POP(state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "POP[]");
+        }
+        state.stack.pop();
+      }
+      function CLEAR(state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "CLEAR[]");
+        }
+        state.stack.length = 0;
+      }
+      function SWAP(state) {
+        var stack = state.stack;
+        var a = stack.pop();
+        var b = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SWAP[]");
+        }
+        stack.push(a);
+        stack.push(b);
+      }
+      function DEPTH(state) {
+        var stack = state.stack;
+        if (exports2.DEBUG) {
+          console.log(state.step, "DEPTH[]");
+        }
+        stack.push(stack.length);
+      }
+      function LOOPCALL(state) {
+        var stack = state.stack;
+        var fn = stack.pop();
+        var c = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "LOOPCALL[]", fn, c);
+        }
+        var cip = state.ip;
+        var cprog = state.prog;
+        state.prog = state.funcs[fn];
+        for (var i = 0; i < c; i++) {
+          exec(state);
+          if (exports2.DEBUG) {
+            console.log(
+              ++state.step,
+              i + 1 < c ? "next loopcall" : "done loopcall",
+              i
+            );
+          }
+        }
+        state.ip = cip;
+        state.prog = cprog;
+      }
+      function CALL(state) {
+        var fn = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "CALL[]", fn);
+        }
+        var cip = state.ip;
+        var cprog = state.prog;
+        state.prog = state.funcs[fn];
+        exec(state);
+        state.ip = cip;
+        state.prog = cprog;
+        if (exports2.DEBUG) {
+          console.log(++state.step, "returning from", fn);
+        }
+      }
+      function CINDEX(state) {
+        var stack = state.stack;
+        var k = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "CINDEX[]", k);
+        }
+        stack.push(stack[stack.length - k]);
+      }
+      function MINDEX(state) {
+        var stack = state.stack;
+        var k = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "MINDEX[]", k);
+        }
+        stack.push(stack.splice(stack.length - k, 1)[0]);
+      }
+      function FDEF(state) {
+        if (state.env !== "fpgm") {
+          throw new Error("FDEF not allowed here");
+        }
+        var stack = state.stack;
+        var prog = state.prog;
+        var ip = state.ip;
+        var fn = stack.pop();
+        var ipBegin = ip;
+        if (exports2.DEBUG) {
+          console.log(state.step, "FDEF[]", fn);
+        }
+        while (prog[++ip] !== 45) {
+        }
+        state.ip = ip;
+        state.funcs[fn] = prog.slice(ipBegin + 1, ip);
+      }
+      function MDAP(round, state) {
+        var pi = state.stack.pop();
+        var p = state.z0[pi];
+        var fv = state.fv;
+        var pv = state.pv;
+        if (exports2.DEBUG) {
+          console.log(state.step, "MDAP[" + round + "]", pi);
+        }
+        var d = pv.distance(p, HPZero);
+        if (round) {
+          d = state.round(d);
+        }
+        fv.setRelative(p, HPZero, d, pv);
+        fv.touch(p);
+        state.rp0 = state.rp1 = pi;
+      }
+      function IUP(v, state) {
+        var z2 = state.z2;
+        var pLen = z2.length - 2;
+        var cp;
+        var pp;
+        var np;
+        if (exports2.DEBUG) {
+          console.log(state.step, "IUP[" + v.axis + "]");
+        }
+        for (var i = 0; i < pLen; i++) {
+          cp = z2[i];
+          if (v.touched(cp)) {
+            continue;
+          }
+          pp = cp.prevTouched(v);
+          if (pp === cp) {
+            continue;
+          }
+          np = cp.nextTouched(v);
+          if (pp === np) {
+            v.setRelative(cp, cp, v.distance(pp, pp, false, true), v, true);
+          }
+          v.interpolate(cp, pp, np, v);
+        }
+      }
+      function SHP(a, state) {
+        var stack = state.stack;
+        var rpi = a ? state.rp1 : state.rp2;
+        var rp = (a ? state.z0 : state.z1)[rpi];
+        var fv = state.fv;
+        var pv = state.pv;
+        var loop = state.loop;
+        var z2 = state.z2;
+        while (loop--) {
+          var pi = stack.pop();
+          var p = z2[pi];
+          var d = pv.distance(rp, rp, false, true);
+          fv.setRelative(p, p, d, pv);
+          fv.touch(p);
+          if (exports2.DEBUG) {
+            console.log(
+              state.step,
+              (state.loop > 1 ? "loop " + (state.loop - loop) + ": " : "") + "SHP[" + (a ? "rp1" : "rp2") + "]",
+              pi
+            );
+          }
+        }
+        state.loop = 1;
+      }
+      function SHC(a, state) {
+        var stack = state.stack;
+        var rpi = a ? state.rp1 : state.rp2;
+        var rp = (a ? state.z0 : state.z1)[rpi];
+        var fv = state.fv;
+        var pv = state.pv;
+        var ci = stack.pop();
+        var sp = state.z2[state.contours[ci]];
+        var p = sp;
+        if (exports2.DEBUG) {
+          console.log(state.step, "SHC[" + a + "]", ci);
+        }
+        var d = pv.distance(rp, rp, false, true);
+        do {
+          if (p !== rp) {
+            fv.setRelative(p, p, d, pv);
+          }
+          p = p.nextPointOnContour;
+        } while (p !== sp);
+      }
+      function SHZ(a, state) {
+        var stack = state.stack;
+        var rpi = a ? state.rp1 : state.rp2;
+        var rp = (a ? state.z0 : state.z1)[rpi];
+        var fv = state.fv;
+        var pv = state.pv;
+        var e = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SHZ[" + a + "]", e);
+        }
+        var z;
+        switch (e) {
+          case 0:
+            z = state.tZone;
+            break;
+          case 1:
+            z = state.gZone;
+            break;
+          default:
+            throw new Error("Invalid zone");
+        }
+        var p;
+        var d = pv.distance(rp, rp, false, true);
+        var pLen = z.length - 2;
+        for (var i = 0; i < pLen; i++) {
+          p = z[i];
+          fv.setRelative(p, p, d, pv);
+        }
+      }
+      function SHPIX(state) {
+        var stack = state.stack;
+        var loop = state.loop;
+        var fv = state.fv;
+        var d = stack.pop() / 64;
+        var z2 = state.z2;
+        while (loop--) {
+          var pi = stack.pop();
+          var p = z2[pi];
+          if (exports2.DEBUG) {
+            console.log(
+              state.step,
+              (state.loop > 1 ? "loop " + (state.loop - loop) + ": " : "") + "SHPIX[]",
+              pi,
+              d
+            );
+          }
+          fv.setRelative(p, p, d);
+          fv.touch(p);
+        }
+        state.loop = 1;
+      }
+      function IP(state) {
+        var stack = state.stack;
+        var rp1i = state.rp1;
+        var rp2i = state.rp2;
+        var loop = state.loop;
+        var rp1 = state.z0[rp1i];
+        var rp2 = state.z1[rp2i];
+        var fv = state.fv;
+        var pv = state.dpv;
+        var z2 = state.z2;
+        while (loop--) {
+          var pi = stack.pop();
+          var p = z2[pi];
+          if (exports2.DEBUG) {
+            console.log(
+              state.step,
+              (state.loop > 1 ? "loop " + (state.loop - loop) + ": " : "") + "IP[]",
+              pi,
+              rp1i,
+              "<->",
+              rp2i
+            );
+          }
+          fv.interpolate(p, rp1, rp2, pv);
+          fv.touch(p);
+        }
+        state.loop = 1;
+      }
+      function MSIRP(a, state) {
+        var stack = state.stack;
+        var d = stack.pop() / 64;
+        var pi = stack.pop();
+        var p = state.z1[pi];
+        var rp0 = state.z0[state.rp0];
+        var fv = state.fv;
+        var pv = state.pv;
+        fv.setRelative(p, rp0, d, pv);
+        fv.touch(p);
+        if (exports2.DEBUG) {
+          console.log(state.step, "MSIRP[" + a + "]", d, pi);
+        }
+        state.rp1 = state.rp0;
+        state.rp2 = pi;
+        if (a) {
+          state.rp0 = pi;
+        }
+      }
+      function ALIGNRP(state) {
+        var stack = state.stack;
+        var rp0i = state.rp0;
+        var rp0 = state.z0[rp0i];
+        var loop = state.loop;
+        var fv = state.fv;
+        var pv = state.pv;
+        var z1 = state.z1;
+        while (loop--) {
+          var pi = stack.pop();
+          var p = z1[pi];
+          if (exports2.DEBUG) {
+            console.log(
+              state.step,
+              (state.loop > 1 ? "loop " + (state.loop - loop) + ": " : "") + "ALIGNRP[]",
+              pi
+            );
+          }
+          fv.setRelative(p, rp0, 0, pv);
+          fv.touch(p);
+        }
+        state.loop = 1;
+      }
+      function RTDG(state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "RTDG[]");
+        }
+        state.round = roundToDoubleGrid;
+      }
+      function MIAP(round, state) {
+        var stack = state.stack;
+        var n = stack.pop();
+        var pi = stack.pop();
+        var p = state.z0[pi];
+        var fv = state.fv;
+        var pv = state.pv;
+        var cv = state.cvt[n];
+        if (exports2.DEBUG) {
+          console.log(
+            state.step,
+            "MIAP[" + round + "]",
+            n,
+            "(",
+            cv,
+            ")",
+            pi
+          );
+        }
+        var d = pv.distance(p, HPZero);
+        if (round) {
+          if (Math.abs(d - cv) < state.cvCutIn) {
+            d = cv;
+          }
+          d = state.round(d);
+        }
+        fv.setRelative(p, HPZero, d, pv);
+        if (state.zp0 === 0) {
+          p.xo = p.x;
+          p.yo = p.y;
+        }
+        fv.touch(p);
+        state.rp0 = state.rp1 = pi;
+      }
+      function NPUSHB(state) {
+        var prog = state.prog;
+        var ip = state.ip;
+        var stack = state.stack;
+        var n = prog[++ip];
+        if (exports2.DEBUG) {
+          console.log(state.step, "NPUSHB[]", n);
+        }
+        for (var i = 0; i < n; i++) {
+          stack.push(prog[++ip]);
+        }
+        state.ip = ip;
+      }
+      function NPUSHW(state) {
+        var ip = state.ip;
+        var prog = state.prog;
+        var stack = state.stack;
+        var n = prog[++ip];
+        if (exports2.DEBUG) {
+          console.log(state.step, "NPUSHW[]", n);
+        }
+        for (var i = 0; i < n; i++) {
+          var w = prog[++ip] << 8 | prog[++ip];
+          if (w & 32768) {
+            w = -((w ^ 65535) + 1);
+          }
+          stack.push(w);
+        }
+        state.ip = ip;
+      }
+      function WS(state) {
+        var stack = state.stack;
+        var store = state.store;
+        if (!store) {
+          store = state.store = [];
+        }
+        var v = stack.pop();
+        var l = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "WS", v, l);
+        }
+        store[l] = v;
+      }
+      function RS(state) {
+        var stack = state.stack;
+        var store = state.store;
+        var l = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "RS", l);
+        }
+        var v = store && store[l] || 0;
+        stack.push(v);
+      }
+      function WCVTP(state) {
+        var stack = state.stack;
+        var v = stack.pop();
+        var l = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "WCVTP", v, l);
+        }
+        state.cvt[l] = v / 64;
+      }
+      function RCVT(state) {
+        var stack = state.stack;
+        var cvte = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "RCVT", cvte);
+        }
+        stack.push(state.cvt[cvte] * 64);
+      }
+      function GC(a, state) {
+        var stack = state.stack;
+        var pi = stack.pop();
+        var p = state.z2[pi];
+        if (exports2.DEBUG) {
+          console.log(state.step, "GC[" + a + "]", pi);
+        }
+        stack.push(state.dpv.distance(p, HPZero, a, false) * 64);
+      }
+      function MD(a, state) {
+        var stack = state.stack;
+        var pi2 = stack.pop();
+        var pi1 = stack.pop();
+        var p2 = state.z1[pi2];
+        var p1 = state.z0[pi1];
+        var d = state.dpv.distance(p1, p2, a, a);
+        if (exports2.DEBUG) {
+          console.log(state.step, "MD[" + a + "]", pi2, pi1, "->", d);
+        }
+        state.stack.push(Math.round(d * 64));
+      }
+      function MPPEM(state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "MPPEM[]");
+        }
+        state.stack.push(state.ppem);
+      }
+      function FLIPON(state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "FLIPON[]");
+        }
+        state.autoFlip = true;
+      }
+      function LT(state) {
+        var stack = state.stack;
+        var e2 = stack.pop();
+        var e1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "LT[]", e2, e1);
+        }
+        stack.push(e1 < e2 ? 1 : 0);
+      }
+      function LTEQ(state) {
+        var stack = state.stack;
+        var e2 = stack.pop();
+        var e1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "LTEQ[]", e2, e1);
+        }
+        stack.push(e1 <= e2 ? 1 : 0);
+      }
+      function GT(state) {
+        var stack = state.stack;
+        var e2 = stack.pop();
+        var e1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "GT[]", e2, e1);
+        }
+        stack.push(e1 > e2 ? 1 : 0);
+      }
+      function GTEQ(state) {
+        var stack = state.stack;
+        var e2 = stack.pop();
+        var e1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "GTEQ[]", e2, e1);
+        }
+        stack.push(e1 >= e2 ? 1 : 0);
+      }
+      function EQ(state) {
+        var stack = state.stack;
+        var e2 = stack.pop();
+        var e1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "EQ[]", e2, e1);
+        }
+        stack.push(e2 === e1 ? 1 : 0);
+      }
+      function NEQ(state) {
+        var stack = state.stack;
+        var e2 = stack.pop();
+        var e1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "NEQ[]", e2, e1);
+        }
+        stack.push(e2 !== e1 ? 1 : 0);
+      }
+      function ODD(state) {
+        var stack = state.stack;
+        var n = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "ODD[]", n);
+        }
+        stack.push(Math.trunc(n) % 2 ? 1 : 0);
+      }
+      function EVEN(state) {
+        var stack = state.stack;
+        var n = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "EVEN[]", n);
+        }
+        stack.push(Math.trunc(n) % 2 ? 0 : 1);
+      }
+      function IF(state) {
+        var test = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "IF[]", test);
+        }
+        if (!test) {
+          skip(state, true);
+          if (exports2.DEBUG) {
+            console.log(state.step, "EIF[]");
+          }
+        }
+      }
+      function EIF(state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "EIF[]");
+        }
+      }
+      function AND(state) {
+        var stack = state.stack;
+        var e2 = stack.pop();
+        var e1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "AND[]", e2, e1);
+        }
+        stack.push(e2 && e1 ? 1 : 0);
+      }
+      function OR(state) {
+        var stack = state.stack;
+        var e2 = stack.pop();
+        var e1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "OR[]", e2, e1);
+        }
+        stack.push(e2 || e1 ? 1 : 0);
+      }
+      function NOT(state) {
+        var stack = state.stack;
+        var e = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "NOT[]", e);
+        }
+        stack.push(e ? 0 : 1);
+      }
+      function DELTAP123(b, state) {
+        var stack = state.stack;
+        var n = stack.pop();
+        var fv = state.fv;
+        var pv = state.pv;
+        var ppem = state.ppem;
+        var base = state.deltaBase + (b - 1) * 16;
+        var ds = state.deltaShift;
+        var z0 = state.z0;
+        if (exports2.DEBUG) {
+          console.log(state.step, "DELTAP[" + b + "]", n, stack);
+        }
+        for (var i = 0; i < n; i++) {
+          var pi = stack.pop();
+          var arg = stack.pop();
+          var appem = base + ((arg & 240) >> 4);
+          if (appem !== ppem) {
+            continue;
+          }
+          var mag = (arg & 15) - 8;
+          if (mag >= 0) {
+            mag++;
+          }
+          if (exports2.DEBUG) {
+            console.log(state.step, "DELTAPFIX", pi, "by", mag * ds);
+          }
+          var p = z0[pi];
+          fv.setRelative(p, p, mag * ds, pv);
+        }
+      }
+      function SDB(state) {
+        var stack = state.stack;
+        var n = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SDB[]", n);
+        }
+        state.deltaBase = n;
+      }
+      function SDS(state) {
+        var stack = state.stack;
+        var n = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SDS[]", n);
+        }
+        state.deltaShift = Math.pow(0.5, n);
+      }
+      function ADD(state) {
+        var stack = state.stack;
+        var n2 = stack.pop();
+        var n1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "ADD[]", n2, n1);
+        }
+        stack.push(n1 + n2);
+      }
+      function SUB(state) {
+        var stack = state.stack;
+        var n2 = stack.pop();
+        var n1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SUB[]", n2, n1);
+        }
+        stack.push(n1 - n2);
+      }
+      function DIV(state) {
+        var stack = state.stack;
+        var n2 = stack.pop();
+        var n1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "DIV[]", n2, n1);
+        }
+        stack.push(n1 * 64 / n2);
+      }
+      function MUL(state) {
+        var stack = state.stack;
+        var n2 = stack.pop();
+        var n1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "MUL[]", n2, n1);
+        }
+        stack.push(n1 * n2 / 64);
+      }
+      function ABS(state) {
+        var stack = state.stack;
+        var n = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "ABS[]", n);
+        }
+        stack.push(Math.abs(n));
+      }
+      function NEG(state) {
+        var stack = state.stack;
+        var n = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "NEG[]", n);
+        }
+        stack.push(-n);
+      }
+      function FLOOR(state) {
+        var stack = state.stack;
+        var n = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "FLOOR[]", n);
+        }
+        stack.push(Math.floor(n / 64) * 64);
+      }
+      function CEILING(state) {
+        var stack = state.stack;
+        var n = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "CEILING[]", n);
+        }
+        stack.push(Math.ceil(n / 64) * 64);
+      }
+      function ROUND(dt, state) {
+        var stack = state.stack;
+        var n = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "ROUND[]");
+        }
+        stack.push(state.round(n / 64) * 64);
+      }
+      function WCVTF(state) {
+        var stack = state.stack;
+        var v = stack.pop();
+        var l = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "WCVTF[]", v, l);
+        }
+        state.cvt[l] = v * state.ppem / state.font.unitsPerEm;
+      }
+      function DELTAC123(b, state) {
+        var stack = state.stack;
+        var n = stack.pop();
+        var ppem = state.ppem;
+        var base = state.deltaBase + (b - 1) * 16;
+        var ds = state.deltaShift;
+        if (exports2.DEBUG) {
+          console.log(state.step, "DELTAC[" + b + "]", n, stack);
+        }
+        for (var i = 0; i < n; i++) {
+          var c = stack.pop();
+          var arg = stack.pop();
+          var appem = base + ((arg & 240) >> 4);
+          if (appem !== ppem) {
+            continue;
+          }
+          var mag = (arg & 15) - 8;
+          if (mag >= 0) {
+            mag++;
+          }
+          var delta = mag * ds;
+          if (exports2.DEBUG) {
+            console.log(state.step, "DELTACFIX", c, "by", delta);
+          }
+          state.cvt[c] += delta;
+        }
+      }
+      function SROUND(state) {
+        var n = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SROUND[]", n);
+        }
+        state.round = roundSuper;
+        var period;
+        switch (n & 192) {
+          case 0:
+            period = 0.5;
+            break;
+          case 64:
+            period = 1;
+            break;
+          case 128:
+            period = 2;
+            break;
+          default:
+            throw new Error("invalid SROUND value");
+        }
+        state.srPeriod = period;
+        switch (n & 48) {
+          case 0:
+            state.srPhase = 0;
+            break;
+          case 16:
+            state.srPhase = 0.25 * period;
+            break;
+          case 32:
+            state.srPhase = 0.5 * period;
+            break;
+          case 48:
+            state.srPhase = 0.75 * period;
+            break;
+          default:
+            throw new Error("invalid SROUND value");
+        }
+        n &= 15;
+        if (n === 0) {
+          state.srThreshold = 0;
+        } else {
+          state.srThreshold = (n / 8 - 0.5) * period;
+        }
+      }
+      function S45ROUND(state) {
+        var n = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "S45ROUND[]", n);
+        }
+        state.round = roundSuper;
+        var period;
+        switch (n & 192) {
+          case 0:
+            period = Math.sqrt(2) / 2;
+            break;
+          case 64:
+            period = Math.sqrt(2);
+            break;
+          case 128:
+            period = 2 * Math.sqrt(2);
+            break;
+          default:
+            throw new Error("invalid S45ROUND value");
+        }
+        state.srPeriod = period;
+        switch (n & 48) {
+          case 0:
+            state.srPhase = 0;
+            break;
+          case 16:
+            state.srPhase = 0.25 * period;
+            break;
+          case 32:
+            state.srPhase = 0.5 * period;
+            break;
+          case 48:
+            state.srPhase = 0.75 * period;
+            break;
+          default:
+            throw new Error("invalid S45ROUND value");
+        }
+        n &= 15;
+        if (n === 0) {
+          state.srThreshold = 0;
+        } else {
+          state.srThreshold = (n / 8 - 0.5) * period;
+        }
+      }
+      function ROFF(state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "ROFF[]");
+        }
+        state.round = roundOff;
+      }
+      function RUTG(state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "RUTG[]");
+        }
+        state.round = roundUpToGrid;
+      }
+      function RDTG(state) {
+        if (exports2.DEBUG) {
+          console.log(state.step, "RDTG[]");
+        }
+        state.round = roundDownToGrid;
+      }
+      function SCANCTRL(state) {
+        var n = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SCANCTRL[]", n);
+        }
+      }
+      function SDPVTL(a, state) {
+        var stack = state.stack;
+        var p2i = stack.pop();
+        var p1i = stack.pop();
+        var p2 = state.z2[p2i];
+        var p1 = state.z1[p1i];
+        if (exports2.DEBUG) {
+          console.log(state.step, "SDPVTL[" + a + "]", p2i, p1i);
+        }
+        var dx;
+        var dy;
+        if (!a) {
+          dx = p1.x - p2.x;
+          dy = p1.y - p2.y;
+        } else {
+          dx = p2.y - p1.y;
+          dy = p1.x - p2.x;
+        }
+        state.dpv = getUnitVector(dx, dy);
+      }
+      function GETINFO(state) {
+        var stack = state.stack;
+        var sel = stack.pop();
+        var r = 0;
+        if (exports2.DEBUG) {
+          console.log(state.step, "GETINFO[]", sel);
+        }
+        if (sel & 1) {
+          r = 35;
+        }
+        if (sel & 32) {
+          r |= 4096;
+        }
+        stack.push(r);
+      }
+      function ROLL(state) {
+        var stack = state.stack;
+        var a = stack.pop();
+        var b = stack.pop();
+        var c = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "ROLL[]");
+        }
+        stack.push(b);
+        stack.push(a);
+        stack.push(c);
+      }
+      function MAX(state) {
+        var stack = state.stack;
+        var e2 = stack.pop();
+        var e1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "MAX[]", e2, e1);
+        }
+        stack.push(Math.max(e1, e2));
+      }
+      function MIN(state) {
+        var stack = state.stack;
+        var e2 = stack.pop();
+        var e1 = stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "MIN[]", e2, e1);
+        }
+        stack.push(Math.min(e1, e2));
+      }
+      function SCANTYPE(state) {
+        var n = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "SCANTYPE[]", n);
+        }
+      }
+      function INSTCTRL(state) {
+        var s = state.stack.pop();
+        var v = state.stack.pop();
+        if (exports2.DEBUG) {
+          console.log(state.step, "INSTCTRL[]", s, v);
+        }
+        switch (s) {
+          case 1:
+            state.inhibitGridFit = !!v;
+            return;
+          case 2:
+            state.ignoreCvt = !!v;
+            return;
+          default:
+            throw new Error("invalid INSTCTRL[] selector");
+        }
+      }
+      function PUSHB(n, state) {
+        var stack = state.stack;
+        var prog = state.prog;
+        var ip = state.ip;
+        if (exports2.DEBUG) {
+          console.log(state.step, "PUSHB[" + n + "]");
+        }
+        for (var i = 0; i < n; i++) {
+          stack.push(prog[++ip]);
+        }
+        state.ip = ip;
+      }
+      function PUSHW(n, state) {
+        var ip = state.ip;
+        var prog = state.prog;
+        var stack = state.stack;
+        if (exports2.DEBUG) {
+          console.log(state.ip, "PUSHW[" + n + "]");
+        }
+        for (var i = 0; i < n; i++) {
+          var w = prog[++ip] << 8 | prog[++ip];
+          if (w & 32768) {
+            w = -((w ^ 65535) + 1);
+          }
+          stack.push(w);
+        }
+        state.ip = ip;
+      }
+      function MDRP_MIRP(indirect, setRp0, keepD, ro, dt, state) {
+        var stack = state.stack;
+        var cvte = indirect && stack.pop();
+        var pi = stack.pop();
+        var rp0i = state.rp0;
+        var rp = state.z0[rp0i];
+        var p = state.z1[pi];
+        var md = state.minDis;
+        var fv = state.fv;
+        var pv = state.dpv;
+        var od;
+        var d;
+        var sign;
+        var cv;
+        d = od = pv.distance(p, rp, true, true);
+        sign = d >= 0 ? 1 : -1;
+        d = Math.abs(d);
+        if (indirect) {
+          cv = state.cvt[cvte];
+          if (ro && Math.abs(d - cv) < state.cvCutIn) {
+            d = cv;
+          }
+        }
+        if (keepD && d < md) {
+          d = md;
+        }
+        if (ro) {
+          d = state.round(d);
+        }
+        fv.setRelative(p, rp, sign * d, pv);
+        fv.touch(p);
+        if (exports2.DEBUG) {
+          console.log(
+            state.step,
+            (indirect ? "MIRP[" : "MDRP[") + (setRp0 ? "M" : "m") + (keepD ? ">" : "_") + (ro ? "R" : "_") + (dt === 0 ? "Gr" : dt === 1 ? "Bl" : dt === 2 ? "Wh" : "") + "]",
+            indirect ? cvte + "(" + state.cvt[cvte] + "," + cv + ")" : "",
+            pi,
+            "(d =",
+            od,
+            "->",
+            sign * d,
+            ")"
+          );
+        }
+        state.rp1 = state.rp0;
+        state.rp2 = pi;
+        if (setRp0) {
+          state.rp0 = pi;
+        }
+      }
+      instructionTable = [
+        /* 0x00 */
+        SVTCA.bind(void 0, yUnitVector),
+        /* 0x01 */
+        SVTCA.bind(void 0, xUnitVector),
+        /* 0x02 */
+        SPVTCA.bind(void 0, yUnitVector),
+        /* 0x03 */
+        SPVTCA.bind(void 0, xUnitVector),
+        /* 0x04 */
+        SFVTCA.bind(void 0, yUnitVector),
+        /* 0x05 */
+        SFVTCA.bind(void 0, xUnitVector),
+        /* 0x06 */
+        SPVTL.bind(void 0, 0),
+        /* 0x07 */
+        SPVTL.bind(void 0, 1),
+        /* 0x08 */
+        SFVTL.bind(void 0, 0),
+        /* 0x09 */
+        SFVTL.bind(void 0, 1),
+        /* 0x0A */
+        SPVFS,
+        /* 0x0B */
+        SFVFS,
+        /* 0x0C */
+        GPV,
+        /* 0x0D */
+        GFV,
+        /* 0x0E */
+        SFVTPV,
+        /* 0x0F */
+        ISECT,
+        /* 0x10 */
+        SRP0,
+        /* 0x11 */
+        SRP1,
+        /* 0x12 */
+        SRP2,
+        /* 0x13 */
+        SZP0,
+        /* 0x14 */
+        SZP1,
+        /* 0x15 */
+        SZP2,
+        /* 0x16 */
+        SZPS,
+        /* 0x17 */
+        SLOOP,
+        /* 0x18 */
+        RTG,
+        /* 0x19 */
+        RTHG,
+        /* 0x1A */
+        SMD,
+        /* 0x1B */
+        ELSE,
+        /* 0x1C */
+        JMPR,
+        /* 0x1D */
+        SCVTCI,
+        /* 0x1E */
+        void 0,
+        // TODO SSWCI
+        /* 0x1F */
+        void 0,
+        // TODO SSW
+        /* 0x20 */
+        DUP,
+        /* 0x21 */
+        POP,
+        /* 0x22 */
+        CLEAR,
+        /* 0x23 */
+        SWAP,
+        /* 0x24 */
+        DEPTH,
+        /* 0x25 */
+        CINDEX,
+        /* 0x26 */
+        MINDEX,
+        /* 0x27 */
+        void 0,
+        // TODO ALIGNPTS
+        /* 0x28 */
+        void 0,
+        /* 0x29 */
+        void 0,
+        // TODO UTP
+        /* 0x2A */
+        LOOPCALL,
+        /* 0x2B */
+        CALL,
+        /* 0x2C */
+        FDEF,
+        /* 0x2D */
+        void 0,
+        // ENDF (eaten by FDEF)
+        /* 0x2E */
+        MDAP.bind(void 0, 0),
+        /* 0x2F */
+        MDAP.bind(void 0, 1),
+        /* 0x30 */
+        IUP.bind(void 0, yUnitVector),
+        /* 0x31 */
+        IUP.bind(void 0, xUnitVector),
+        /* 0x32 */
+        SHP.bind(void 0, 0),
+        /* 0x33 */
+        SHP.bind(void 0, 1),
+        /* 0x34 */
+        SHC.bind(void 0, 0),
+        /* 0x35 */
+        SHC.bind(void 0, 1),
+        /* 0x36 */
+        SHZ.bind(void 0, 0),
+        /* 0x37 */
+        SHZ.bind(void 0, 1),
+        /* 0x38 */
+        SHPIX,
+        /* 0x39 */
+        IP,
+        /* 0x3A */
+        MSIRP.bind(void 0, 0),
+        /* 0x3B */
+        MSIRP.bind(void 0, 1),
+        /* 0x3C */
+        ALIGNRP,
+        /* 0x3D */
+        RTDG,
+        /* 0x3E */
+        MIAP.bind(void 0, 0),
+        /* 0x3F */
+        MIAP.bind(void 0, 1),
+        /* 0x40 */
+        NPUSHB,
+        /* 0x41 */
+        NPUSHW,
+        /* 0x42 */
+        WS,
+        /* 0x43 */
+        RS,
+        /* 0x44 */
+        WCVTP,
+        /* 0x45 */
+        RCVT,
+        /* 0x46 */
+        GC.bind(void 0, 0),
+        /* 0x47 */
+        GC.bind(void 0, 1),
+        /* 0x48 */
+        void 0,
+        // TODO SCFS
+        /* 0x49 */
+        MD.bind(void 0, 0),
+        /* 0x4A */
+        MD.bind(void 0, 1),
+        /* 0x4B */
+        MPPEM,
+        /* 0x4C */
+        void 0,
+        // TODO MPS
+        /* 0x4D */
+        FLIPON,
+        /* 0x4E */
+        void 0,
+        // TODO FLIPOFF
+        /* 0x4F */
+        void 0,
+        // TODO DEBUG
+        /* 0x50 */
+        LT,
+        /* 0x51 */
+        LTEQ,
+        /* 0x52 */
+        GT,
+        /* 0x53 */
+        GTEQ,
+        /* 0x54 */
+        EQ,
+        /* 0x55 */
+        NEQ,
+        /* 0x56 */
+        ODD,
+        /* 0x57 */
+        EVEN,
+        /* 0x58 */
+        IF,
+        /* 0x59 */
+        EIF,
+        /* 0x5A */
+        AND,
+        /* 0x5B */
+        OR,
+        /* 0x5C */
+        NOT,
+        /* 0x5D */
+        DELTAP123.bind(void 0, 1),
+        /* 0x5E */
+        SDB,
+        /* 0x5F */
+        SDS,
+        /* 0x60 */
+        ADD,
+        /* 0x61 */
+        SUB,
+        /* 0x62 */
+        DIV,
+        /* 0x63 */
+        MUL,
+        /* 0x64 */
+        ABS,
+        /* 0x65 */
+        NEG,
+        /* 0x66 */
+        FLOOR,
+        /* 0x67 */
+        CEILING,
+        /* 0x68 */
+        ROUND.bind(void 0, 0),
+        /* 0x69 */
+        ROUND.bind(void 0, 1),
+        /* 0x6A */
+        ROUND.bind(void 0, 2),
+        /* 0x6B */
+        ROUND.bind(void 0, 3),
+        /* 0x6C */
+        void 0,
+        // TODO NROUND[ab]
+        /* 0x6D */
+        void 0,
+        // TODO NROUND[ab]
+        /* 0x6E */
+        void 0,
+        // TODO NROUND[ab]
+        /* 0x6F */
+        void 0,
+        // TODO NROUND[ab]
+        /* 0x70 */
+        WCVTF,
+        /* 0x71 */
+        DELTAP123.bind(void 0, 2),
+        /* 0x72 */
+        DELTAP123.bind(void 0, 3),
+        /* 0x73 */
+        DELTAC123.bind(void 0, 1),
+        /* 0x74 */
+        DELTAC123.bind(void 0, 2),
+        /* 0x75 */
+        DELTAC123.bind(void 0, 3),
+        /* 0x76 */
+        SROUND,
+        /* 0x77 */
+        S45ROUND,
+        /* 0x78 */
+        void 0,
+        // TODO JROT[]
+        /* 0x79 */
+        void 0,
+        // TODO JROF[]
+        /* 0x7A */
+        ROFF,
+        /* 0x7B */
+        void 0,
+        /* 0x7C */
+        RUTG,
+        /* 0x7D */
+        RDTG,
+        /* 0x7E */
+        POP,
+        // actually SANGW, supposed to do only a pop though
+        /* 0x7F */
+        POP,
+        // actually AA, supposed to do only a pop though
+        /* 0x80 */
+        void 0,
+        // TODO FLIPPT
+        /* 0x81 */
+        void 0,
+        // TODO FLIPRGON
+        /* 0x82 */
+        void 0,
+        // TODO FLIPRGOFF
+        /* 0x83 */
+        void 0,
+        /* 0x84 */
+        void 0,
+        /* 0x85 */
+        SCANCTRL,
+        /* 0x86 */
+        SDPVTL.bind(void 0, 0),
+        /* 0x87 */
+        SDPVTL.bind(void 0, 1),
+        /* 0x88 */
+        GETINFO,
+        /* 0x89 */
+        void 0,
+        // TODO IDEF
+        /* 0x8A */
+        ROLL,
+        /* 0x8B */
+        MAX,
+        /* 0x8C */
+        MIN,
+        /* 0x8D */
+        SCANTYPE,
+        /* 0x8E */
+        INSTCTRL,
+        /* 0x8F */
+        void 0,
+        /* 0x90 */
+        void 0,
+        /* 0x91 */
+        void 0,
+        /* 0x92 */
+        void 0,
+        /* 0x93 */
+        void 0,
+        /* 0x94 */
+        void 0,
+        /* 0x95 */
+        void 0,
+        /* 0x96 */
+        void 0,
+        /* 0x97 */
+        void 0,
+        /* 0x98 */
+        void 0,
+        /* 0x99 */
+        void 0,
+        /* 0x9A */
+        void 0,
+        /* 0x9B */
+        void 0,
+        /* 0x9C */
+        void 0,
+        /* 0x9D */
+        void 0,
+        /* 0x9E */
+        void 0,
+        /* 0x9F */
+        void 0,
+        /* 0xA0 */
+        void 0,
+        /* 0xA1 */
+        void 0,
+        /* 0xA2 */
+        void 0,
+        /* 0xA3 */
+        void 0,
+        /* 0xA4 */
+        void 0,
+        /* 0xA5 */
+        void 0,
+        /* 0xA6 */
+        void 0,
+        /* 0xA7 */
+        void 0,
+        /* 0xA8 */
+        void 0,
+        /* 0xA9 */
+        void 0,
+        /* 0xAA */
+        void 0,
+        /* 0xAB */
+        void 0,
+        /* 0xAC */
+        void 0,
+        /* 0xAD */
+        void 0,
+        /* 0xAE */
+        void 0,
+        /* 0xAF */
+        void 0,
+        /* 0xB0 */
+        PUSHB.bind(void 0, 1),
+        /* 0xB1 */
+        PUSHB.bind(void 0, 2),
+        /* 0xB2 */
+        PUSHB.bind(void 0, 3),
+        /* 0xB3 */
+        PUSHB.bind(void 0, 4),
+        /* 0xB4 */
+        PUSHB.bind(void 0, 5),
+        /* 0xB5 */
+        PUSHB.bind(void 0, 6),
+        /* 0xB6 */
+        PUSHB.bind(void 0, 7),
+        /* 0xB7 */
+        PUSHB.bind(void 0, 8),
+        /* 0xB8 */
+        PUSHW.bind(void 0, 1),
+        /* 0xB9 */
+        PUSHW.bind(void 0, 2),
+        /* 0xBA */
+        PUSHW.bind(void 0, 3),
+        /* 0xBB */
+        PUSHW.bind(void 0, 4),
+        /* 0xBC */
+        PUSHW.bind(void 0, 5),
+        /* 0xBD */
+        PUSHW.bind(void 0, 6),
+        /* 0xBE */
+        PUSHW.bind(void 0, 7),
+        /* 0xBF */
+        PUSHW.bind(void 0, 8),
+        /* 0xC0 */
+        MDRP_MIRP.bind(void 0, 0, 0, 0, 0, 0),
+        /* 0xC1 */
+        MDRP_MIRP.bind(void 0, 0, 0, 0, 0, 1),
+        /* 0xC2 */
+        MDRP_MIRP.bind(void 0, 0, 0, 0, 0, 2),
+        /* 0xC3 */
+        MDRP_MIRP.bind(void 0, 0, 0, 0, 0, 3),
+        /* 0xC4 */
+        MDRP_MIRP.bind(void 0, 0, 0, 0, 1, 0),
+        /* 0xC5 */
+        MDRP_MIRP.bind(void 0, 0, 0, 0, 1, 1),
+        /* 0xC6 */
+        MDRP_MIRP.bind(void 0, 0, 0, 0, 1, 2),
+        /* 0xC7 */
+        MDRP_MIRP.bind(void 0, 0, 0, 0, 1, 3),
+        /* 0xC8 */
+        MDRP_MIRP.bind(void 0, 0, 0, 1, 0, 0),
+        /* 0xC9 */
+        MDRP_MIRP.bind(void 0, 0, 0, 1, 0, 1),
+        /* 0xCA */
+        MDRP_MIRP.bind(void 0, 0, 0, 1, 0, 2),
+        /* 0xCB */
+        MDRP_MIRP.bind(void 0, 0, 0, 1, 0, 3),
+        /* 0xCC */
+        MDRP_MIRP.bind(void 0, 0, 0, 1, 1, 0),
+        /* 0xCD */
+        MDRP_MIRP.bind(void 0, 0, 0, 1, 1, 1),
+        /* 0xCE */
+        MDRP_MIRP.bind(void 0, 0, 0, 1, 1, 2),
+        /* 0xCF */
+        MDRP_MIRP.bind(void 0, 0, 0, 1, 1, 3),
+        /* 0xD0 */
+        MDRP_MIRP.bind(void 0, 0, 1, 0, 0, 0),
+        /* 0xD1 */
+        MDRP_MIRP.bind(void 0, 0, 1, 0, 0, 1),
+        /* 0xD2 */
+        MDRP_MIRP.bind(void 0, 0, 1, 0, 0, 2),
+        /* 0xD3 */
+        MDRP_MIRP.bind(void 0, 0, 1, 0, 0, 3),
+        /* 0xD4 */
+        MDRP_MIRP.bind(void 0, 0, 1, 0, 1, 0),
+        /* 0xD5 */
+        MDRP_MIRP.bind(void 0, 0, 1, 0, 1, 1),
+        /* 0xD6 */
+        MDRP_MIRP.bind(void 0, 0, 1, 0, 1, 2),
+        /* 0xD7 */
+        MDRP_MIRP.bind(void 0, 0, 1, 0, 1, 3),
+        /* 0xD8 */
+        MDRP_MIRP.bind(void 0, 0, 1, 1, 0, 0),
+        /* 0xD9 */
+        MDRP_MIRP.bind(void 0, 0, 1, 1, 0, 1),
+        /* 0xDA */
+        MDRP_MIRP.bind(void 0, 0, 1, 1, 0, 2),
+        /* 0xDB */
+        MDRP_MIRP.bind(void 0, 0, 1, 1, 0, 3),
+        /* 0xDC */
+        MDRP_MIRP.bind(void 0, 0, 1, 1, 1, 0),
+        /* 0xDD */
+        MDRP_MIRP.bind(void 0, 0, 1, 1, 1, 1),
+        /* 0xDE */
+        MDRP_MIRP.bind(void 0, 0, 1, 1, 1, 2),
+        /* 0xDF */
+        MDRP_MIRP.bind(void 0, 0, 1, 1, 1, 3),
+        /* 0xE0 */
+        MDRP_MIRP.bind(void 0, 1, 0, 0, 0, 0),
+        /* 0xE1 */
+        MDRP_MIRP.bind(void 0, 1, 0, 0, 0, 1),
+        /* 0xE2 */
+        MDRP_MIRP.bind(void 0, 1, 0, 0, 0, 2),
+        /* 0xE3 */
+        MDRP_MIRP.bind(void 0, 1, 0, 0, 0, 3),
+        /* 0xE4 */
+        MDRP_MIRP.bind(void 0, 1, 0, 0, 1, 0),
+        /* 0xE5 */
+        MDRP_MIRP.bind(void 0, 1, 0, 0, 1, 1),
+        /* 0xE6 */
+        MDRP_MIRP.bind(void 0, 1, 0, 0, 1, 2),
+        /* 0xE7 */
+        MDRP_MIRP.bind(void 0, 1, 0, 0, 1, 3),
+        /* 0xE8 */
+        MDRP_MIRP.bind(void 0, 1, 0, 1, 0, 0),
+        /* 0xE9 */
+        MDRP_MIRP.bind(void 0, 1, 0, 1, 0, 1),
+        /* 0xEA */
+        MDRP_MIRP.bind(void 0, 1, 0, 1, 0, 2),
+        /* 0xEB */
+        MDRP_MIRP.bind(void 0, 1, 0, 1, 0, 3),
+        /* 0xEC */
+        MDRP_MIRP.bind(void 0, 1, 0, 1, 1, 0),
+        /* 0xED */
+        MDRP_MIRP.bind(void 0, 1, 0, 1, 1, 1),
+        /* 0xEE */
+        MDRP_MIRP.bind(void 0, 1, 0, 1, 1, 2),
+        /* 0xEF */
+        MDRP_MIRP.bind(void 0, 1, 0, 1, 1, 3),
+        /* 0xF0 */
+        MDRP_MIRP.bind(void 0, 1, 1, 0, 0, 0),
+        /* 0xF1 */
+        MDRP_MIRP.bind(void 0, 1, 1, 0, 0, 1),
+        /* 0xF2 */
+        MDRP_MIRP.bind(void 0, 1, 1, 0, 0, 2),
+        /* 0xF3 */
+        MDRP_MIRP.bind(void 0, 1, 1, 0, 0, 3),
+        /* 0xF4 */
+        MDRP_MIRP.bind(void 0, 1, 1, 0, 1, 0),
+        /* 0xF5 */
+        MDRP_MIRP.bind(void 0, 1, 1, 0, 1, 1),
+        /* 0xF6 */
+        MDRP_MIRP.bind(void 0, 1, 1, 0, 1, 2),
+        /* 0xF7 */
+        MDRP_MIRP.bind(void 0, 1, 1, 0, 1, 3),
+        /* 0xF8 */
+        MDRP_MIRP.bind(void 0, 1, 1, 1, 0, 0),
+        /* 0xF9 */
+        MDRP_MIRP.bind(void 0, 1, 1, 1, 0, 1),
+        /* 0xFA */
+        MDRP_MIRP.bind(void 0, 1, 1, 1, 0, 2),
+        /* 0xFB */
+        MDRP_MIRP.bind(void 0, 1, 1, 1, 0, 3),
+        /* 0xFC */
+        MDRP_MIRP.bind(void 0, 1, 1, 1, 1, 0),
+        /* 0xFD */
+        MDRP_MIRP.bind(void 0, 1, 1, 1, 1, 1),
+        /* 0xFE */
+        MDRP_MIRP.bind(void 0, 1, 1, 1, 1, 2),
+        /* 0xFF */
+        MDRP_MIRP.bind(void 0, 1, 1, 1, 1, 3)
+      ];
+      function Token(char) {
+        this.char = char;
+        this.state = {};
+        this.activeState = null;
+      }
+      function ContextRange(startIndex, endOffset, contextName) {
+        this.contextName = contextName;
+        this.startIndex = startIndex;
+        this.endOffset = endOffset;
+      }
+      function ContextChecker(contextName, checkStart, checkEnd) {
+        this.contextName = contextName;
+        this.openRange = null;
+        this.ranges = [];
+        this.checkStart = checkStart;
+        this.checkEnd = checkEnd;
+      }
+      function ContextParams(context, currentIndex) {
+        this.context = context;
+        this.index = currentIndex;
+        this.length = context.length;
+        this.current = context[currentIndex];
+        this.backtrack = context.slice(0, currentIndex);
+        this.lookahead = context.slice(currentIndex + 1);
+      }
+      function Event(eventId) {
+        this.eventId = eventId;
+        this.subscribers = [];
+      }
+      function initializeCoreEvents(events) {
+        var this$1 = this;
+        var coreEvents = [
+          "start",
+          "end",
+          "next",
+          "newToken",
+          "contextStart",
+          "contextEnd",
+          "insertToken",
+          "removeToken",
+          "removeRange",
+          "replaceToken",
+          "replaceRange",
+          "composeRUD",
+          "updateContextsRanges"
+        ];
+        coreEvents.forEach(function(eventId) {
+          Object.defineProperty(this$1.events, eventId, {
+            value: new Event(eventId)
+          });
+        });
+        if (!!events) {
+          coreEvents.forEach(function(eventId) {
+            var event = events[eventId];
+            if (typeof event === "function") {
+              this$1.events[eventId].subscribe(event);
+            }
+          });
+        }
+        var requiresContextUpdate = [
+          "insertToken",
+          "removeToken",
+          "removeRange",
+          "replaceToken",
+          "replaceRange",
+          "composeRUD"
+        ];
+        requiresContextUpdate.forEach(function(eventId) {
+          this$1.events[eventId].subscribe(
+            this$1.updateContextsRanges
+          );
+        });
+      }
+      function Tokenizer(events) {
+        this.tokens = [];
+        this.registeredContexts = {};
+        this.contextCheckers = [];
+        this.events = {};
+        this.registeredModifiers = [];
+        initializeCoreEvents.call(this, events);
+      }
+      Token.prototype.setState = function(key, value) {
+        this.state[key] = value;
+        this.activeState = { key, value: this.state[key] };
+        return this.activeState;
+      };
+      Token.prototype.getState = function(stateId) {
+        return this.state[stateId] || null;
+      };
+      Tokenizer.prototype.inboundIndex = function(index) {
+        return index >= 0 && index < this.tokens.length;
+      };
+      Tokenizer.prototype.composeRUD = function(RUDs) {
+        var this$1 = this;
+        var silent = true;
+        var state = RUDs.map(function(RUD) {
+          return this$1[RUD[0]].apply(this$1, RUD.slice(1).concat(silent));
+        });
+        var hasFAILObject = function(obj) {
+          return typeof obj === "object" && obj.hasOwnProperty("FAIL");
+        };
+        if (state.every(hasFAILObject)) {
+          return {
+            FAIL: "composeRUD: one or more operations hasn't completed successfully",
+            report: state.filter(hasFAILObject)
+          };
+        }
+        this.dispatch("composeRUD", [state.filter(function(op) {
+          return !hasFAILObject(op);
+        })]);
+      };
+      Tokenizer.prototype.replaceRange = function(startIndex, offset, tokens, silent) {
+        offset = offset !== null ? offset : this.tokens.length;
+        var isTokenType = tokens.every(function(token) {
+          return token instanceof Token;
+        });
+        if (!isNaN(startIndex) && this.inboundIndex(startIndex) && isTokenType) {
+          var replaced = this.tokens.splice.apply(
+            this.tokens,
+            [startIndex, offset].concat(tokens)
+          );
+          if (!silent) {
+            this.dispatch("replaceToken", [startIndex, offset, tokens]);
+          }
+          return [replaced, tokens];
+        } else {
+          return { FAIL: "replaceRange: invalid tokens or startIndex." };
+        }
+      };
+      Tokenizer.prototype.replaceToken = function(index, token, silent) {
+        if (!isNaN(index) && this.inboundIndex(index) && token instanceof Token) {
+          var replaced = this.tokens.splice(index, 1, token);
+          if (!silent) {
+            this.dispatch("replaceToken", [index, token]);
+          }
+          return [replaced[0], token];
+        } else {
+          return { FAIL: "replaceToken: invalid token or index." };
+        }
+      };
+      Tokenizer.prototype.removeRange = function(startIndex, offset, silent) {
+        offset = !isNaN(offset) ? offset : this.tokens.length;
+        var tokens = this.tokens.splice(startIndex, offset);
+        if (!silent) {
+          this.dispatch("removeRange", [tokens, startIndex, offset]);
+        }
+        return tokens;
+      };
+      Tokenizer.prototype.removeToken = function(index, silent) {
+        if (!isNaN(index) && this.inboundIndex(index)) {
+          var token = this.tokens.splice(index, 1);
+          if (!silent) {
+            this.dispatch("removeToken", [token, index]);
+          }
+          return token;
+        } else {
+          return { FAIL: "removeToken: invalid token index." };
+        }
+      };
+      Tokenizer.prototype.insertToken = function(tokens, index, silent) {
+        var tokenType = tokens.every(
+          function(token) {
+            return token instanceof Token;
+          }
+        );
+        if (tokenType) {
+          this.tokens.splice.apply(
+            this.tokens,
+            [index, 0].concat(tokens)
+          );
+          if (!silent) {
+            this.dispatch("insertToken", [tokens, index]);
+          }
+          return tokens;
+        } else {
+          return { FAIL: "insertToken: invalid token(s)." };
+        }
+      };
+      Tokenizer.prototype.registerModifier = function(modifierId, condition, modifier) {
+        this.events.newToken.subscribe(function(token, contextParams) {
+          var conditionParams = [token, contextParams];
+          var canApplyModifier = condition === null || condition.apply(this, conditionParams) === true;
+          var modifierParams = [token, contextParams];
+          if (canApplyModifier) {
+            var newStateValue = modifier.apply(this, modifierParams);
+            token.setState(modifierId, newStateValue);
+          }
+        });
+        this.registeredModifiers.push(modifierId);
+      };
+      Event.prototype.subscribe = function(eventHandler) {
+        if (typeof eventHandler === "function") {
+          return this.subscribers.push(eventHandler) - 1;
+        } else {
+          return { FAIL: "invalid '" + this.eventId + "' event handler" };
+        }
+      };
+      Event.prototype.unsubscribe = function(subsId) {
+        this.subscribers.splice(subsId, 1);
+      };
+      ContextParams.prototype.setCurrentIndex = function(index) {
+        this.index = index;
+        this.current = this.context[index];
+        this.backtrack = this.context.slice(0, index);
+        this.lookahead = this.context.slice(index + 1);
+      };
+      ContextParams.prototype.get = function(offset) {
+        switch (true) {
+          case offset === 0:
+            return this.current;
+          case (offset < 0 && Math.abs(offset) <= this.backtrack.length):
+            return this.backtrack.slice(offset)[0];
+          case (offset > 0 && offset <= this.lookahead.length):
+            return this.lookahead[offset - 1];
+          default:
+            return null;
+        }
+      };
+      Tokenizer.prototype.rangeToText = function(range) {
+        if (range instanceof ContextRange) {
+          return this.getRangeTokens(range).map(function(token) {
+            return token.char;
+          }).join("");
+        }
+      };
+      Tokenizer.prototype.getText = function() {
+        return this.tokens.map(function(token) {
+          return token.char;
+        }).join("");
+      };
+      Tokenizer.prototype.getContext = function(contextName) {
+        var context = this.registeredContexts[contextName];
+        return !!context ? context : null;
+      };
+      Tokenizer.prototype.on = function(eventName, eventHandler) {
+        var event = this.events[eventName];
+        if (!!event) {
+          return event.subscribe(eventHandler);
+        } else {
+          return null;
+        }
+      };
+      Tokenizer.prototype.dispatch = function(eventName, args) {
+        var this$1 = this;
+        var event = this.events[eventName];
+        if (event instanceof Event) {
+          event.subscribers.forEach(function(subscriber) {
+            subscriber.apply(this$1, args || []);
+          });
+        }
+      };
+      Tokenizer.prototype.registerContextChecker = function(contextName, contextStartCheck, contextEndCheck) {
+        if (!!this.getContext(contextName)) {
+          return {
+            FAIL: "context name '" + contextName + "' is already registered."
+          };
+        }
+        if (typeof contextStartCheck !== "function") {
+          return {
+            FAIL: "missing context start check."
+          };
+        }
+        if (typeof contextEndCheck !== "function") {
+          return {
+            FAIL: "missing context end check."
+          };
+        }
+        var contextCheckers = new ContextChecker(
+          contextName,
+          contextStartCheck,
+          contextEndCheck
+        );
+        this.registeredContexts[contextName] = contextCheckers;
+        this.contextCheckers.push(contextCheckers);
+        return contextCheckers;
+      };
+      Tokenizer.prototype.getRangeTokens = function(range) {
+        var endIndex = range.startIndex + range.endOffset;
+        return [].concat(
+          this.tokens.slice(range.startIndex, endIndex)
+        );
+      };
+      Tokenizer.prototype.getContextRanges = function(contextName) {
+        var context = this.getContext(contextName);
+        if (!!context) {
+          return context.ranges;
+        } else {
+          return { FAIL: "context checker '" + contextName + "' is not registered." };
+        }
+      };
+      Tokenizer.prototype.resetContextsRanges = function() {
+        var registeredContexts = this.registeredContexts;
+        for (var contextName in registeredContexts) {
+          if (registeredContexts.hasOwnProperty(contextName)) {
+            var context = registeredContexts[contextName];
+            context.ranges = [];
+          }
+        }
+      };
+      Tokenizer.prototype.updateContextsRanges = function() {
+        this.resetContextsRanges();
+        var chars = this.tokens.map(function(token) {
+          return token.char;
+        });
+        for (var i = 0; i < chars.length; i++) {
+          var contextParams = new ContextParams(chars, i);
+          this.runContextCheck(contextParams);
+        }
+        this.dispatch("updateContextsRanges", [this.registeredContexts]);
+      };
+      Tokenizer.prototype.setEndOffset = function(offset, contextName) {
+        var startIndex = this.getContext(contextName).openRange.startIndex;
+        var range = new ContextRange(startIndex, offset, contextName);
+        var ranges = this.getContext(contextName).ranges;
+        range.rangeId = contextName + "." + ranges.length;
+        ranges.push(range);
+        this.getContext(contextName).openRange = null;
+        return range;
+      };
+      Tokenizer.prototype.runContextCheck = function(contextParams) {
+        var this$1 = this;
+        var index = contextParams.index;
+        this.contextCheckers.forEach(function(contextChecker) {
+          var contextName = contextChecker.contextName;
+          var openRange = this$1.getContext(contextName).openRange;
+          if (!openRange && contextChecker.checkStart(contextParams)) {
+            openRange = new ContextRange(index, null, contextName);
+            this$1.getContext(contextName).openRange = openRange;
+            this$1.dispatch("contextStart", [contextName, index]);
+          }
+          if (!!openRange && contextChecker.checkEnd(contextParams)) {
+            var offset = index - openRange.startIndex + 1;
+            var range = this$1.setEndOffset(offset, contextName);
+            this$1.dispatch("contextEnd", [contextName, range]);
+          }
+        });
+      };
+      Tokenizer.prototype.tokenize = function(text) {
+        this.tokens = [];
+        this.resetContextsRanges();
+        var chars = Array.from(text);
+        this.dispatch("start");
+        for (var i = 0; i < chars.length; i++) {
+          var char = chars[i];
+          var contextParams = new ContextParams(chars, i);
+          this.dispatch("next", [contextParams]);
+          this.runContextCheck(contextParams);
+          var token = new Token(char);
+          this.tokens.push(token);
+          this.dispatch("newToken", [token, contextParams]);
+        }
+        this.dispatch("end", [this.tokens]);
+        return this.tokens;
+      };
+      function isArabicChar(c) {
+        return /[\u0600-\u065F\u066A-\u06D2\u06FA-\u06FF]/.test(c);
+      }
+      function isIsolatedArabicChar(char) {
+        return /[\u0630\u0690\u0621\u0631\u0661\u0671\u0622\u0632\u0672\u0692\u06C2\u0623\u0673\u0693\u06C3\u0624\u0694\u06C4\u0625\u0675\u0695\u06C5\u06E5\u0676\u0696\u06C6\u0627\u0677\u0697\u06C7\u0648\u0688\u0698\u06C8\u0689\u0699\u06C9\u068A\u06CA\u066B\u068B\u06CB\u068C\u068D\u06CD\u06FD\u068E\u06EE\u06FE\u062F\u068F\u06CF\u06EF]/.test(char);
+      }
+      function isTashkeelArabicChar(char) {
+        return /[\u0600-\u0605\u060C-\u060E\u0610-\u061B\u061E\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/.test(char);
+      }
+      function isLatinChar(c) {
+        return /[A-z]/.test(c);
+      }
+      function isWhiteSpace(c) {
+        return /\s/.test(c);
+      }
+      function FeatureQuery(font) {
+        this.font = font;
+        this.features = {};
+      }
+      function SubstitutionAction(action) {
+        this.id = action.id;
+        this.tag = action.tag;
+        this.substitution = action.substitution;
+      }
+      function lookupCoverage(glyphIndex, coverage) {
+        if (!glyphIndex) {
+          return -1;
+        }
+        switch (coverage.format) {
+          case 1:
+            return coverage.glyphs.indexOf(glyphIndex);
+          case 2:
+            var ranges = coverage.ranges;
+            for (var i = 0; i < ranges.length; i++) {
+              var range = ranges[i];
+              if (glyphIndex >= range.start && glyphIndex <= range.end) {
+                var offset = glyphIndex - range.start;
+                return range.index + offset;
+              }
+            }
+            break;
+          default:
+            return -1;
+        }
+        return -1;
+      }
+      function singleSubstitutionFormat1(glyphIndex, subtable) {
+        var substituteIndex = lookupCoverage(glyphIndex, subtable.coverage);
+        if (substituteIndex === -1) {
+          return null;
+        }
+        return glyphIndex + subtable.deltaGlyphId;
+      }
+      function singleSubstitutionFormat2(glyphIndex, subtable) {
+        var substituteIndex = lookupCoverage(glyphIndex, subtable.coverage);
+        if (substituteIndex === -1) {
+          return null;
+        }
+        return subtable.substitute[substituteIndex];
+      }
+      function lookupCoverageList(coverageList, contextParams) {
+        var lookupList = [];
+        for (var i = 0; i < coverageList.length; i++) {
+          var coverage = coverageList[i];
+          var glyphIndex = contextParams.current;
+          glyphIndex = Array.isArray(glyphIndex) ? glyphIndex[0] : glyphIndex;
+          var lookupIndex = lookupCoverage(glyphIndex, coverage);
+          if (lookupIndex !== -1) {
+            lookupList.push(lookupIndex);
+          }
+        }
+        if (lookupList.length !== coverageList.length) {
+          return -1;
+        }
+        return lookupList;
+      }
+      function chainingSubstitutionFormat3(contextParams, subtable) {
+        var lookupsCount = subtable.inputCoverage.length + subtable.lookaheadCoverage.length + subtable.backtrackCoverage.length;
+        if (contextParams.context.length < lookupsCount) {
+          return [];
+        }
+        var inputLookups = lookupCoverageList(
+          subtable.inputCoverage,
+          contextParams
+        );
+        if (inputLookups === -1) {
+          return [];
+        }
+        var lookaheadOffset = subtable.inputCoverage.length - 1;
+        if (contextParams.lookahead.length < subtable.lookaheadCoverage.length) {
+          return [];
+        }
+        var lookaheadContext = contextParams.lookahead.slice(lookaheadOffset);
+        while (lookaheadContext.length && isTashkeelArabicChar(lookaheadContext[0].char)) {
+          lookaheadContext.shift();
+        }
+        var lookaheadParams = new ContextParams(lookaheadContext, 0);
+        var lookaheadLookups = lookupCoverageList(
+          subtable.lookaheadCoverage,
+          lookaheadParams
+        );
+        var backtrackContext = [].concat(contextParams.backtrack);
+        backtrackContext.reverse();
+        while (backtrackContext.length && isTashkeelArabicChar(backtrackContext[0].char)) {
+          backtrackContext.shift();
+        }
+        if (backtrackContext.length < subtable.backtrackCoverage.length) {
+          return [];
+        }
+        var backtrackParams = new ContextParams(backtrackContext, 0);
+        var backtrackLookups = lookupCoverageList(
+          subtable.backtrackCoverage,
+          backtrackParams
+        );
+        var contextRulesMatch = inputLookups.length === subtable.inputCoverage.length && lookaheadLookups.length === subtable.lookaheadCoverage.length && backtrackLookups.length === subtable.backtrackCoverage.length;
+        var substitutions = [];
+        if (contextRulesMatch) {
+          for (var i = 0; i < subtable.lookupRecords.length; i++) {
+            var lookupRecord = subtable.lookupRecords[i];
+            var lookupListIndex = lookupRecord.lookupListIndex;
+            var lookupTable = this.getLookupByIndex(lookupListIndex);
+            for (var s = 0; s < lookupTable.subtables.length; s++) {
+              var subtable$1 = lookupTable.subtables[s];
+              var lookup = this.getLookupMethod(lookupTable, subtable$1);
+              var substitutionType = this.getSubstitutionType(lookupTable, subtable$1);
+              if (substitutionType === "12") {
+                for (var n = 0; n < inputLookups.length; n++) {
+                  var glyphIndex = contextParams.get(n);
+                  var substitution = lookup(glyphIndex);
+                  if (substitution) {
+                    substitutions.push(substitution);
+                  }
+                }
+              }
+            }
+          }
+        }
+        return substitutions;
+      }
+      function ligatureSubstitutionFormat1(contextParams, subtable) {
+        var glyphIndex = contextParams.current;
+        var ligSetIndex = lookupCoverage(glyphIndex, subtable.coverage);
+        if (ligSetIndex === -1) {
+          return null;
+        }
+        var ligature;
+        var ligatureSet = subtable.ligatureSets[ligSetIndex];
+        for (var s = 0; s < ligatureSet.length; s++) {
+          ligature = ligatureSet[s];
+          for (var l = 0; l < ligature.components.length; l++) {
+            var lookaheadItem = contextParams.lookahead[l];
+            var component = ligature.components[l];
+            if (lookaheadItem !== component) {
+              break;
+            }
+            if (l === ligature.components.length - 1) {
+              return ligature;
+            }
+          }
+        }
+        return null;
+      }
+      function decompositionSubstitutionFormat1(glyphIndex, subtable) {
+        var substituteIndex = lookupCoverage(glyphIndex, subtable.coverage);
+        if (substituteIndex === -1) {
+          return null;
+        }
+        return subtable.sequences[substituteIndex];
+      }
+      FeatureQuery.prototype.getDefaultScriptFeaturesIndexes = function() {
+        var scripts = this.font.tables.gsub.scripts;
+        for (var s = 0; s < scripts.length; s++) {
+          var script = scripts[s];
+          if (script.tag === "DFLT") {
+            return script.script.defaultLangSys.featureIndexes;
+          }
+        }
+        return [];
+      };
+      FeatureQuery.prototype.getScriptFeaturesIndexes = function(scriptTag) {
+        var tables = this.font.tables;
+        if (!tables.gsub) {
+          return [];
+        }
+        if (!scriptTag) {
+          return this.getDefaultScriptFeaturesIndexes();
+        }
+        var scripts = this.font.tables.gsub.scripts;
+        for (var i = 0; i < scripts.length; i++) {
+          var script = scripts[i];
+          if (script.tag === scriptTag && script.script.defaultLangSys) {
+            return script.script.defaultLangSys.featureIndexes;
+          } else {
+            var langSysRecords = script.langSysRecords;
+            if (!!langSysRecords) {
+              for (var j = 0; j < langSysRecords.length; j++) {
+                var langSysRecord = langSysRecords[j];
+                if (langSysRecord.tag === scriptTag) {
+                  var langSys = langSysRecord.langSys;
+                  return langSys.featureIndexes;
+                }
+              }
+            }
+          }
+        }
+        return this.getDefaultScriptFeaturesIndexes();
+      };
+      FeatureQuery.prototype.mapTagsToFeatures = function(features, scriptTag) {
+        var tags = {};
+        for (var i = 0; i < features.length; i++) {
+          var tag = features[i].tag;
+          var feature = features[i].feature;
+          tags[tag] = feature;
+        }
+        this.features[scriptTag].tags = tags;
+      };
+      FeatureQuery.prototype.getScriptFeatures = function(scriptTag) {
+        var features = this.features[scriptTag];
+        if (this.features.hasOwnProperty(scriptTag)) {
+          return features;
+        }
+        var featuresIndexes = this.getScriptFeaturesIndexes(scriptTag);
+        if (!featuresIndexes) {
+          return null;
+        }
+        var gsub2 = this.font.tables.gsub;
+        features = featuresIndexes.map(function(index) {
+          return gsub2.features[index];
+        });
+        this.features[scriptTag] = features;
+        this.mapTagsToFeatures(features, scriptTag);
+        return features;
+      };
+      FeatureQuery.prototype.getSubstitutionType = function(lookupTable, subtable) {
+        var lookupType = lookupTable.lookupType.toString();
+        var substFormat = subtable.substFormat.toString();
+        return lookupType + substFormat;
+      };
+      FeatureQuery.prototype.getLookupMethod = function(lookupTable, subtable) {
+        var this$1 = this;
+        var substitutionType = this.getSubstitutionType(lookupTable, subtable);
+        switch (substitutionType) {
+          case "11":
+            return function(glyphIndex) {
+              return singleSubstitutionFormat1.apply(
+                this$1,
+                [glyphIndex, subtable]
+              );
+            };
+          case "12":
+            return function(glyphIndex) {
+              return singleSubstitutionFormat2.apply(
+                this$1,
+                [glyphIndex, subtable]
+              );
+            };
+          case "63":
+            return function(contextParams) {
+              return chainingSubstitutionFormat3.apply(
+                this$1,
+                [contextParams, subtable]
+              );
+            };
+          case "41":
+            return function(contextParams) {
+              return ligatureSubstitutionFormat1.apply(
+                this$1,
+                [contextParams, subtable]
+              );
+            };
+          case "21":
+            return function(glyphIndex) {
+              return decompositionSubstitutionFormat1.apply(
+                this$1,
+                [glyphIndex, subtable]
+              );
+            };
+          default:
+            throw new Error(
+              "lookupType: " + lookupTable.lookupType + " - substFormat: " + subtable.substFormat + " is not yet supported"
+            );
+        }
+      };
+      FeatureQuery.prototype.lookupFeature = function(query) {
+        var contextParams = query.contextParams;
+        var currentIndex = contextParams.index;
+        var feature = this.getFeature({
+          tag: query.tag,
+          script: query.script
+        });
+        if (!feature) {
+          return new Error(
+            "font '" + this.font.names.fullName.en + "' doesn't support feature '" + query.tag + "' for script '" + query.script + "'."
+          );
+        }
+        var lookups = this.getFeatureLookups(feature);
+        var substitutions = [].concat(contextParams.context);
+        for (var l = 0; l < lookups.length; l++) {
+          var lookupTable = lookups[l];
+          var subtables = this.getLookupSubtables(lookupTable);
+          for (var s = 0; s < subtables.length; s++) {
+            var subtable = subtables[s];
+            var substType = this.getSubstitutionType(lookupTable, subtable);
+            var lookup = this.getLookupMethod(lookupTable, subtable);
+            var substitution = void 0;
+            switch (substType) {
+              case "11":
+                substitution = lookup(contextParams.current);
+                if (substitution) {
+                  substitutions.splice(currentIndex, 1, new SubstitutionAction({
+                    id: 11,
+                    tag: query.tag,
+                    substitution
+                  }));
+                }
+                break;
+              case "12":
+                substitution = lookup(contextParams.current);
+                if (substitution) {
+                  substitutions.splice(currentIndex, 1, new SubstitutionAction({
+                    id: 12,
+                    tag: query.tag,
+                    substitution
+                  }));
+                }
+                break;
+              case "63":
+                substitution = lookup(contextParams);
+                if (Array.isArray(substitution) && substitution.length) {
+                  substitutions.splice(currentIndex, 1, new SubstitutionAction({
+                    id: 63,
+                    tag: query.tag,
+                    substitution
+                  }));
+                }
+                break;
+              case "41":
+                substitution = lookup(contextParams);
+                if (substitution) {
+                  substitutions.splice(currentIndex, 1, new SubstitutionAction({
+                    id: 41,
+                    tag: query.tag,
+                    substitution
+                  }));
+                }
+                break;
+              case "21":
+                substitution = lookup(contextParams.current);
+                if (substitution) {
+                  substitutions.splice(currentIndex, 1, new SubstitutionAction({
+                    id: 21,
+                    tag: query.tag,
+                    substitution
+                  }));
+                }
+                break;
+            }
+            contextParams = new ContextParams(substitutions, currentIndex);
+            if (Array.isArray(substitution) && !substitution.length) {
+              continue;
+            }
+            substitution = null;
+          }
+        }
+        return substitutions.length ? substitutions : null;
+      };
+      FeatureQuery.prototype.supports = function(query) {
+        if (!query.script) {
+          return false;
+        }
+        this.getScriptFeatures(query.script);
+        var supportedScript = this.features.hasOwnProperty(query.script);
+        if (!query.tag) {
+          return supportedScript;
+        }
+        var supportedFeature = this.features[query.script].some(function(feature) {
+          return feature.tag === query.tag;
+        });
+        return supportedScript && supportedFeature;
+      };
+      FeatureQuery.prototype.getLookupSubtables = function(lookupTable) {
+        return lookupTable.subtables || null;
+      };
+      FeatureQuery.prototype.getLookupByIndex = function(index) {
+        var lookups = this.font.tables.gsub.lookups;
+        return lookups[index] || null;
+      };
+      FeatureQuery.prototype.getFeatureLookups = function(feature) {
+        return feature.lookupListIndexes.map(this.getLookupByIndex.bind(this));
+      };
+      FeatureQuery.prototype.getFeature = function getFeature(query) {
+        if (!this.font) {
+          return { FAIL: "No font was found" };
+        }
+        if (!this.features.hasOwnProperty(query.script)) {
+          this.getScriptFeatures(query.script);
+        }
+        var scriptFeatures = this.features[query.script];
+        if (!scriptFeatures) {
+          return { FAIL: "No feature for script " + query.script };
+        }
+        if (!scriptFeatures.tags[query.tag]) {
+          return null;
+        }
+        return this.features[query.script].tags[query.tag];
+      };
+      function arabicWordStartCheck(contextParams) {
+        var char = contextParams.current;
+        var prevChar = contextParams.get(-1);
+        return (
+          // ? arabic first char
+          prevChar === null && isArabicChar(char) || // ? arabic char preceded with a non arabic char
+          !isArabicChar(prevChar) && isArabicChar(char)
+        );
+      }
+      function arabicWordEndCheck(contextParams) {
+        var nextChar = contextParams.get(1);
+        return (
+          // ? last arabic char
+          nextChar === null || // ? next char is not arabic
+          !isArabicChar(nextChar)
+        );
+      }
+      var arabicWordCheck = {
+        startCheck: arabicWordStartCheck,
+        endCheck: arabicWordEndCheck
+      };
+      function arabicSentenceStartCheck(contextParams) {
+        var char = contextParams.current;
+        var prevChar = contextParams.get(-1);
+        return (
+          // ? an arabic char preceded with a non arabic char
+          (isArabicChar(char) || isTashkeelArabicChar(char)) && !isArabicChar(prevChar)
+        );
+      }
+      function arabicSentenceEndCheck(contextParams) {
+        var nextChar = contextParams.get(1);
+        switch (true) {
+          case nextChar === null:
+            return true;
+          case (!isArabicChar(nextChar) && !isTashkeelArabicChar(nextChar)):
+            var nextIsWhitespace = isWhiteSpace(nextChar);
+            if (!nextIsWhitespace) {
+              return true;
+            }
+            if (nextIsWhitespace) {
+              var arabicCharAhead = false;
+              arabicCharAhead = contextParams.lookahead.some(
+                function(c) {
+                  return isArabicChar(c) || isTashkeelArabicChar(c);
+                }
+              );
+              if (!arabicCharAhead) {
+                return true;
+              }
+            }
+            break;
+          default:
+            return false;
+        }
+      }
+      var arabicSentenceCheck = {
+        startCheck: arabicSentenceStartCheck,
+        endCheck: arabicSentenceEndCheck
+      };
+      function singleSubstitutionFormat1$1(action, tokens, index) {
+        tokens[index].setState(action.tag, action.substitution);
+      }
+      function singleSubstitutionFormat2$1(action, tokens, index) {
+        tokens[index].setState(action.tag, action.substitution);
+      }
+      function chainingSubstitutionFormat3$1(action, tokens, index) {
+        action.substitution.forEach(function(subst, offset) {
+          var token = tokens[index + offset];
+          token.setState(action.tag, subst);
+        });
+      }
+      function ligatureSubstitutionFormat1$1(action, tokens, index) {
+        var token = tokens[index];
+        token.setState(action.tag, action.substitution.ligGlyph);
+        var compsCount = action.substitution.components.length;
+        for (var i = 0; i < compsCount; i++) {
+          token = tokens[index + i + 1];
+          token.setState("deleted", true);
+        }
+      }
+      var SUBSTITUTIONS = {
+        11: singleSubstitutionFormat1$1,
+        12: singleSubstitutionFormat2$1,
+        63: chainingSubstitutionFormat3$1,
+        41: ligatureSubstitutionFormat1$1
+      };
+      function applySubstitution(action, tokens, index) {
+        if (action instanceof SubstitutionAction && SUBSTITUTIONS[action.id]) {
+          SUBSTITUTIONS[action.id](action, tokens, index);
+        }
+      }
+      function willConnectPrev(charContextParams) {
+        var backtrack = [].concat(charContextParams.backtrack);
+        for (var i = backtrack.length - 1; i >= 0; i--) {
+          var prevChar = backtrack[i];
+          var isolated = isIsolatedArabicChar(prevChar);
+          var tashkeel = isTashkeelArabicChar(prevChar);
+          if (!isolated && !tashkeel) {
+            return true;
+          }
+          if (isolated) {
+            return false;
+          }
+        }
+        return false;
+      }
+      function willConnectNext(charContextParams) {
+        if (isIsolatedArabicChar(charContextParams.current)) {
+          return false;
+        }
+        for (var i = 0; i < charContextParams.lookahead.length; i++) {
+          var nextChar = charContextParams.lookahead[i];
+          var tashkeel = isTashkeelArabicChar(nextChar);
+          if (!tashkeel) {
+            return true;
+          }
+        }
+        return false;
+      }
+      function arabicPresentationForms(range) {
+        var this$1 = this;
+        var script = "arab";
+        var tags = this.featuresTags[script];
+        var tokens = this.tokenizer.getRangeTokens(range);
+        if (tokens.length === 1) {
+          return;
+        }
+        var contextParams = new ContextParams(
+          tokens.map(
+            function(token) {
+              return token.getState("glyphIndex");
+            }
+          ),
+          0
+        );
+        var charContextParams = new ContextParams(
+          tokens.map(
+            function(token) {
+              return token.char;
+            }
+          ),
+          0
+        );
+        tokens.forEach(function(token, index) {
+          if (isTashkeelArabicChar(token.char)) {
+            return;
+          }
+          contextParams.setCurrentIndex(index);
+          charContextParams.setCurrentIndex(index);
+          var CONNECT = 0;
+          if (willConnectPrev(charContextParams)) {
+            CONNECT |= 1;
+          }
+          if (willConnectNext(charContextParams)) {
+            CONNECT |= 2;
+          }
+          var tag;
+          switch (CONNECT) {
+            case 1:
+              tag = "fina";
+              break;
+            case 2:
+              tag = "init";
+              break;
+            case 3:
+              tag = "medi";
+              break;
+          }
+          if (tags.indexOf(tag) === -1) {
+            return;
+          }
+          var substitutions = this$1.query.lookupFeature({
+            tag,
+            script,
+            contextParams
+          });
+          if (substitutions instanceof Error) {
+            return console.info(substitutions.message);
+          }
+          substitutions.forEach(function(action, index2) {
+            if (action instanceof SubstitutionAction) {
+              applySubstitution(action, tokens, index2);
+              contextParams.context[index2] = action.substitution;
+            }
+          });
+        });
+      }
+      function getContextParams(tokens, index) {
+        var context = tokens.map(function(token) {
+          return token.activeState.value;
+        });
+        return new ContextParams(context, index || 0);
+      }
+      function arabicRequiredLigatures(range) {
+        var this$1 = this;
+        var script = "arab";
+        var tokens = this.tokenizer.getRangeTokens(range);
+        var contextParams = getContextParams(tokens);
+        contextParams.context.forEach(function(glyphIndex, index) {
+          contextParams.setCurrentIndex(index);
+          var substitutions = this$1.query.lookupFeature({
+            tag: "rlig",
+            script,
+            contextParams
+          });
+          if (substitutions.length) {
+            substitutions.forEach(
+              function(action) {
+                return applySubstitution(action, tokens, index);
+              }
+            );
+            contextParams = getContextParams(tokens);
+          }
+        });
+      }
+      function latinWordStartCheck(contextParams) {
+        var char = contextParams.current;
+        var prevChar = contextParams.get(-1);
+        return (
+          // ? latin first char
+          prevChar === null && isLatinChar(char) || // ? latin char preceded with a non latin char
+          !isLatinChar(prevChar) && isLatinChar(char)
+        );
+      }
+      function latinWordEndCheck(contextParams) {
+        var nextChar = contextParams.get(1);
+        return (
+          // ? last latin char
+          nextChar === null || // ? next char is not latin
+          !isLatinChar(nextChar)
+        );
+      }
+      var latinWordCheck = {
+        startCheck: latinWordStartCheck,
+        endCheck: latinWordEndCheck
+      };
+      function getContextParams$1(tokens, index) {
+        var context = tokens.map(function(token) {
+          return token.activeState.value;
+        });
+        return new ContextParams(context, index || 0);
+      }
+      function latinLigature(range) {
+        var this$1 = this;
+        var script = "latn";
+        var tokens = this.tokenizer.getRangeTokens(range);
+        var contextParams = getContextParams$1(tokens);
+        contextParams.context.forEach(function(glyphIndex, index) {
+          contextParams.setCurrentIndex(index);
+          var substitutions = this$1.query.lookupFeature({
+            tag: "liga",
+            script,
+            contextParams
+          });
+          if (substitutions.length) {
+            substitutions.forEach(
+              function(action) {
+                return applySubstitution(action, tokens, index);
+              }
+            );
+            contextParams = getContextParams$1(tokens);
+          }
+        });
+      }
+      function Bidi(baseDir) {
+        this.baseDir = baseDir || "ltr";
+        this.tokenizer = new Tokenizer();
+        this.featuresTags = {};
+      }
+      Bidi.prototype.setText = function(text) {
+        this.text = text;
+      };
+      Bidi.prototype.contextChecks = {
+        latinWordCheck,
+        arabicWordCheck,
+        arabicSentenceCheck
+      };
+      function registerContextChecker(checkId) {
+        var check2 = this.contextChecks[checkId + "Check"];
+        return this.tokenizer.registerContextChecker(
+          checkId,
+          check2.startCheck,
+          check2.endCheck
+        );
+      }
+      function tokenizeText() {
+        registerContextChecker.call(this, "latinWord");
+        registerContextChecker.call(this, "arabicWord");
+        registerContextChecker.call(this, "arabicSentence");
+        return this.tokenizer.tokenize(this.text);
+      }
+      function reverseArabicSentences() {
+        var this$1 = this;
+        var ranges = this.tokenizer.getContextRanges("arabicSentence");
+        ranges.forEach(function(range) {
+          var rangeTokens = this$1.tokenizer.getRangeTokens(range);
+          this$1.tokenizer.replaceRange(
+            range.startIndex,
+            range.endOffset,
+            rangeTokens.reverse()
+          );
+        });
+      }
+      Bidi.prototype.registerFeatures = function(script, tags) {
+        var this$1 = this;
+        var supportedTags = tags.filter(
+          function(tag) {
+            return this$1.query.supports({ script, tag });
+          }
+        );
+        if (!this.featuresTags.hasOwnProperty(script)) {
+          this.featuresTags[script] = supportedTags;
+        } else {
+          this.featuresTags[script] = this.featuresTags[script].concat(supportedTags);
+        }
+      };
+      Bidi.prototype.applyFeatures = function(font, features) {
+        if (!font) {
+          throw new Error(
+            "No valid font was provided to apply features"
+          );
+        }
+        if (!this.query) {
+          this.query = new FeatureQuery(font);
+        }
+        for (var f2 = 0; f2 < features.length; f2++) {
+          var feature = features[f2];
+          if (!this.query.supports({ script: feature.script })) {
+            continue;
+          }
+          this.registerFeatures(feature.script, feature.tags);
+        }
+      };
+      Bidi.prototype.registerModifier = function(modifierId, condition, modifier) {
+        this.tokenizer.registerModifier(modifierId, condition, modifier);
+      };
+      function checkGlyphIndexStatus() {
+        if (this.tokenizer.registeredModifiers.indexOf("glyphIndex") === -1) {
+          throw new Error(
+            "glyphIndex modifier is required to apply arabic presentation features."
+          );
+        }
+      }
+      function applyArabicPresentationForms() {
+        var this$1 = this;
+        var script = "arab";
+        if (!this.featuresTags.hasOwnProperty(script)) {
+          return;
+        }
+        checkGlyphIndexStatus.call(this);
+        var ranges = this.tokenizer.getContextRanges("arabicWord");
+        ranges.forEach(function(range) {
+          arabicPresentationForms.call(this$1, range);
+        });
+      }
+      function applyArabicRequireLigatures() {
+        var this$1 = this;
+        var script = "arab";
+        if (!this.featuresTags.hasOwnProperty(script)) {
+          return;
+        }
+        var tags = this.featuresTags[script];
+        if (tags.indexOf("rlig") === -1) {
+          return;
+        }
+        checkGlyphIndexStatus.call(this);
+        var ranges = this.tokenizer.getContextRanges("arabicWord");
+        ranges.forEach(function(range) {
+          arabicRequiredLigatures.call(this$1, range);
+        });
+      }
+      function applyLatinLigatures() {
+        var this$1 = this;
+        var script = "latn";
+        if (!this.featuresTags.hasOwnProperty(script)) {
+          return;
+        }
+        var tags = this.featuresTags[script];
+        if (tags.indexOf("liga") === -1) {
+          return;
+        }
+        checkGlyphIndexStatus.call(this);
+        var ranges = this.tokenizer.getContextRanges("latinWord");
+        ranges.forEach(function(range) {
+          latinLigature.call(this$1, range);
+        });
+      }
+      Bidi.prototype.checkContextReady = function(contextId) {
+        return !!this.tokenizer.getContext(contextId);
+      };
+      Bidi.prototype.applyFeaturesToContexts = function() {
+        if (this.checkContextReady("arabicWord")) {
+          applyArabicPresentationForms.call(this);
+          applyArabicRequireLigatures.call(this);
+        }
+        if (this.checkContextReady("latinWord")) {
+          applyLatinLigatures.call(this);
+        }
+        if (this.checkContextReady("arabicSentence")) {
+          reverseArabicSentences.call(this);
+        }
+      };
+      Bidi.prototype.processText = function(text) {
+        if (!this.text || this.text !== text) {
+          this.setText(text);
+          tokenizeText.call(this);
+          this.applyFeaturesToContexts();
+        }
+      };
+      Bidi.prototype.getBidiText = function(text) {
+        this.processText(text);
+        return this.tokenizer.getText();
+      };
+      Bidi.prototype.getTextGlyphs = function(text) {
+        this.processText(text);
+        var indexes = [];
+        for (var i = 0; i < this.tokenizer.tokens.length; i++) {
+          var token = this.tokenizer.tokens[i];
+          if (token.state.deleted) {
+            continue;
+          }
+          var index = token.activeState.value;
+          indexes.push(Array.isArray(index) ? index[0] : index);
+        }
+        return indexes;
+      };
+      function Font(options) {
+        options = options || {};
+        options.tables = options.tables || {};
+        if (!options.empty) {
+          checkArgument(options.familyName, "When creating a new Font object, familyName is required.");
+          checkArgument(options.styleName, "When creating a new Font object, styleName is required.");
+          checkArgument(options.unitsPerEm, "When creating a new Font object, unitsPerEm is required.");
+          checkArgument(options.ascender, "When creating a new Font object, ascender is required.");
+          checkArgument(options.descender <= 0, "When creating a new Font object, negative descender value is required.");
+          this.names = {
+            fontFamily: { en: options.familyName || " " },
+            fontSubfamily: { en: options.styleName || " " },
+            fullName: { en: options.fullName || options.familyName + " " + options.styleName },
+            // postScriptName may not contain any whitespace
+            postScriptName: { en: options.postScriptName || (options.familyName + options.styleName).replace(/\s/g, "") },
+            designer: { en: options.designer || " " },
+            designerURL: { en: options.designerURL || " " },
+            manufacturer: { en: options.manufacturer || " " },
+            manufacturerURL: { en: options.manufacturerURL || " " },
+            license: { en: options.license || " " },
+            licenseURL: { en: options.licenseURL || " " },
+            version: { en: options.version || "Version 0.1" },
+            description: { en: options.description || " " },
+            copyright: { en: options.copyright || " " },
+            trademark: { en: options.trademark || " " }
+          };
+          this.unitsPerEm = options.unitsPerEm || 1e3;
+          this.ascender = options.ascender;
+          this.descender = options.descender;
+          this.createdTimestamp = options.createdTimestamp;
+          this.tables = Object.assign(options.tables, {
+            os2: Object.assign({
+              usWeightClass: options.weightClass || this.usWeightClasses.MEDIUM,
+              usWidthClass: options.widthClass || this.usWidthClasses.MEDIUM,
+              fsSelection: options.fsSelection || this.fsSelectionValues.REGULAR
+            }, options.tables.os2)
+          });
+        }
+        this.supported = true;
+        this.glyphs = new glyphset.GlyphSet(this, options.glyphs || []);
+        this.encoding = new DefaultEncoding(this);
+        this.position = new Position(this);
+        this.substitution = new Substitution(this);
+        this.tables = this.tables || {};
+        this._push = null;
+        this._hmtxTableData = {};
+        Object.defineProperty(this, "hinting", {
+          get: function() {
+            if (this._hinting) {
+              return this._hinting;
+            }
+            if (this.outlinesFormat === "truetype") {
+              return this._hinting = new Hinting(this);
+            }
+          }
+        });
+      }
+      Font.prototype.hasChar = function(c) {
+        return this.encoding.charToGlyphIndex(c) !== null;
+      };
+      Font.prototype.charToGlyphIndex = function(s) {
+        return this.encoding.charToGlyphIndex(s);
+      };
+      Font.prototype.charToGlyph = function(c) {
+        var glyphIndex = this.charToGlyphIndex(c);
+        var glyph = this.glyphs.get(glyphIndex);
+        if (!glyph) {
+          glyph = this.glyphs.get(0);
+        }
+        return glyph;
+      };
+      Font.prototype.updateFeatures = function(options) {
+        return this.defaultRenderOptions.features.map(function(feature) {
+          if (feature.script === "latn") {
+            return {
+              script: "latn",
+              tags: feature.tags.filter(function(tag) {
+                return options[tag];
+              })
+            };
+          } else {
+            return feature;
+          }
+        });
+      };
+      Font.prototype.stringToGlyphs = function(s, options) {
+        var this$1 = this;
+        var bidi = new Bidi();
+        var charToGlyphIndexMod = function(token) {
+          return this$1.charToGlyphIndex(token.char);
+        };
+        bidi.registerModifier("glyphIndex", null, charToGlyphIndexMod);
+        var features = options ? this.updateFeatures(options.features) : this.defaultRenderOptions.features;
+        bidi.applyFeatures(this, features);
+        var indexes = bidi.getTextGlyphs(s);
+        var length = indexes.length;
+        var glyphs = new Array(length);
+        var notdef = this.glyphs.get(0);
+        for (var i = 0; i < length; i += 1) {
+          glyphs[i] = this.glyphs.get(indexes[i]) || notdef;
+        }
+        return glyphs;
+      };
+      Font.prototype.nameToGlyphIndex = function(name) {
+        return this.glyphNames.nameToGlyphIndex(name);
+      };
+      Font.prototype.nameToGlyph = function(name) {
+        var glyphIndex = this.nameToGlyphIndex(name);
+        var glyph = this.glyphs.get(glyphIndex);
+        if (!glyph) {
+          glyph = this.glyphs.get(0);
+        }
+        return glyph;
+      };
+      Font.prototype.glyphIndexToName = function(gid) {
+        if (!this.glyphNames.glyphIndexToName) {
+          return "";
+        }
+        return this.glyphNames.glyphIndexToName(gid);
+      };
+      Font.prototype.getKerningValue = function(leftGlyph, rightGlyph) {
+        leftGlyph = leftGlyph.index || leftGlyph;
+        rightGlyph = rightGlyph.index || rightGlyph;
+        var gposKerning = this.position.defaultKerningTables;
+        if (gposKerning) {
+          return this.position.getKerningValue(gposKerning, leftGlyph, rightGlyph);
+        }
+        return this.kerningPairs[leftGlyph + "," + rightGlyph] || 0;
+      };
+      Font.prototype.defaultRenderOptions = {
+        kerning: true,
+        features: [
+          /**
+           * these 4 features are required to render Arabic text properly
+           * and shouldn't be turned off when rendering arabic text.
+           */
+          { script: "arab", tags: ["init", "medi", "fina", "rlig"] },
+          { script: "latn", tags: ["liga", "rlig"] }
+        ]
+      };
+      Font.prototype.forEachGlyph = function(text, x, y, fontSize, options, callback) {
+        x = x !== void 0 ? x : 0;
+        y = y !== void 0 ? y : 0;
+        fontSize = fontSize !== void 0 ? fontSize : 72;
+        options = Object.assign({}, this.defaultRenderOptions, options);
+        var fontScale = 1 / this.unitsPerEm * fontSize;
+        var glyphs = this.stringToGlyphs(text, options);
+        var kerningLookups;
+        if (options.kerning) {
+          var script = options.script || this.position.getDefaultScriptName();
+          kerningLookups = this.position.getKerningTables(script, options.language);
+        }
+        for (var i = 0; i < glyphs.length; i += 1) {
+          var glyph = glyphs[i];
+          callback.call(this, glyph, x, y, fontSize, options);
+          if (glyph.advanceWidth) {
+            x += glyph.advanceWidth * fontScale;
+          }
+          if (options.kerning && i < glyphs.length - 1) {
+            var kerningValue = kerningLookups ? this.position.getKerningValue(kerningLookups, glyph.index, glyphs[i + 1].index) : this.getKerningValue(glyph, glyphs[i + 1]);
+            x += kerningValue * fontScale;
+          }
+          if (options.letterSpacing) {
+            x += options.letterSpacing * fontSize;
+          } else if (options.tracking) {
+            x += options.tracking / 1e3 * fontSize;
+          }
+        }
+        return x;
+      };
+      Font.prototype.getPath = function(text, x, y, fontSize, options) {
+        var fullPath = new Path();
+        this.forEachGlyph(text, x, y, fontSize, options, function(glyph, gX, gY, gFontSize) {
+          var glyphPath = glyph.getPath(gX, gY, gFontSize, options, this);
+          fullPath.extend(glyphPath);
+        });
+        return fullPath;
+      };
+      Font.prototype.getPaths = function(text, x, y, fontSize, options) {
+        var glyphPaths = [];
+        this.forEachGlyph(text, x, y, fontSize, options, function(glyph, gX, gY, gFontSize) {
+          var glyphPath = glyph.getPath(gX, gY, gFontSize, options, this);
+          glyphPaths.push(glyphPath);
+        });
+        return glyphPaths;
+      };
+      Font.prototype.getAdvanceWidth = function(text, fontSize, options) {
+        return this.forEachGlyph(text, 0, 0, fontSize, options, function() {
+        });
+      };
+      Font.prototype.draw = function(ctx, text, x, y, fontSize, options) {
+        this.getPath(text, x, y, fontSize, options).draw(ctx);
+      };
+      Font.prototype.drawPoints = function(ctx, text, x, y, fontSize, options) {
+        this.forEachGlyph(text, x, y, fontSize, options, function(glyph, gX, gY, gFontSize) {
+          glyph.drawPoints(ctx, gX, gY, gFontSize);
+        });
+      };
+      Font.prototype.drawMetrics = function(ctx, text, x, y, fontSize, options) {
+        this.forEachGlyph(text, x, y, fontSize, options, function(glyph, gX, gY, gFontSize) {
+          glyph.drawMetrics(ctx, gX, gY, gFontSize);
+        });
+      };
+      Font.prototype.getEnglishName = function(name) {
+        var translations = this.names[name];
+        if (translations) {
+          return translations.en;
+        }
+      };
+      Font.prototype.validate = function() {
+        var _this = this;
+        function assert(predicate, message) {
+        }
+        function assertNamePresent(name) {
+          var englishName = _this.getEnglishName(name);
+          assert(englishName && englishName.trim().length > 0);
+        }
+        assertNamePresent("fontFamily");
+        assertNamePresent("weightName");
+        assertNamePresent("manufacturer");
+        assertNamePresent("copyright");
+        assertNamePresent("version");
+        assert(this.unitsPerEm > 0);
+      };
+      Font.prototype.toTables = function() {
+        return sfnt.fontToTable(this);
+      };
+      Font.prototype.toBuffer = function() {
+        console.warn("Font.toBuffer is deprecated. Use Font.toArrayBuffer instead.");
+        return this.toArrayBuffer();
+      };
+      Font.prototype.toArrayBuffer = function() {
+        var sfntTable = this.toTables();
+        var bytes = sfntTable.encode();
+        var buffer = new ArrayBuffer(bytes.length);
+        var intArray = new Uint8Array(buffer);
+        for (var i = 0; i < bytes.length; i++) {
+          intArray[i] = bytes[i];
+        }
+        return buffer;
+      };
+      Font.prototype.download = function(fileName) {
+        var familyName = this.getEnglishName("fontFamily");
+        var styleName = this.getEnglishName("fontSubfamily");
+        fileName = fileName || familyName.replace(/\s/g, "") + "-" + styleName + ".otf";
+        var arrayBuffer = this.toArrayBuffer();
+        if (isBrowser()) {
+          window.URL = window.URL || window.webkitURL;
+          if (window.URL) {
+            var dataView = new DataView(arrayBuffer);
+            var blob = new Blob([dataView], { type: "font/opentype" });
+            var link = document.createElement("a");
+            link.href = window.URL.createObjectURL(blob);
+            link.download = fileName;
+            var event = document.createEvent("MouseEvents");
+            event.initEvent("click", true, false);
+            link.dispatchEvent(event);
+          } else {
+            console.warn("Font file could not be downloaded. Try using a different browser.");
+          }
+        } else {
+          var fs = require("fs");
+          var buffer = arrayBufferToNodeBuffer(arrayBuffer);
+          fs.writeFileSync(fileName, buffer);
+        }
+      };
+      Font.prototype.fsSelectionValues = {
+        ITALIC: 1,
+        //1
+        UNDERSCORE: 2,
+        //2
+        NEGATIVE: 4,
+        //4
+        OUTLINED: 8,
+        //8
+        STRIKEOUT: 16,
+        //16
+        BOLD: 32,
+        //32
+        REGULAR: 64,
+        //64
+        USER_TYPO_METRICS: 128,
+        //128
+        WWS: 256,
+        //256
+        OBLIQUE: 512
+        //512
+      };
+      Font.prototype.usWidthClasses = {
+        ULTRA_CONDENSED: 1,
+        EXTRA_CONDENSED: 2,
+        CONDENSED: 3,
+        SEMI_CONDENSED: 4,
+        MEDIUM: 5,
+        SEMI_EXPANDED: 6,
+        EXPANDED: 7,
+        EXTRA_EXPANDED: 8,
+        ULTRA_EXPANDED: 9
+      };
+      Font.prototype.usWeightClasses = {
+        THIN: 100,
+        EXTRA_LIGHT: 200,
+        LIGHT: 300,
+        NORMAL: 400,
+        MEDIUM: 500,
+        SEMI_BOLD: 600,
+        BOLD: 700,
+        EXTRA_BOLD: 800,
+        BLACK: 900
+      };
+      function addName(name, names) {
+        var nameString = JSON.stringify(name);
+        var nameID = 256;
+        for (var nameKey in names) {
+          var n = parseInt(nameKey);
+          if (!n || n < 256) {
+            continue;
+          }
+          if (JSON.stringify(names[nameKey]) === nameString) {
+            return n;
+          }
+          if (nameID <= n) {
+            nameID = n + 1;
+          }
+        }
+        names[nameID] = name;
+        return nameID;
+      }
+      function makeFvarAxis(n, axis, names) {
+        var nameID = addName(axis.name, names);
+        return [
+          { name: "tag_" + n, type: "TAG", value: axis.tag },
+          { name: "minValue_" + n, type: "FIXED", value: axis.minValue << 16 },
+          { name: "defaultValue_" + n, type: "FIXED", value: axis.defaultValue << 16 },
+          { name: "maxValue_" + n, type: "FIXED", value: axis.maxValue << 16 },
+          { name: "flags_" + n, type: "USHORT", value: 0 },
+          { name: "nameID_" + n, type: "USHORT", value: nameID }
+        ];
+      }
+      function parseFvarAxis(data, start, names) {
+        var axis = {};
+        var p = new parse2.Parser(data, start);
+        axis.tag = p.parseTag();
+        axis.minValue = p.parseFixed();
+        axis.defaultValue = p.parseFixed();
+        axis.maxValue = p.parseFixed();
+        p.skip("uShort", 1);
+        axis.name = names[p.parseUShort()] || {};
+        return axis;
+      }
+      function makeFvarInstance(n, inst, axes, names) {
+        var nameID = addName(inst.name, names);
+        var fields = [
+          { name: "nameID_" + n, type: "USHORT", value: nameID },
+          { name: "flags_" + n, type: "USHORT", value: 0 }
+        ];
+        for (var i = 0; i < axes.length; ++i) {
+          var axisTag = axes[i].tag;
+          fields.push({
+            name: "axis_" + n + " " + axisTag,
+            type: "FIXED",
+            value: inst.coordinates[axisTag] << 16
+          });
+        }
+        return fields;
+      }
+      function parseFvarInstance(data, start, axes, names) {
+        var inst = {};
+        var p = new parse2.Parser(data, start);
+        inst.name = names[p.parseUShort()] || {};
+        p.skip("uShort", 1);
+        inst.coordinates = {};
+        for (var i = 0; i < axes.length; ++i) {
+          inst.coordinates[axes[i].tag] = p.parseFixed();
+        }
+        return inst;
+      }
+      function makeFvarTable(fvar2, names) {
+        var result = new table.Table("fvar", [
+          { name: "version", type: "ULONG", value: 65536 },
+          { name: "offsetToData", type: "USHORT", value: 0 },
+          { name: "countSizePairs", type: "USHORT", value: 2 },
+          { name: "axisCount", type: "USHORT", value: fvar2.axes.length },
+          { name: "axisSize", type: "USHORT", value: 20 },
+          { name: "instanceCount", type: "USHORT", value: fvar2.instances.length },
+          { name: "instanceSize", type: "USHORT", value: 4 + fvar2.axes.length * 4 }
+        ]);
+        result.offsetToData = result.sizeOf();
+        for (var i = 0; i < fvar2.axes.length; i++) {
+          result.fields = result.fields.concat(makeFvarAxis(i, fvar2.axes[i], names));
+        }
+        for (var j = 0; j < fvar2.instances.length; j++) {
+          result.fields = result.fields.concat(makeFvarInstance(j, fvar2.instances[j], fvar2.axes, names));
+        }
+        return result;
+      }
+      function parseFvarTable(data, start, names) {
+        var p = new parse2.Parser(data, start);
+        var tableVersion = p.parseULong();
+        check.argument(tableVersion === 65536, "Unsupported fvar table version.");
+        var offsetToData = p.parseOffset16();
+        p.skip("uShort", 1);
+        var axisCount = p.parseUShort();
+        var axisSize = p.parseUShort();
+        var instanceCount = p.parseUShort();
+        var instanceSize = p.parseUShort();
+        var axes = [];
+        for (var i = 0; i < axisCount; i++) {
+          axes.push(parseFvarAxis(data, start + offsetToData + i * axisSize, names));
+        }
+        var instances = [];
+        var instanceStart = start + offsetToData + axisCount * axisSize;
+        for (var j = 0; j < instanceCount; j++) {
+          instances.push(parseFvarInstance(data, instanceStart + j * instanceSize, axes, names));
+        }
+        return { axes, instances };
+      }
+      var fvar = { make: makeFvarTable, parse: parseFvarTable };
+      var attachList = function() {
+        return {
+          coverage: this.parsePointer(Parser.coverage),
+          attachPoints: this.parseList(Parser.pointer(Parser.uShortList))
+        };
+      };
+      var caretValue = function() {
+        var format = this.parseUShort();
+        check.argument(
+          format === 1 || format === 2 || format === 3,
+          "Unsupported CaretValue table version."
+        );
+        if (format === 1) {
+          return { coordinate: this.parseShort() };
+        } else if (format === 2) {
+          return { pointindex: this.parseShort() };
+        } else if (format === 3) {
+          return { coordinate: this.parseShort() };
+        }
+      };
+      var ligGlyph = function() {
+        return this.parseList(Parser.pointer(caretValue));
+      };
+      var ligCaretList = function() {
+        return {
+          coverage: this.parsePointer(Parser.coverage),
+          ligGlyphs: this.parseList(Parser.pointer(ligGlyph))
+        };
+      };
+      var markGlyphSets = function() {
+        this.parseUShort();
+        return this.parseList(Parser.pointer(Parser.coverage));
+      };
+      function parseGDEFTable(data, start) {
+        start = start || 0;
+        var p = new Parser(data, start);
+        var tableVersion = p.parseVersion(1);
+        check.argument(
+          tableVersion === 1 || tableVersion === 1.2 || tableVersion === 1.3,
+          "Unsupported GDEF table version."
+        );
+        var gdef2 = {
+          version: tableVersion,
+          classDef: p.parsePointer(Parser.classDef),
+          attachList: p.parsePointer(attachList),
+          ligCaretList: p.parsePointer(ligCaretList),
+          markAttachClassDef: p.parsePointer(Parser.classDef)
+        };
+        if (tableVersion >= 1.2) {
+          gdef2.markGlyphSets = p.parsePointer(markGlyphSets);
+        }
+        return gdef2;
+      }
+      var gdef = { parse: parseGDEFTable };
+      var subtableParsers$1 = new Array(10);
+      subtableParsers$1[1] = function parseLookup1() {
+        var start = this.offset + this.relativeOffset;
+        var posformat = this.parseUShort();
+        if (posformat === 1) {
+          return {
+            posFormat: 1,
+            coverage: this.parsePointer(Parser.coverage),
+            value: this.parseValueRecord()
+          };
+        } else if (posformat === 2) {
+          return {
+            posFormat: 2,
+            coverage: this.parsePointer(Parser.coverage),
+            values: this.parseValueRecordList()
+          };
+        }
+        check.assert(false, "0x" + start.toString(16) + ": GPOS lookup type 1 format must be 1 or 2.");
+      };
+      subtableParsers$1[2] = function parseLookup2() {
+        var start = this.offset + this.relativeOffset;
+        var posFormat = this.parseUShort();
+        check.assert(posFormat === 1 || posFormat === 2, "0x" + start.toString(16) + ": GPOS lookup type 2 format must be 1 or 2.");
+        var coverage = this.parsePointer(Parser.coverage);
+        var valueFormat1 = this.parseUShort();
+        var valueFormat2 = this.parseUShort();
+        if (posFormat === 1) {
+          return {
+            posFormat,
+            coverage,
+            valueFormat1,
+            valueFormat2,
+            pairSets: this.parseList(Parser.pointer(Parser.list(function() {
+              return {
+                // pairValueRecord
+                secondGlyph: this.parseUShort(),
+                value1: this.parseValueRecord(valueFormat1),
+                value2: this.parseValueRecord(valueFormat2)
+              };
+            })))
+          };
+        } else if (posFormat === 2) {
+          var classDef1 = this.parsePointer(Parser.classDef);
+          var classDef2 = this.parsePointer(Parser.classDef);
+          var class1Count = this.parseUShort();
+          var class2Count = this.parseUShort();
+          return {
+            // Class Pair Adjustment
+            posFormat,
+            coverage,
+            valueFormat1,
+            valueFormat2,
+            classDef1,
+            classDef2,
+            class1Count,
+            class2Count,
+            classRecords: this.parseList(class1Count, Parser.list(class2Count, function() {
+              return {
+                value1: this.parseValueRecord(valueFormat1),
+                value2: this.parseValueRecord(valueFormat2)
+              };
+            }))
+          };
+        }
+      };
+      subtableParsers$1[3] = function parseLookup3() {
+        return { error: "GPOS Lookup 3 not supported" };
+      };
+      subtableParsers$1[4] = function parseLookup4() {
+        return { error: "GPOS Lookup 4 not supported" };
+      };
+      subtableParsers$1[5] = function parseLookup5() {
+        return { error: "GPOS Lookup 5 not supported" };
+      };
+      subtableParsers$1[6] = function parseLookup6() {
+        return { error: "GPOS Lookup 6 not supported" };
+      };
+      subtableParsers$1[7] = function parseLookup7() {
+        return { error: "GPOS Lookup 7 not supported" };
+      };
+      subtableParsers$1[8] = function parseLookup8() {
+        return { error: "GPOS Lookup 8 not supported" };
+      };
+      subtableParsers$1[9] = function parseLookup9() {
+        return { error: "GPOS Lookup 9 not supported" };
+      };
+      function parseGposTable(data, start) {
+        start = start || 0;
+        var p = new Parser(data, start);
+        var tableVersion = p.parseVersion(1);
+        check.argument(tableVersion === 1 || tableVersion === 1.1, "Unsupported GPOS table version " + tableVersion);
+        if (tableVersion === 1) {
+          return {
+            version: tableVersion,
+            scripts: p.parseScriptList(),
+            features: p.parseFeatureList(),
+            lookups: p.parseLookupList(subtableParsers$1)
+          };
+        } else {
+          return {
+            version: tableVersion,
+            scripts: p.parseScriptList(),
+            features: p.parseFeatureList(),
+            lookups: p.parseLookupList(subtableParsers$1),
+            variations: p.parseFeatureVariationsList()
+          };
+        }
+      }
+      var subtableMakers$1 = new Array(10);
+      function makeGposTable(gpos2) {
+        return new table.Table("GPOS", [
+          { name: "version", type: "ULONG", value: 65536 },
+          { name: "scripts", type: "TABLE", value: new table.ScriptList(gpos2.scripts) },
+          { name: "features", type: "TABLE", value: new table.FeatureList(gpos2.features) },
+          { name: "lookups", type: "TABLE", value: new table.LookupList(gpos2.lookups, subtableMakers$1) }
+        ]);
+      }
+      var gpos = { parse: parseGposTable, make: makeGposTable };
+      function parseWindowsKernTable(p) {
+        var pairs = {};
+        p.skip("uShort");
+        var subtableVersion = p.parseUShort();
+        check.argument(subtableVersion === 0, "Unsupported kern sub-table version.");
+        p.skip("uShort", 2);
+        var nPairs = p.parseUShort();
+        p.skip("uShort", 3);
+        for (var i = 0; i < nPairs; i += 1) {
+          var leftIndex = p.parseUShort();
+          var rightIndex = p.parseUShort();
+          var value = p.parseShort();
+          pairs[leftIndex + "," + rightIndex] = value;
+        }
+        return pairs;
+      }
+      function parseMacKernTable(p) {
+        var pairs = {};
+        p.skip("uShort");
+        var nTables = p.parseULong();
+        if (nTables > 1) {
+          console.warn("Only the first kern subtable is supported.");
+        }
+        p.skip("uLong");
+        var coverage = p.parseUShort();
+        var subtableVersion = coverage & 255;
+        p.skip("uShort");
+        if (subtableVersion === 0) {
+          var nPairs = p.parseUShort();
+          p.skip("uShort", 3);
+          for (var i = 0; i < nPairs; i += 1) {
+            var leftIndex = p.parseUShort();
+            var rightIndex = p.parseUShort();
+            var value = p.parseShort();
+            pairs[leftIndex + "," + rightIndex] = value;
+          }
+        }
+        return pairs;
+      }
+      function parseKernTable(data, start) {
+        var p = new parse2.Parser(data, start);
+        var tableVersion = p.parseUShort();
+        if (tableVersion === 0) {
+          return parseWindowsKernTable(p);
+        } else if (tableVersion === 1) {
+          return parseMacKernTable(p);
+        } else {
+          throw new Error("Unsupported kern table version (" + tableVersion + ").");
+        }
+      }
+      var kern = { parse: parseKernTable };
+      function parseLocaTable(data, start, numGlyphs, shortVersion) {
+        var p = new parse2.Parser(data, start);
+        var parseFn = shortVersion ? p.parseUShort : p.parseULong;
+        var glyphOffsets = [];
+        for (var i = 0; i < numGlyphs + 1; i += 1) {
+          var glyphOffset = parseFn.call(p);
+          if (shortVersion) {
+            glyphOffset *= 2;
+          }
+          glyphOffsets.push(glyphOffset);
+        }
+        return glyphOffsets;
+      }
+      var loca = { parse: parseLocaTable };
+      function loadFromFile(path, callback) {
+        var fs = require("fs");
+        fs.readFile(path, function(err, buffer) {
+          if (err) {
+            return callback(err.message);
+          }
+          callback(null, nodeBufferToArrayBuffer(buffer));
+        });
+      }
+      function loadFromUrl(url, callback) {
+        var request = new XMLHttpRequest();
+        request.open("get", url, true);
+        request.responseType = "arraybuffer";
+        request.onload = function() {
+          if (request.response) {
+            return callback(null, request.response);
+          } else {
+            return callback("Font could not be loaded: " + request.statusText);
+          }
+        };
+        request.onerror = function() {
+          callback("Font could not be loaded");
+        };
+        request.send();
+      }
+      function parseOpenTypeTableEntries(data, numTables) {
+        var tableEntries = [];
+        var p = 12;
+        for (var i = 0; i < numTables; i += 1) {
+          var tag = parse2.getTag(data, p);
+          var checksum = parse2.getULong(data, p + 4);
+          var offset = parse2.getULong(data, p + 8);
+          var length = parse2.getULong(data, p + 12);
+          tableEntries.push({ tag, checksum, offset, length, compression: false });
+          p += 16;
+        }
+        return tableEntries;
+      }
+      function parseWOFFTableEntries(data, numTables) {
+        var tableEntries = [];
+        var p = 44;
+        for (var i = 0; i < numTables; i += 1) {
+          var tag = parse2.getTag(data, p);
+          var offset = parse2.getULong(data, p + 4);
+          var compLength = parse2.getULong(data, p + 8);
+          var origLength = parse2.getULong(data, p + 12);
+          var compression = void 0;
+          if (compLength < origLength) {
+            compression = "WOFF";
+          } else {
+            compression = false;
+          }
+          tableEntries.push({
+            tag,
+            offset,
+            compression,
+            compressedLength: compLength,
+            length: origLength
+          });
+          p += 20;
+        }
+        return tableEntries;
+      }
+      function uncompressTable(data, tableEntry) {
+        if (tableEntry.compression === "WOFF") {
+          var inBuffer = new Uint8Array(data.buffer, tableEntry.offset + 2, tableEntry.compressedLength - 2);
+          var outBuffer = new Uint8Array(tableEntry.length);
+          tinyInflate(inBuffer, outBuffer);
+          if (outBuffer.byteLength !== tableEntry.length) {
+            throw new Error("Decompression error: " + tableEntry.tag + " decompressed length doesn't match recorded length");
+          }
+          var view = new DataView(outBuffer.buffer, 0);
+          return { data: view, offset: 0 };
+        } else {
+          return { data, offset: tableEntry.offset };
+        }
+      }
+      function parseBuffer(buffer, opt) {
+        opt = opt === void 0 || opt === null ? {} : opt;
+        var indexToLocFormat;
+        var ltagTable;
+        var font = new Font({ empty: true });
+        var data = new DataView(buffer, 0);
+        var numTables;
+        var tableEntries = [];
+        var signature = parse2.getTag(data, 0);
+        if (signature === String.fromCharCode(0, 1, 0, 0) || signature === "true" || signature === "typ1") {
+          font.outlinesFormat = "truetype";
+          numTables = parse2.getUShort(data, 4);
+          tableEntries = parseOpenTypeTableEntries(data, numTables);
+        } else if (signature === "OTTO") {
+          font.outlinesFormat = "cff";
+          numTables = parse2.getUShort(data, 4);
+          tableEntries = parseOpenTypeTableEntries(data, numTables);
+        } else if (signature === "wOFF") {
+          var flavor = parse2.getTag(data, 4);
+          if (flavor === String.fromCharCode(0, 1, 0, 0)) {
+            font.outlinesFormat = "truetype";
+          } else if (flavor === "OTTO") {
+            font.outlinesFormat = "cff";
+          } else {
+            throw new Error("Unsupported OpenType flavor " + signature);
+          }
+          numTables = parse2.getUShort(data, 12);
+          tableEntries = parseWOFFTableEntries(data, numTables);
+        } else {
+          throw new Error("Unsupported OpenType signature " + signature);
+        }
+        var cffTableEntry;
+        var fvarTableEntry;
+        var glyfTableEntry;
+        var gdefTableEntry;
+        var gposTableEntry;
+        var gsubTableEntry;
+        var hmtxTableEntry;
+        var kernTableEntry;
+        var locaTableEntry;
+        var nameTableEntry;
+        var metaTableEntry;
+        var p;
+        for (var i = 0; i < numTables; i += 1) {
+          var tableEntry = tableEntries[i];
+          var table2 = void 0;
+          switch (tableEntry.tag) {
+            case "cmap":
+              table2 = uncompressTable(data, tableEntry);
+              font.tables.cmap = cmap.parse(table2.data, table2.offset);
+              font.encoding = new CmapEncoding(font.tables.cmap);
+              break;
+            case "cvt ":
+              table2 = uncompressTable(data, tableEntry);
+              p = new parse2.Parser(table2.data, table2.offset);
+              font.tables.cvt = p.parseShortList(tableEntry.length / 2);
+              break;
+            case "fvar":
+              fvarTableEntry = tableEntry;
+              break;
+            case "fpgm":
+              table2 = uncompressTable(data, tableEntry);
+              p = new parse2.Parser(table2.data, table2.offset);
+              font.tables.fpgm = p.parseByteList(tableEntry.length);
+              break;
+            case "head":
+              table2 = uncompressTable(data, tableEntry);
+              font.tables.head = head.parse(table2.data, table2.offset);
+              font.unitsPerEm = font.tables.head.unitsPerEm;
+              indexToLocFormat = font.tables.head.indexToLocFormat;
+              break;
+            case "hhea":
+              table2 = uncompressTable(data, tableEntry);
+              font.tables.hhea = hhea.parse(table2.data, table2.offset);
+              font.ascender = font.tables.hhea.ascender;
+              font.descender = font.tables.hhea.descender;
+              font.numberOfHMetrics = font.tables.hhea.numberOfHMetrics;
+              break;
+            case "hmtx":
+              hmtxTableEntry = tableEntry;
+              break;
+            case "ltag":
+              table2 = uncompressTable(data, tableEntry);
+              ltagTable = ltag.parse(table2.data, table2.offset);
+              break;
+            case "maxp":
+              table2 = uncompressTable(data, tableEntry);
+              font.tables.maxp = maxp.parse(table2.data, table2.offset);
+              font.numGlyphs = font.tables.maxp.numGlyphs;
+              break;
+            case "name":
+              nameTableEntry = tableEntry;
+              break;
+            case "OS/2":
+              table2 = uncompressTable(data, tableEntry);
+              font.tables.os2 = os2.parse(table2.data, table2.offset);
+              break;
+            case "post":
+              table2 = uncompressTable(data, tableEntry);
+              font.tables.post = post.parse(table2.data, table2.offset);
+              font.glyphNames = new GlyphNames(font.tables.post);
+              break;
+            case "prep":
+              table2 = uncompressTable(data, tableEntry);
+              p = new parse2.Parser(table2.data, table2.offset);
+              font.tables.prep = p.parseByteList(tableEntry.length);
+              break;
+            case "glyf":
+              glyfTableEntry = tableEntry;
+              break;
+            case "loca":
+              locaTableEntry = tableEntry;
+              break;
+            case "CFF ":
+              cffTableEntry = tableEntry;
+              break;
+            case "kern":
+              kernTableEntry = tableEntry;
+              break;
+            case "GDEF":
+              gdefTableEntry = tableEntry;
+              break;
+            case "GPOS":
+              gposTableEntry = tableEntry;
+              break;
+            case "GSUB":
+              gsubTableEntry = tableEntry;
+              break;
+            case "meta":
+              metaTableEntry = tableEntry;
+              break;
+          }
+        }
+        var nameTable = uncompressTable(data, nameTableEntry);
+        font.tables.name = _name.parse(nameTable.data, nameTable.offset, ltagTable);
+        font.names = font.tables.name;
+        if (glyfTableEntry && locaTableEntry) {
+          var shortVersion = indexToLocFormat === 0;
+          var locaTable = uncompressTable(data, locaTableEntry);
+          var locaOffsets = loca.parse(locaTable.data, locaTable.offset, font.numGlyphs, shortVersion);
+          var glyfTable = uncompressTable(data, glyfTableEntry);
+          font.glyphs = glyf.parse(glyfTable.data, glyfTable.offset, locaOffsets, font, opt);
+        } else if (cffTableEntry) {
+          var cffTable = uncompressTable(data, cffTableEntry);
+          cff.parse(cffTable.data, cffTable.offset, font, opt);
+        } else {
+          throw new Error("Font doesn't contain TrueType or CFF outlines.");
+        }
+        var hmtxTable = uncompressTable(data, hmtxTableEntry);
+        hmtx.parse(font, hmtxTable.data, hmtxTable.offset, font.numberOfHMetrics, font.numGlyphs, font.glyphs, opt);
+        addGlyphNames(font, opt);
+        if (kernTableEntry) {
+          var kernTable = uncompressTable(data, kernTableEntry);
+          font.kerningPairs = kern.parse(kernTable.data, kernTable.offset);
+        } else {
+          font.kerningPairs = {};
+        }
+        if (gdefTableEntry) {
+          var gdefTable = uncompressTable(data, gdefTableEntry);
+          font.tables.gdef = gdef.parse(gdefTable.data, gdefTable.offset);
+        }
+        if (gposTableEntry) {
+          var gposTable = uncompressTable(data, gposTableEntry);
+          font.tables.gpos = gpos.parse(gposTable.data, gposTable.offset);
+          font.position.init();
+        }
+        if (gsubTableEntry) {
+          var gsubTable = uncompressTable(data, gsubTableEntry);
+          font.tables.gsub = gsub.parse(gsubTable.data, gsubTable.offset);
+        }
+        if (fvarTableEntry) {
+          var fvarTable = uncompressTable(data, fvarTableEntry);
+          font.tables.fvar = fvar.parse(fvarTable.data, fvarTable.offset, font.names);
+        }
+        if (metaTableEntry) {
+          var metaTable = uncompressTable(data, metaTableEntry);
+          font.tables.meta = meta.parse(metaTable.data, metaTable.offset);
+          font.metas = font.tables.meta;
+        }
+        return font;
+      }
+      function load(url, callback, opt) {
+        opt = opt === void 0 || opt === null ? {} : opt;
+        var isNode = typeof window === "undefined";
+        var loadFn = isNode && !opt.isUrl ? loadFromFile : loadFromUrl;
+        return new Promise(function(resolve, reject) {
+          loadFn(url, function(err, arrayBuffer) {
+            if (err) {
+              if (callback) {
+                return callback(err);
+              } else {
+                reject(err);
+              }
+            }
+            var font;
+            try {
+              font = parseBuffer(arrayBuffer, opt);
+            } catch (e) {
+              if (callback) {
+                return callback(e, null);
+              } else {
+                reject(e);
+              }
+            }
+            if (callback) {
+              return callback(null, font);
+            } else {
+              resolve(font);
+            }
+          });
+        });
+      }
+      function loadSync(url, opt) {
+        var fs = require("fs");
+        var buffer = fs.readFileSync(url);
+        return parseBuffer(nodeBufferToArrayBuffer(buffer), opt);
+      }
+      var opentype = /* @__PURE__ */ Object.freeze({
+        __proto__: null,
+        Font,
+        Glyph,
+        Path,
+        BoundingBox,
+        _parse: parse2,
+        parse: parseBuffer,
+        load,
+        loadSync
+      });
+      exports2.BoundingBox = BoundingBox;
+      exports2.Font = Font;
+      exports2.Glyph = Glyph;
+      exports2.Path = Path;
+      exports2._parse = parse2;
+      exports2.default = opentype;
+      exports2.load = load;
+      exports2.loadSync = loadSync;
+      exports2.parse = parseBuffer;
+      Object.defineProperty(exports2, "__esModule", { value: true });
+    });
+  }
+});
+
+// node_modules/pdfjs/lib/font/subset.js
+var require_subset = __commonJS({
+  "node_modules/pdfjs/lib/font/subset.js"(exports, module2) {
+    "use strict";
+    var opentype = require_opentype();
+    module2.exports = class FontSubset {
+      constructor(font) {
+        this.font = font;
+        this.name = "PDFJS+" + this.font.names.fontFamily.en;
+        this.glyphs = {
+          "0": this.font.charToGlyph(String.fromCharCode(0)),
+          // notDef glyph
+          "32": this.font.charToGlyph(String.fromCharCode(32))
+          // space
+        };
+        this.subset = { "0": 0, "32": 32 };
+        this.mapping = { "0": 0, "32": 32 };
+        this.pos = 33;
+      }
+      use(chars) {
+        for (let i = 0, len = chars.length; i < len; ++i) {
+          const code = chars.charCodeAt(i);
+          if (code in this.mapping || code < 33) {
+            continue;
+          }
+          const glyph = this.font.charToGlyph(chars[i]);
+          this.subset[this.pos] = code;
+          this.mapping[code] = this.pos;
+          this.glyphs[this.pos] = glyph;
+          this.pos++;
+        }
+      }
+      encode(str) {
+        const codes = [];
+        for (let i = 0, len = str.length; i < len; ++i) {
+          codes.push(this.mapping[str.charCodeAt(i)]);
+        }
+        return String.fromCharCode.apply(String, codes);
+      }
+      cmap() {
+        return this.subset;
+      }
+      save() {
+        const glyphs = [];
+        for (const pos in this.glyphs) {
+          glyphs.push(this.glyphs[pos]);
+        }
+        const font = new opentype.Font({
+          familyName: this.name,
+          styleName: this.font.names.fontSubfamily.en,
+          unitsPerEm: this.font.unitsPerEm,
+          ascender: this.font.ascender,
+          descender: this.font.descender,
+          glyphs
+        });
+        return font.toArrayBuffer();
+      }
+    };
+  }
+});
+
+// node_modules/pdfjs/lib/font/otf.js
+var require_otf = __commonJS({
+  "node_modules/pdfjs/lib/font/otf.js"(exports, module2) {
+    "use strict";
+    var opentype = require_opentype();
+    var FontSubset = require_subset();
+    var PDFName = require_name();
+    var PDFObject = require_object();
+    var PDFDictionary = require_dictionary();
+    var PDFString = require_string();
+    var PDFArray = require_array();
+    var PDFStream = require_stream();
+    var Base = require_base();
+    var StringWidth = Base.StringWidth;
+    var util = require_util();
+    module2.exports = class OTFFontFactory extends Base {
+      constructor(b) {
+        super();
+        const ab = util.toArrayBuffer(b);
+        this.font = opentype.parse(ab);
+      }
+      instance() {
+        return new OTFFont(this.font, this);
+      }
+    };
+    var OTFFont = class {
+      constructor(font, parent) {
+        this.font = font;
+        this.parent = parent;
+        this.subset = new FontSubset(this.font);
+        this.subset.use(" ");
+      }
+      encode(str) {
+        this.subset.use(str);
+        return new PDFString(this.subset.encode(str)).toHexString();
+      }
+      stringWidth(str, size) {
+        const scale = size / this.font.unitsPerEm;
+        const glyphs = this.font.stringToGlyphs(str);
+        const kerning = [];
+        let width = 0;
+        for (let i = 0, len = glyphs.length; i < len; ++i) {
+          const left = glyphs[i];
+          const right = glyphs[i + 1];
+          width += left.advanceWidth;
+          if (right) {
+            const offset = -this.font.getKerningValue(left, right);
+            if (offset !== 0) {
+              width += offset;
+              kerning.push({ pos: i + 1, offset });
+            }
+          }
+        }
+        return new StringWidth(width * scale, kerning);
+      }
+      lineHeight(size, includeGap) {
+        if (includeGap == null) {
+          includeGap = false;
+        }
+        const gap = includeGap ? this.font.tables.os2.sTypoLineGap : 0;
+        const ascent = this.font.tables.os2.sTypoAscender;
+        const descent = this.font.tables.os2.sTypoDescender;
+        return (ascent + gap - descent) * size / this.font.unitsPerEm;
+      }
+      ascent(size) {
+        return this.font.tables.os2.sTypoAscender * size / this.font.unitsPerEm;
+      }
+      descent(size) {
+        return this.font.tables.os2.sTypoDescender * size / this.font.unitsPerEm;
+      }
+      underlinePosition(size) {
+        return this.font.tables.post.underlinePosition * size / this.font.unitsPerEm;
+      }
+      underlineThickness(size) {
+        return this.font.tables.post.underlineThickness * size / this.font.unitsPerEm;
+      }
+      async write(doc, fontObj) {
+        const head = this.font.tables.head;
+        const scaleFactor = 1e3 / this.font.unitsPerEm;
+        let flags = 0;
+        const familyClass = (this.font.tables.os2.sFamilyClass || 0) >> 8;
+        const isSerif = !!~[1, 2, 3, 4, 5, 6, 7].indexOf(familyClass);
+        const isFixedPitch = this.font.tables.post.isFixedPitch;
+        const italicAngle = this.font.tables.post.italicAngle;
+        if (isFixedPitch)
+          flags |= 1 << 0;
+        if (isSerif)
+          flags |= 1 << 1;
+        if (familyClass === 10)
+          flags |= 1 << 3;
+        if (italicAngle !== 0)
+          flags |= 1 << 6;
+        flags |= 1 << 5;
+        const descriptor = new PDFObject("FontDescriptor");
+        descriptor.prop("FontName", this.subset.name);
+        descriptor.prop("Flags", flags);
+        descriptor.prop("FontBBox", new PDFArray([
+          head.xMin * scaleFactor,
+          head.yMin * scaleFactor,
+          head.xMax * scaleFactor,
+          head.yMax * scaleFactor
+        ]));
+        descriptor.prop("ItalicAngle", italicAngle);
+        descriptor.prop("Ascent", this.font.tables.os2.sTypoAscender * scaleFactor);
+        descriptor.prop("Descent", this.font.tables.os2.sTypoDescender * scaleFactor);
+        descriptor.prop("CapHeight", this.font.tables.os2.sCapHeight * scaleFactor);
+        descriptor.prop("XHeight", this.font.tables.os2.sxHeight * scaleFactor);
+        descriptor.prop("StemV", 0);
+        const descendant = new PDFObject("Font");
+        descendant.prop("Subtype", "CIDFontType0");
+        descendant.prop("BaseFont", this.font.names.postScriptName.en);
+        descendant.prop("DW", 1e3);
+        descendant.prop("CIDToGIDMap", "Identity");
+        descendant.prop("CIDSystemInfo", new PDFDictionary({
+          "Ordering": new PDFString("Identity"),
+          "Registry": new PDFString("Adobe"),
+          "Supplement": 0
+        }));
+        descendant.prop("FontDescriptor", descriptor.toReference());
+        fontObj.prop("Subtype", "Type0");
+        fontObj.prop("BaseFont", this.font.names.postScriptName.en);
+        fontObj.prop("Encoding", "Identity-H");
+        fontObj.prop("DescendantFonts", new PDFArray([descendant.toReference()]));
+        const metrics = [], codeMap = this.subset.cmap();
+        for (const code in codeMap) {
+          if (code < 32) {
+            continue;
+          }
+          const width = Math.round(this.subset.glyphs[code].advanceWidth * scaleFactor);
+          metrics.push(code - 31);
+          metrics.push(new PDFArray([width]));
+        }
+        descendant.prop("W", new PDFArray(metrics));
+        const cmap = new PDFStream();
+        cmap.writeLine("/CIDInit /ProcSet findresource begin");
+        cmap.writeLine("12 dict begin");
+        cmap.writeLine("begincmap");
+        cmap.writeLine("/CIDSystemInfo <<");
+        cmap.writeLine("  /Registry (Adobe)");
+        cmap.writeLine("  /Ordering (Identity)");
+        cmap.writeLine("  /Supplement 0");
+        cmap.writeLine(">> def");
+        cmap.writeLine("/CMapName /Identity-H");
+        cmap.writeLine("/CMapType 2 def");
+        cmap.writeLine("1 begincodespacerange");
+        cmap.writeLine("<0000><ffff>");
+        cmap.writeLine("endcodespacerange");
+        const mapping = this.subset.subset, lines = [];
+        for (const code in mapping) {
+          if (code < 32) {
+            continue;
+          }
+          if (lines.length >= 100) {
+            cmap.writeLine(lines.length + " beginbfchar");
+            for (let i = 0; i < lines.length; ++i) {
+              cmap.writeLine(lines[i]);
+            }
+            cmap.writeLine("endbfchar");
+            lines.length = 0;
+          }
+          lines.push(
+            "<" + ("0000" + (+code - 31).toString(16)).slice(-4) + "><" + ("0000" + mapping[code].toString(16)).slice(-4) + ">"
+            // gid
+          );
+        }
+        if (lines.length) {
+          cmap.writeLine(lines.length + " beginbfchar");
+          lines.forEach(function(line) {
+            cmap.writeLine(line);
+          });
+          cmap.writeLine("endbfchar");
+        }
+        cmap.writeLine("endcmap");
+        cmap.writeLine("CMapName currentdict /CMap defineresource pop");
+        cmap.writeLine("end");
+        cmap.writeLine("end");
+        fontObj.prop("ToUnicode", cmap.toReference());
+        const data = this.subset.save();
+        const hex = ab2hex(data);
+        const file = new PDFStream();
+        file.object.prop("Subtype", "OpenType");
+        file.object.prop("Length", hex.length + 1);
+        file.object.prop("Length1", data.byteLength);
+        file.object.prop("Filter", "ASCIIHexDecode");
+        file.content = hex + ">\n";
+        descriptor.prop("FontFile3", file.toReference());
+        await doc._writeObject(file);
+        await doc._writeObject(descriptor);
+        await doc._writeObject(descendant);
+        await doc._writeObject(cmap);
+        await doc._writeObject(fontObj);
+      }
+    };
+    function toHex(n) {
+      if (n < 16)
+        return "0" + n.toString(16);
+      return n.toString(16);
+    }
+    function ab2hex(ab) {
+      const view = new Uint8Array(ab);
+      let hex = "";
+      for (let i = 0, len = ab.byteLength; i < len; ++i) {
+        hex += toHex(view[i]);
+      }
+      return hex;
+    }
+  }
+});
+
+// node_modules/pdfjs/lib/image/image.js
+var require_image = __commonJS({
+  "node_modules/pdfjs/lib/image/image.js"(exports, module2) {
+    var util = require_util();
+    var PDFImage = require_pdf();
+    var JPEGImage = require_jpeg();
+    module2.exports = class Image {
+      constructor(b) {
+        const src = util.toArrayBuffer(b);
+        switch (determineType(src)) {
+          case "pdf":
+            return new PDFImage(src);
+          case "jpeg":
+            return new JPEGImage(src);
+          default:
+            throw new TypeError("Unsupported image type");
+        }
+      }
+    };
+    function determineType(buffer) {
+      const pdf = String.fromCharCode.apply(null, new Uint8Array(buffer, 0, 5));
+      if (pdf === "%PDF-") {
+        return "pdf";
+      }
+      const view = new DataView(buffer);
+      if (view.getUint8(0) === 255 || view.getUint8(1) === 216) {
+        return "jpeg";
+      }
+      return null;
+    }
+  }
+});
+
+// node_modules/pdfjs/lib/index.js
+var require_lib = __commonJS({
+  "node_modules/pdfjs/lib/index.js"(exports) {
+    "use strict";
+    exports.Document = require_document();
+    exports.Font = require_otf();
+    exports.Image = require_image();
+    exports.ExternalDocument = require_external();
+    exports.mm = 0.0393700787 * 72;
+    exports.cm = exports.mm * 10;
+  }
+});
+
 // main.ts
 var main_exports = {};
 __export(main_exports, {
@@ -28,48 +23232,43 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian = require("obsidian");
+var pdfjs = require_lib();
 var MyPlugin = class extends import_obsidian.Plugin {
   onload() {
     this.addCommand({
-      id: "move-mermaidjs-variable-declarations-up",
+      id: "move-variable-declarations-up",
       name: "Clean code for Mermaid.js ( [ graph | flowchart ] )",
       editorCallback: (editor, view) => {
         var _a;
-        var selection_old = editor.getSelection();
-        var check_graph_type = ["graph", "flowchart"];
-        var top_lines = selection_old.split("\n").filter((d) => {
+        let selection_old = editor.getSelection();
+        let check_graph_type = ["graph", "flowchart"];
+        let top_lines = selection_old.split("\n").filter((d) => {
           if (d !== "")
             return d;
         }).slice(0, 2);
         if (top_lines[0].trim() !== "```mermaid" && !top_lines[1].trim().match(/[graph flowchart]/g))
           return;
-        var selection_copy = JSON.parse(JSON.stringify(selection_old));
-        console.log(selection_old, selection_copy);
-        var parenthesis_pattern = /[\(\[\>]/g;
-        var parenthesis_pattern_open = /[\(\[\>]/;
-        var parenthesis_pattern_close = /[\)\]]/;
-        var re_variables_pattern = /([\w\d\_\/]+[\(\[\>][^\)\]\<]+[\)\]]?[^&\.\n\s][\"\']?[^&\n\-]*[\)\]\<])/g;
-        var re_variables = selection_old.match(re_variables_pattern);
-        var re_variables_quotes = (_a = selection_old.match(re_variables_pattern)) == null ? void 0 : _a.map((d) => d.split(parenthesis_pattern_open)[0] + d[parenthesis_pattern_open.exec(d).index] + '"' + d.split(parenthesis_pattern_open).slice(1).join("")).map((d) => d.slice(0, -1) + '"' + d.slice(-1)).map((d) => d.replace('""', '"'));
-        console.log(re_variables);
-        var clean_variables = re_variables == null ? void 0 : re_variables.map((d, i) => {
-          var short_name = d.split(parenthesis_pattern)[0];
-          console.log("vars_ " + d + " _ " + short_name);
+        let selection_copy = JSON.parse(JSON.stringify(selection_old));
+        let parenthesis_pattern = /[\(\[\>]/g;
+        let parenthesis_pattern_open = /[\(\[\>]/;
+        let parenthesis_pattern_close = /[\)\]]/;
+        let re_variables_pattern = /([\w\d\_\/]+[\(\[\>][^\)\]\<]+[\)\]]?[^&\.\n\s][\"\']?[^&\n\-]*[\)\]\<])/g;
+        let re_variables = selection_old.match(re_variables_pattern);
+        let re_variables_quotes = (_a = selection_old.match(re_variables_pattern)) == null ? void 0 : _a.map((d) => d.split(parenthesis_pattern_open)[0] + d[parenthesis_pattern_open.exec(d).index] + '"' + d.split(parenthesis_pattern_open).slice(1).join("")).map((d) => d.slice(0, -1) + '"' + d.slice(-1)).map((d) => d.replace('""', '"'));
+        let clean_variables = re_variables == null ? void 0 : re_variables.map((d, i) => {
+          let short_name = d.split(parenthesis_pattern)[0];
           selection_copy = selection_copy.replace(d, short_name);
           return "    " + d;
         });
-        console.log("# ", selection_copy);
-        var vars_formatted = re_variables_quotes == null ? void 0 : re_variables_quotes.join("\n");
-        var final_code = selection_copy.split("\n").slice(0, 2).join(" \n") + "\n\n\n%%var space start" + vars_formatted + "\n%%var space end\n\n\n" + selection_copy.split("\n").slice(2).join("\n");
+        let vars_formatted = re_variables_quotes == null ? void 0 : re_variables_quotes.join("\n");
+        let final_code = selection_copy.split("\n").slice(0, 2).join(" \n") + "\n\n\n%%var space start" + vars_formatted + "\n%%var space end\n\n\n" + selection_copy.split("\n").slice(2).join("\n");
         if (final_code.match(/\%\%var space start/g).length > 1) {
-          var temp = final_code.split("%%var space end").splice(0, 1);
-          var temp2 = final_code.split("%%var space end").splice(2);
+          let temp = final_code.split("%%var space end").splice(0, 1);
+          let temp2 = final_code.split("%%var space end").splice(2);
           final_code = temp + "\n%%var space end" + temp2;
         }
-        var final_code_ = top_lines.join("\n") + "\n\n%%var space start\n" + final_code.split("%%var space start")[1].replace(top_lines[1], "");
+        let final_code_ = top_lines.join("\n") + "\n\n%%var space start\n" + final_code.split("%%var space start")[1].replace(top_lines[1], "");
         final_code_ = final_code_.replace("\n\n\n\n\n", "");
-        console.log(final_code_);
-        console.log(top_lines);
         editor.replaceSelection(final_code_);
       }
     });
@@ -77,37 +23276,31 @@ var MyPlugin = class extends import_obsidian.Plugin {
       id: "regex-for-mermaid-style",
       name: "Regex for Mermaid.js style ( [ style | class ] )",
       editorCallback: async (editor, view) => {
-        var document = this.app.workspace.getActiveFile();
-        if (!(document == null ? void 0 : document.name))
+        let document2 = this.app.workspace.getActiveFile();
+        if (!(document2 == null ? void 0 : document2.name))
           return;
-        var document_txt = await this.app.vault.read(document);
-        var selection = editor.getSelection().split("\n")[0];
-        var style_type = selection.split(" ").slice(0, 1);
-        var style_val = selection.split(" ").slice(-1);
-        var style_regex = selection.split(" ").slice(1, 2);
-        console.log("document text: ", document_txt);
-        console.log("selection: ", selection);
-        console.log("fields: ", style_type, style_regex, style_val);
-        var all_vars_raw = document_txt.match(/([\w\d\_\/]+[\(\[\>][^\)\]\<]+[\)\]]?[^&\.\n\s][\"\']?[^&\n\-]*[\)\]\<])/g);
-        var parenthesis_pattern = /[\(\[\>]/g;
-        var all_vars_clean = all_vars_raw == null ? void 0 : all_vars_raw.map((d) => d.split(parenthesis_pattern)[0]);
-        console.log("all vars: ", all_vars_clean);
-        var regex_code = String(style_regex).split(",")[0].replace("/", "").replace("/", "");
-        console.log("re", regex_code);
-        var custom_regex = new RegExp(String(regex_code), "g");
-        var retrieved_vars = all_vars_clean == null ? void 0 : all_vars_clean.filter((d) => {
+        let document_txt = await this.app.vault.read(document2);
+        let selection = editor.getSelection().split("\n")[0].split(" ");
+        let style_type = selection.slice(0, 1);
+        let style_val = selection.slice(-1);
+        let style_regex = selection.slice(1, 2);
+        let all_vars_raw = document_txt.match(/([\w\d\_\/]+[\(\[\>][^\)\]\<]+[\)\]]?[^&\.\n\s][\"\']?[^&\n\-]*[\)\]\<])/g);
+        let parenthesis_pattern = /[\(\[\>]/g;
+        let all_vars_clean = all_vars_raw == null ? void 0 : all_vars_raw.map((d) => d.split(parenthesis_pattern)[0]);
+        let regex_code = String(style_regex).split(",")[0].replace("/", "").replace("/", "");
+        let custom_regex = new RegExp(String(regex_code), "g");
+        let retrieved_vars = all_vars_clean == null ? void 0 : all_vars_clean.filter((d) => {
           if (d.match(custom_regex)) {
             return d;
           }
         });
-        console.log("retrieved vars: ", retrieved_vars);
         if (editor.getSelection().split("\n")[0].split(" ")[0] === "style") {
-          var retrieved_vars_formatted = retrieved_vars.map((re) => {
+          let retrieved_vars_formatted = retrieved_vars.map((re) => {
             return [style_type, re, style_val].join(" ");
           });
           editor.replaceSelection(retrieved_vars_formatted.join("\n"));
         } else if (editor.getSelection().split("\n")[0].split(" ")[0] === "class") {
-          var retrieved_vars_formatted_class = [style_type, retrieved_vars == null ? void 0 : retrieved_vars.join(","), style_val].join(" ");
+          let retrieved_vars_formatted_class = [style_type, retrieved_vars == null ? void 0 : retrieved_vars.join(","), style_val].join(" ");
           editor.replaceSelection(retrieved_vars_formatted_class);
         }
       }
@@ -116,23 +23309,20 @@ var MyPlugin = class extends import_obsidian.Plugin {
       id: "create-empty-files-from-list-of-titles",
       name: "Create empty files from a list of titles",
       editorCallback: (editor, view) => {
-        var _a, _b;
+        var _a;
         const basePath = this.app.vault.adapter.basePath;
-        var activeFolder = (_a = this.app.workspace.getActiveFile()) == null ? void 0 : _a.parent.path;
-        console.log(activeFolder, (_b = this.app.workspace.getActiveFile()) == null ? void 0 : _b.path);
-        var selection = editor.getSelection();
-        var file_names = selection.split("\n").filter((d) => {
+        let activeFolder = (_a = this.app.workspace.getActiveFile()) == null ? void 0 : _a.parent.path;
+        let selection = editor.getSelection();
+        let file_names = selection.split("\n").filter((d) => {
           if (d !== "") {
             return d.trim();
           }
         });
-        var files = this.app.vault.getFiles().map((d) => d.path);
-        console.log("old_files ", files);
+        let files = this.app.vault.getFiles().map((d) => d.path);
         file_names.map((d) => {
           if (!files.includes(activeFolder + `/${d}.md`)) {
             this.app.vault.create(activeFolder + `/${d}.md`, "");
           } else {
-            console.log("file already exists");
           }
         });
       }
@@ -141,20 +23331,21 @@ var MyPlugin = class extends import_obsidian.Plugin {
       id: "copy-global-colorGroups-to-local-graph",
       name: "Copy global colorGroups to local graph",
       editorCallback: (editor, view) => {
-        var graph_json = this.app.vault.adapter.read("./.obsidian/graph.json").then((d) => JSON.parse(d));
-        var workspace_json = this.app.vault.adapter.read("./.obsidian/workspace.json").then((d) => JSON.parse(d));
-        console.log(graph_json, workspace_json);
+        let config_files = app.vault.adapter.list(app.vault.configDir).then((x) => {
+          return x;
+        });
+        let graph_json = this.app.vault.adapter.read("./.obsidian/graph.json").then((d) => JSON.parse(d));
+        let workspace_json = this.app.vault.adapter.read("./.obsidian/workspace.json").then((d) => JSON.parse(d));
         graph_json.then((z) => {
-          var g_graph = Object(z);
+          let g_graph = Object(z);
           return g_graph["colorGroups"];
         }).then((y) => {
           workspace_json.then((d) => {
             Object(Object(Object(Object(Object(Object(Object(Object(Object(d)["main"])["children"])[1])["children"])[0])["state"])["state"])["options"])["colorGroups"] = y;
-            console.log(d);
             this.app.vault.adapter.remove("./.obsidian/workspace.json");
             this.app.vault.create("./.obsidian/workspace.json", JSON.stringify(d));
           }).then((j) => {
-            var notice = new import_obsidian.Notice("WARNING: Close and reopen Obsidian to update local graph", 1e4);
+            let notice = new import_obsidian.Notice("WARNING: Close and reopen Obsidian to update local graph", 1e4);
           });
         });
       }
@@ -163,17 +23354,17 @@ var MyPlugin = class extends import_obsidian.Plugin {
       id: "list-to-links",
       name: "List to links",
       editorCallback: (editor, view) => {
-        var selection = editor.getSelection();
-        var selection_list = [];
-        var selection_formatted = "";
+        let selection = editor.getSelection();
+        let selection_list = [];
+        let selection_formatted = "";
         if (selection.includes("\n")) {
-          selection_list = selection.split("\n").filter((f) => {
-            return f.replace(" ", "") !== "";
+          selection_list = selection.split("\n").filter((f2) => {
+            return f2.replace(" ", "") !== "";
           }).map((d) => d.includes(",") ? "[[" + d.replace(",", "") + "]]," : "[[" + d + "]]");
           selection_formatted = selection_list.join("\n");
         } else {
-          selection_list = selection.split(",").filter((f) => {
-            return f.replace(" ", "") !== "";
+          selection_list = selection.split(",").filter((f2) => {
+            return f2.replace(" ", "") !== "";
           }).map((d) => "[[" + d + "]]");
           selection_formatted = selection_list.join(",");
         }
@@ -184,33 +23375,39 @@ var MyPlugin = class extends import_obsidian.Plugin {
       id: "create-files-from-list-of-sections",
       name: "Create empty files from a list of sections (H2 as section titles)",
       editorCallback: (editor, view) => {
-        var _a, _b;
+        var _a;
         const basePath = this.app.vault.adapter.basePath;
-        var activeFolder = (_a = this.app.workspace.getActiveFile()) == null ? void 0 : _a.parent.path;
-        console.log(activeFolder, (_b = this.app.workspace.getActiveFile()) == null ? void 0 : _b.path);
-        var selection = editor.getSelection();
-        var file_names = selection.split("\n").filter((d) => {
+        let activeFolder = (_a = this.app.workspace.getActiveFile()) == null ? void 0 : _a.parent.path;
+        let selection = editor.getSelection();
+        let file_names = selection.split("\n").filter((d) => {
           if (d !== "" && d.startsWith("##")) {
             return d;
           }
         }).map((d) => d.replace("##", "").replace(/[\*\"\\\/\<\>\:\|\?]/g, "_"));
-        console.log(file_names);
-        var files_contents = selection.split("##").filter((d) => {
+        let files_contents = selection.split("##").filter((d) => {
           return d !== "";
         }).map((d) => d.split("\n").slice(1).join("\n"));
-        console.log(files_contents);
-        var files = this.app.vault.getFiles().map((d) => d.path);
-        console.log("old_files ", files);
+        let files = this.app.vault.getFiles().map((d) => d.path);
         file_names.map((d, i) => {
           if (!files.includes(activeFolder + `/${d}.md`)) {
             this.app.vault.create(activeFolder + `/${d}.md`, files_contents[i]);
-          } else {
-            console.log("file already exists");
           }
         });
+      }
+    });
+    this.addCommand({
+      id: "test",
+      name: "test",
+      editorCallback: (editor, view) => {
+        console.log("Test: ", this.app.vault.getAbstractFileByPath("./"));
       }
     });
   }
   onunload() {
   }
 };
+/*! Bundled license information:
+
+opentype.js/dist/opentype.js:
+  (*! https://mths.be/codepointat v0.2.0 by @mathias *)
+*/
