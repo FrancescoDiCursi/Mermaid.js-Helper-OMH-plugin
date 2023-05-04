@@ -23309,7 +23309,7 @@ var MyPlugin = class extends import_obsidian.Plugin {
       id: "create-empty-files-from-list-of-titles",
       name: "Create empty files from a list of titles",
       editorCallback: (editor, view) => {
-        var _a;
+        var _a, _b;
         const basePath = this.app.vault.adapter.basePath;
         let activeFolder = (_a = this.app.workspace.getActiveFile()) == null ? void 0 : _a.parent.path;
         let selection = editor.getSelection();
@@ -23318,88 +23318,17 @@ var MyPlugin = class extends import_obsidian.Plugin {
             return d.trim();
           }
         });
-        let files = this.app.vault.getFiles().map((d) => d.path);
+        let path = (_b = this.app.workspace.getActiveFile()) == null ? void 0 : _b.parent.path;
+        let folder = this.app.vault.getAbstractFileByPath(path).parent;
+        let files = new Array();
+        import_obsidian.Vault.recurseChildren(folder, (file) => {
+          files.push(file.path);
+        });
         file_names.map((d) => {
           if (!files.includes(activeFolder + `/${d}.md`)) {
             this.app.vault.create(activeFolder + `/${d}.md`, "");
-          } else {
           }
         });
-      }
-    });
-    this.addCommand({
-      id: "copy-global-colorGroups-to-local-graph",
-      name: "Copy global colorGroups to local graph",
-      editorCallback: (editor, view) => {
-        let config_files = app.vault.adapter.list(app.vault.configDir).then((x) => {
-          return x;
-        });
-        let graph_json = this.app.vault.adapter.read("./.obsidian/graph.json").then((d) => JSON.parse(d));
-        let workspace_json = this.app.vault.adapter.read("./.obsidian/workspace.json").then((d) => JSON.parse(d));
-        graph_json.then((z) => {
-          let g_graph = Object(z);
-          return g_graph["colorGroups"];
-        }).then((y) => {
-          workspace_json.then((d) => {
-            Object(Object(Object(Object(Object(Object(Object(Object(Object(d)["main"])["children"])[1])["children"])[0])["state"])["state"])["options"])["colorGroups"] = y;
-            this.app.vault.adapter.remove("./.obsidian/workspace.json");
-            this.app.vault.create("./.obsidian/workspace.json", JSON.stringify(d));
-          }).then((j) => {
-            let notice = new import_obsidian.Notice("WARNING: Close and reopen Obsidian to update local graph", 1e4);
-          });
-        });
-      }
-    });
-    this.addCommand({
-      id: "list-to-links",
-      name: "List to links",
-      editorCallback: (editor, view) => {
-        let selection = editor.getSelection();
-        let selection_list = [];
-        let selection_formatted = "";
-        if (selection.includes("\n")) {
-          selection_list = selection.split("\n").filter((f2) => {
-            return f2.replace(" ", "") !== "";
-          }).map((d) => d.includes(",") ? "[[" + d.replace(",", "") + "]]," : "[[" + d + "]]");
-          selection_formatted = selection_list.join("\n");
-        } else {
-          selection_list = selection.split(",").filter((f2) => {
-            return f2.replace(" ", "") !== "";
-          }).map((d) => "[[" + d + "]]");
-          selection_formatted = selection_list.join(",");
-        }
-        editor.replaceSelection(selection_formatted);
-      }
-    });
-    this.addCommand({
-      id: "create-files-from-list-of-sections",
-      name: "Create empty files from a list of sections (H2 as section titles)",
-      editorCallback: (editor, view) => {
-        var _a;
-        const basePath = this.app.vault.adapter.basePath;
-        let activeFolder = (_a = this.app.workspace.getActiveFile()) == null ? void 0 : _a.parent.path;
-        let selection = editor.getSelection();
-        let file_names = selection.split("\n").filter((d) => {
-          if (d !== "" && d.startsWith("##")) {
-            return d;
-          }
-        }).map((d) => d.replace("##", "").replace(/[\*\"\\\/\<\>\:\|\?]/g, "_"));
-        let files_contents = selection.split("##").filter((d) => {
-          return d !== "";
-        }).map((d) => d.split("\n").slice(1).join("\n"));
-        let files = this.app.vault.getFiles().map((d) => d.path);
-        file_names.map((d, i) => {
-          if (!files.includes(activeFolder + `/${d}.md`)) {
-            this.app.vault.create(activeFolder + `/${d}.md`, files_contents[i]);
-          }
-        });
-      }
-    });
-    this.addCommand({
-      id: "test",
-      name: "test",
-      editorCallback: (editor, view) => {
-        console.log("Test: ", this.app.vault.getAbstractFileByPath("./"));
       }
     });
   }

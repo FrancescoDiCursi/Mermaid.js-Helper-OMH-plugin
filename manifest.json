@@ -5,6 +5,6 @@
 	"minAppVersion": "0.15.0",
 	"description": "plug in that helps in mermaid.js workflow and more",
 	"author": "Francesco Di Cursi",
-	"isDesktopOnly": false,
-	"repo": "FrancescoDiCursi/Mermaid.js-Helper-OMH-plugin"
+	"isDesktopOnly": false
+
 }
